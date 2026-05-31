@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mServe Debug Bridge</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>mServe Debug Bridge</h1>
+      <p>Connects to ROS via rosbridge and controls lifecycle + cmd_vel.</p>
+      <div class="status-row">
+        <span id="connection-status" class="status disconnected">Disconnected</span>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>Node Lifecycle</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>mserve_base</h3>
+          <div class="node-state">State: <span id="base-state" class="state-label">?</span></div>
+          <div class="button-row">
+            <button id="base-configure">Configure</button>
+            <button id="base-activate">Activate</button>
+            <button id="base-deactivate">Deactivate</button>
+            <button id="base-cleanup">Cleanup</button>
+            <button id="base-shutdown" class="btn-danger">Shutdown</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>mserve_drivechain</h3>
+          <div class="node-state">State: <span id="drivechain-state" class="state-label">?</span></div>
+          <div class="button-row">
+            <button id="drivechain-configure">Configure</button>
+            <button id="drivechain-activate">Activate</button>
+            <button id="drivechain-deactivate">Deactivate</button>
+            <button id="drivechain-cleanup">Cleanup</button>
+            <button id="drivechain-shutdown" class="btn-danger">Shutdown</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Drive Command</h2>
+      <div class="form-grid">
+        <label for="linear-speed">Linear speed</label>
+        <input id="linear-speed" type="range" min="-1" max="1" step="0.05" value="0" />
+        <span id="linear-value">0.00</span>
+
+        <label for="angular-speed">Angular speed</label>
+        <input id="angular-speed" type="range" min="-2" max="2" step="0.05" value="0" />
+        <span id="angular-value">0.00</span>
+      </div>
+      <div class="button-row">
+        <button id="publish-cmd">Publish Twist</button>
+        <button id="stop-cmd">Stop</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="roslib.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+bool connected
+float32 temperature
+string firmware_version

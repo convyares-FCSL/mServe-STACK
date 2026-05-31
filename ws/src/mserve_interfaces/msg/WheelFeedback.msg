@@ -1,0 +1,4 @@
+float32 left_position
+float32 right_position
+float32 left_velocity
+float32 right_velocity

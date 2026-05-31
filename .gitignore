@@ -1,0 +1,19 @@
+.env
+.env.local
+
+# ROS 2 workspace output
+ws/build/
+ws/install/
+ws/log/
+ws/core
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Editor/system noise
+.vscode/
+.idea/
+.DS_Store

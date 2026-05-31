@@ -1,0 +1,134 @@
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #334155;
+  --text: #e2e8f0;
+  --accent: #38bdf8;
+  --accent-2: #7dd3fc;
+  --danger: #f87171;
+  --success: #34d399;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0 0 8px;
+}
+
+.status-row {
+  margin-top: 12px;
+}
+
+.status {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.status.connected {
+  background: var(--success);
+  color: #0f172a;
+}
+
+.status.disconnected {
+  background: var(--danger);
+  color: #0f172a;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.cards {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.card {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.node-state {
+  margin: 10px 0;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #0f172a;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+.state-label {
+  font-weight: 700;
+}
+
+.state-active       { color: var(--success); }
+.state-inactive     { color: var(--accent); }
+.state-unconfigured { color: var(--text); }
+.state-finalized,
+.state-errorprocessing,
+.state-unavailable  { color: var(--danger); }
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-danger {
+  background: var(--danger);
+}

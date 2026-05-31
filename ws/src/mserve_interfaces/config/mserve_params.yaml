@@ -1,0 +1,41 @@
+# mServe shared parameter defaults.
+# Nested keys use dot notation: e.g. limits.max_linear_speed
+# QoS and topic names default to sensible values; override here for your chassis.
+
+mserve_base:
+  ros__parameters:
+    limits:
+      max_linear_speed: 0.8        # m/s  — robot-level safety cap
+      max_angular_speed: 1.2       # rad/s — robot-level safety cap
+    topic_names:
+      cmd_vel: /cmd_vel            # standard ROS topic — Nav2 and joy publish here
+      cmd_vel_safe: /mserve/cmd_vel_safe
+    qos:
+      commands:
+        reliability: reliable
+        durability: volatile
+        depth: 1
+
+mserve_drivechain:
+  ros__parameters:
+    hardware:
+      wheel_separation: 0.35       # m — measure centre-to-centre on actual chassis
+      wheel_radius: 0.08           # m — DDSM115 tyre radius
+    feedback_rate: 20.0            # Hz
+    topic_names:
+      cmd_vel_safe: /mserve/cmd_vel_safe
+      wheel_feedback: /mserve/wheel_feedback
+      drivechain_status: /mserve/drivechain_status
+    qos:
+      commands:
+        reliability: reliable
+        durability: volatile
+        depth: 1
+      feedback:
+        reliability: best_effort
+        durability: volatile
+        depth: 10
+      status:
+        reliability: reliable
+        durability: volatile
+        depth: 10

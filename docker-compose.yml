@@ -1,0 +1,32 @@
+services:
+  robot-mserve:
+    image: ros:jazzy-ros-base
+    container_name: mserve-robot-mserve
+    env_file:
+      - .env
+    environment:
+      ROS_DOMAIN_ID: "${MSERVE_ROS_DOMAIN_ID:-52}"
+      RCUTILS_LOGGING_SEVERITY: "${MSERVE_LOG_LEVEL:-INFO}"
+    labels:
+      logging: promtail
+      robot: mserve
+    volumes:
+      - ./ws:/ws
+      - ./web:/web
+    working_dir: /ws
+    command:
+      - bash
+      - -lc
+      - |
+        source /opt/ros/jazzy/setup.bash
+        echo "[mserve] base ROS container started"
+        echo "[mserve] ROS_DOMAIN_ID=$${ROS_DOMAIN_ID}"
+        while true; do
+          echo "[mserve] heartbeat $(date --iso-8601=seconds)"
+          sleep "$${MSERVE_HEARTBEAT_SEC:-10}"
+        done
+    ports:
+      - "${MSERVE_WEB_PORT:-5002}:5002"
+      - "${MSERVE_HTTP_PORT:-8080}:8080"
+      - "${MSERVE_ROSBRIDGE_PORT:-9090}:9090"
+    restart: unless-stopped

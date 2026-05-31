@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_utils</name>
+  <version>0.1.0</version>
+  <description>Utility helpers for the mServe ROS 2 stack.</description>
+  <maintainer email="ecm@example.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>rclcpp</build_depend>
+  <exec_depend>rclcpp</exec_depend>
+  <build_depend>ament_cmake_gtest</build_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+</package>

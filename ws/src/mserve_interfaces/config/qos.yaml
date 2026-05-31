@@ -1,0 +1,5 @@
+default_qos:
+  reliability: reliable
+  durability: volatile
+  history: keep_last
+  depth: 10
