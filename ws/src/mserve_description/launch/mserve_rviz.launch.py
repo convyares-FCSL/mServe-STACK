@@ -9,6 +9,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    # Get the path to the xacro file and RViz config from the package share directory
     package_share = Path(get_package_share_directory('mserve_description'))
     xacro_file = package_share / 'urdf' / 'mserve.urdf.xacro'
     rviz_config = package_share / 'rviz' / 'mserve.rviz'
@@ -18,6 +19,7 @@ def generate_launch_description():
     use_joint_state_gui = LaunchConfiguration('use_joint_state_gui')
     use_rviz = LaunchConfiguration('use_rviz')
 
+    # Launch the joint_state_publisher_gui for movable wheel joints, and the robot_state_publisher to publish the robot's state
     joint_state_publisher_gui = Node(
         package='joint_state_publisher_gui',
         executable='joint_state_publisher_gui',
@@ -25,6 +27,7 @@ def generate_launch_description():
         condition=IfCondition(use_joint_state_gui),
     )
 
+    # Launch the robot state publisher to publish the robot's state
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -33,6 +36,7 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description}],
     )
 
+    # Launch RViz with the saved mServe config if use_rviz is true
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -41,6 +45,7 @@ def generate_launch_description():
         condition=IfCondition(use_rviz),
     )
 
+    # Return the launch description with the declared arguments and nodes
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_joint_state_gui',

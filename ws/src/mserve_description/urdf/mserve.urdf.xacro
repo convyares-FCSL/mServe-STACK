@@ -3,5 +3,8 @@
 
   <!-- Include the core robot definition -->
   <xacro:include filename="mserve_core.xacro"/>
+
+  <!-- Include Gazebo-specific simulation tuning -->
+  <xacro:include filename="mserve_gazebo.xacro"/>
   
 </robot>

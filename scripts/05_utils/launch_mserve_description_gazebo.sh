@@ -25,19 +25,21 @@ if ! command -v xacro >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! ros2 pkg prefix joint_state_publisher_gui >/dev/null 2>&1; then
-  echo "ERROR: joint_state_publisher_gui is not installed."
+if ! ros2 pkg prefix ros_gz_sim >/dev/null 2>&1; then
+  echo "ERROR: ros_gz_sim is not installed."
   echo "Install it with:"
-  echo "  sudo apt install ros-jazzy-joint-state-publisher-gui"
+  echo "  sudo apt install ros-jazzy-ros-gz"
   exit 1
 fi
 
-if ! ros2 pkg prefix rviz2 >/dev/null 2>&1; then
-  echo "ERROR: rviz2 is not installed."
+if ! ros2 pkg prefix ros_gz_bridge >/dev/null 2>&1; then
+  echo "ERROR: ros_gz_bridge is not installed."
+  echo "Install it with:"
+  echo "  sudo apt install ros-jazzy-ros-gz"
   exit 1
 fi
 
-echo "[mserve_description] building host RViz workspace"
+echo "[mserve_description] building host Gazebo workspace"
 colcon --log-base "$LOG_BASE" build \
   --build-base "$BUILD_BASE" \
   --install-base "$INSTALL_BASE" \
@@ -48,5 +50,5 @@ set +u
 source "$INSTALL_BASE/setup.bash"
 set -u
 
-echo "[mserve_description] launching RViz description view"
-ros2 launch mserve_description mserve_rviz.launch.py "$@"
+echo "[mserve_description] launching Gazebo description view"
+ros2 launch mserve_description mserve_gazebo.launch.py "$@"

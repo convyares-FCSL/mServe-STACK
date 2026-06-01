@@ -12,6 +12,7 @@ Available scripts:
 - `05_utils/docker_webbridge.sh` — start rosbridge inside Docker and serve the web UI.
 - `05_utils/docker_launch_mserve.sh` — launch the mServe bringup inside the Docker container.
 - `05_utils/launch_mserve_description_rviz.sh` — build the description package in a host-only install space and launch RViz safely.
+- `05_utils/launch_mserve_description_gazebo.sh` — build the description package in a host-only install space and launch Gazebo safely.
 
 Notes:
 - The Docker workspace is mounted at `/ws`.
