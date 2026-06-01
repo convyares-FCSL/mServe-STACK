@@ -11,3 +11,10 @@ Available scripts:
 - `05_utils/clean_all.sh` — remove workspace build artifacts.
 - `05_utils/docker_webbridge.sh` — start rosbridge inside Docker and serve the web UI.
 - `05_utils/docker_launch_mserve.sh` — launch the mServe bringup inside the Docker container.
+- `05_utils/launch_mserve_description_rviz.sh` — build the description package in a host-only install space and launch RViz safely.
+
+Notes:
+- The Docker workspace is mounted at `/ws`.
+- If you build in Docker with `--symlink-install`, do not source that same
+  `ws/install/setup.bash` from the host filesystem path. Rebuild in the
+  environment you intend to run from.

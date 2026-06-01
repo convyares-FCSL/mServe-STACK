@@ -1,0 +1,287 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="inertial_macros.xacro"/>
+
+    <!-- Chassis Properties (in meteres, kG) -->
+  <xacro:property name="chassis_length" value="0.37"/>
+  <xacro:property name="chassis_width" value="0.25"/>
+  <xacro:property name="chassis_height" value="0.15"/>
+  <xacro:property name="chassis_mass" value="12.0"/>
+  <xacro:property name="chassis_joint_x" value="-0.10"/>
+
+     <!-- Wheel Properties (in meteres)  -->
+  <xacro:property name="wheel_radius" value="0.1"/>
+  <xacro:property name="wheel_length" value="0.04"/>
+  <xacro:property name="wheel_mass" value="0.765"/>
+  <xacro:property name="wheel_y_offset" value="0.18"/>
+
+  <!-- Caster Properties (in meteres)  -->
+  <xacro:property name="caster_radius" value="0.05"/>
+  <xacro:property name="caster_mass" value="0.3"/>
+  <xacro:property name="caster_x" value="0.30"/>
+  <xacro:property name="caster_z" value="-0.01"/>
+
+  <!-- Lidar Properties (in meteres, kG) -->
+  <xacro:property name="lidar_radius" value="0.04"/>
+  <xacro:property name="lidar_length" value="0.04"/>
+  <xacro:property name="lidar_mass" value="0.2"/>
+  <xacro:property name="lidar_x" value="0.24"/>
+  <xacro:property name="lidar_y" value="0.0"/>
+  <xacro:property name="lidar_z" value="0.19"/>
+
+  <!-- Camera Properties (in meteres, kG) -->
+  <xacro:property name="camera_depth" value="0.05"/>
+  <xacro:property name="camera_width" value="0.08"/>
+  <xacro:property name="camera_height" value="0.04"/>
+  <xacro:property name="camera_mass" value="0.15"/>
+  <xacro:property name="camera_x" value="0.32"/>
+  <xacro:property name="camera_y" value="0.0"/>
+  <xacro:property name="camera_z" value="0.14"/>
+
+  <!-- Display Properties (in meteres)  -->
+  <xacro:property name="display_width" value="0.12"/>
+  <xacro:property name="display_depth" value="0.02"/>
+  <xacro:property name="display_height" value="0.08"/>
+  <xacro:property name="display_mass" value="0.25"/>
+  <xacro:property name="display_x" value="${chassis_length + display_depth / 2.0}"/>
+  <xacro:property name="display_y" value="0.0"/>
+  <xacro:property name="display_z" value="${chassis_height * 0.65}"/>
+
+  <!-- Arm Mount Properties (in meteres, kG) -->
+  <xacro:property name="arm_mount_radius" value="0.03"/>
+  <xacro:property name="arm_mount_length" value="0.06"/>
+  <xacro:property name="arm_mount_mass" value="0.4"/>
+  <xacro:property name="arm_mount_x" value="0.08"/>
+  <xacro:property name="arm_mount_y" value="0.0"/>
+  <xacro:property name="arm_mount_z" value="0.20"/>
+
+  <!-- Materials -->
+  <material name="chassis_blue">
+    <color rgba="0.10 0.26 0.47 1.0"/>
+  </material>
+
+  <material name="trim_grey">
+    <color rgba="0.70 0.72 0.74 1.0"/>
+  </material>
+
+  <material name="wheel_black">
+    <color rgba="0.15 0.15 0.15 1.0"/>
+  </material>
+  
+  <material name="sensor_green">
+    <color rgba="0.27 0.67 0.47 1.0"/>
+  </material>
+
+  <!-- BASE LINK -->
+  <link name="base_link"/>
+
+  <!-- CHASSIS LINK -->
+  <joint name="chassis_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="chassis"/>
+    <origin xyz="${chassis_joint_x} 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="chassis">
+    <visual>
+      <origin xyz="${chassis_length / 2.0} 0 ${chassis_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="chassis_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="${chassis_length / 2.0} 0 ${chassis_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box
+      mass="${chassis_mass}"
+      x="${chassis_length}"
+      y="${chassis_width}"
+      z="${chassis_height}"
+      origin_xyz="${chassis_length / 2.0} 0 ${chassis_height / 2.0}"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- LEFT WHEEL JOINT -->
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <origin xyz="0 ${wheel_y_offset} 0" rpy="${-pi / 2.0} 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
+      </geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder
+      mass="${wheel_mass}"
+      radius="${wheel_radius}"
+      length="${wheel_length}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- RIGHT WHEEL JOINT -->
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="0 ${-wheel_y_offset} 0" rpy="${pi / 2.0} 0 0"/>
+    <axis xyz="0 0 -1"/>
+  </joint>
+
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
+      </geometry>
+      <material name="wheel_black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder
+      mass="${wheel_mass}"
+      radius="${wheel_radius}"
+      length="${wheel_length}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- CASTER WHEEL JOINT -->
+  <joint name="caster_wheel_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="caster_wheel"/>
+    <origin xyz="${caster_x} 0 ${caster_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="caster_wheel">
+    <visual>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+      <material name="trim_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="${caster_radius}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_sphere
+      mass="${caster_mass}"
+      radius="${caster_radius}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- LIDAR JOINT -->
+  <joint name="lidar_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="lidar_link"/>
+    <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="lidar_link">
+    <visual>
+      <geometry>
+        <cylinder radius="${lidar_radius}" length="${lidar_length}"/>
+      </geometry>
+      <material name="sensor_green"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${lidar_radius}" length="${lidar_length}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder
+      mass="${lidar_mass}"
+      radius="${lidar_radius}"
+      length="${lidar_length}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- CAMERA JOINT -->
+  <joint name="camera_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="camera_link"/>
+    <origin xyz="${camera_x} ${camera_y} ${camera_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="${camera_depth} ${camera_width} ${camera_height}"/>
+      </geometry>
+      <material name="trim_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${camera_depth} ${camera_width} ${camera_height}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box
+      mass="${camera_mass}"
+      x="${camera_depth}"
+      y="${camera_width}"
+      z="${camera_height}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+
+  <!-- DISPLAY JOINT -->
+  <joint name="display_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="display_link"/>
+    <origin xyz="${display_x} ${display_y} ${display_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="display_link">
+    <visual>
+      <geometry>
+       <box size="${display_depth} ${display_width} ${display_height}"/>
+    </geometry>
+      <material name="trim_grey"/>
+    </visual>
+  </link>
+
+  <!-- ARM MOUNT JOINT -->
+  <joint name="arm_mount_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="arm_mount_link"/>
+    <origin xyz="${arm_mount_x} ${arm_mount_y} ${arm_mount_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="arm_mount_link">
+    <visual>
+      <geometry>
+        <cylinder radius="${arm_mount_radius}" length="${arm_mount_length}"/>
+      </geometry>
+      <material name="trim_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${arm_mount_radius}" length="${arm_mount_length}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder
+      mass="${arm_mount_mass}"
+      radius="${arm_mount_radius}"
+      length="${arm_mount_length}"
+      origin_xyz="0 0 0"
+      origin_rpy="0 0 0"/>
+  </link>
+</robot>

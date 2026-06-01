@@ -3,8 +3,11 @@
 
 # ROS 2 workspace output
 ws/build/
+ws/build_host/
 ws/install/
+ws/install_host/
 ws/log/
+ws/log_host/
 ws/core
 
 # Python
