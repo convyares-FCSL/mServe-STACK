@@ -1,6 +1,9 @@
 services:
   robot-mserve:
-    image: ros:jazzy-ros-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mserve-robot:jazzy
     container_name: mserve-robot-mserve
     env_file:
       - .env

@@ -6,4 +6,10 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 source "$ROOT_DIR/scripts/01_setup/env_setup.sh"
 cd "$ROOT_DIR/ws"
 
-colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_esp32 mserve_bringup
+colcon build --symlink-install --packages-select \
+  mserve_interfaces \
+  mserve_utils \
+  mserve_base \
+  mserve_drivechain \
+  mserve_description \
+  mserve_bringup

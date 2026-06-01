@@ -93,6 +93,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn BaseNo
 rcl_interfaces::msg::SetParametersResult BaseNode::on_parameters(const std::vector<rclcpp::Parameter> & params){
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
+  const auto & state = this->get_current_state().label();
+  const bool reconfigure_allowed = (state == "unconfigured" || state == "configuring");
 
   for (const auto & p : params) {
     if (p.get_name() == "limits.max_linear_speed") {
@@ -105,9 +107,11 @@ rcl_interfaces::msg::SetParametersResult BaseNode::on_parameters(const std::vect
       RCLCPP_INFO(get_logger(), "max_angular_speed -> %.2f rad/s", max_angular_speed_);
 
     } else if (p.get_name().rfind("topic_names.", 0) == 0 || p.get_name().rfind("qos.", 0) == 0) {
-      result.successful = false;
-      result.reason = p.get_name() + " cannot be changed at runtime — reconfigure the node";
-      return result;
+      if (!reconfigure_allowed) {
+        result.successful = false;
+        result.reason = p.get_name() + " requires reconfigure (currently " + state + ")";
+        return result;
+      }
     }
   }
   return result;

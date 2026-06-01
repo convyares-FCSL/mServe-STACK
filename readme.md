@@ -55,13 +55,16 @@ ws/src/
 ## Normal flow
 
 ```bash
-# 1. Start the container
-docker compose up -d robot-mserve
+# 1. Build and start the container image
+docker compose up -d --build robot-mserve
 
-# 2. Launch ROS nodes (base + drivechain)
+# 2. Build the ROS workspace inside Docker
+scripts/05_utils/docker_build_workspace.sh
+
+# 3. Launch ROS nodes (base + drivechain)
 scripts/05_utils/docker_launch_mserve.sh
 
-# 3. Start rosbridge and the web UI
+# 4. Start rosbridge and the web UI
 scripts/05_utils/docker_webbridge.sh both
 ```
 
@@ -72,10 +75,23 @@ Then open `http://localhost:8080` — the UI shows lifecycle state for both node
 From `/home/ecm/mServe-STACK`:
 
 ```bash
+docker compose build robot-mserve
+scripts/05_utils/docker_build_workspace.sh
+```
+
+Raw Docker command:
+
+```bash
 docker compose exec robot-mserve bash -lc "
   source /opt/ros/jazzy/setup.bash && cd /ws &&
   colcon build --symlink-install \
-    --packages-select mserve_interfaces mserve_utils mserve_base mserve_drivechain mserve_bringup
+    --packages-select \
+      mserve_interfaces \
+      mserve_utils \
+      mserve_base \
+      mserve_drivechain \
+      mserve_description \
+      mserve_bringup
 "
 ```
 

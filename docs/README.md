@@ -29,13 +29,13 @@ The C++ lessons in `/home/ecm/ros2-systems-operability/src/2_cpp` are the main s
 From `/home/ecm/mServe-STACK`:
 
 ```bash
-docker compose up -d robot-mserve
+docker compose up -d --build robot-mserve
 ```
 
 Build and run inside the container:
 
 ```bash
-docker compose exec robot-mserve bash -lc "source /opt/ros/jazzy/setup.bash && cd /ws && colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_esp32 mserve_bringup"
+scripts/05_utils/docker_build_workspace.sh
 ```
 
 Launch the bringup using the Docker helper:
@@ -57,7 +57,7 @@ This launches rosbridge inside the `robot-mserve` container and serves the web U
 If you want to run the raw command instead of the helper, use:
 
 ```bash
-docker compose exec robot-mserve bash -lc "cd /ws && source /opt/ros/jazzy/setup.bash && source install/setup.bash && export AMENT_PREFIX_PATH=/ws/install/mserve_bringup:/ws/install/mserve_description:/ws/install/mserve_base:/ws/install/mserve_esp32:/ws/install/mserve_utils:/ws/install/mserve_interfaces:\$AMENT_PREFIX_PATH && ros2 launch mserve_bringup mserve_min.launch.py"
+docker compose exec robot-mserve bash -lc "cd /ws && source /opt/ros/jazzy/setup.bash && source install/setup.bash && export AMENT_PREFIX_PATH=/ws/install/mserve_bringup:/ws/install/mserve_description:/ws/install/mserve_base:/ws/install/mserve_drivechain:/ws/install/mserve_utils:/ws/install/mserve_interfaces:\$AMENT_PREFIX_PATH && ros2 launch mserve_bringup mserve_min.launch.py"
 ```
 
 Check lifecycle state from within the same container:
@@ -75,7 +75,7 @@ If you have a host ROS environment, the original workflow still applies:
 ```bash
 ./scripts/01_setup/env_setup.sh
 cd ws
-colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_esp32 mserve_bringup
+colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_drivechain mserve_description mserve_bringup
 source install/setup.bash
 ros2 launch mserve_bringup mserve_min.launch.py
 ```

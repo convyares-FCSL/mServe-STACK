@@ -34,8 +34,7 @@ DrivechainNode::DrivechainNode(const rclcpp::NodeOptions & options): rclcpp_life
 // Lifecycle Callbacks
 // ==============================================================================
 
-rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecycle::State &)
-{
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecycle::State &){
   try {
     // Load parameters, applying defaults if not set. The on_parameters callback will handle updates at runtime.
     wheel_separation_ = mserve_utils::get_or_declare_param(
@@ -126,6 +125,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Drivec
 rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(const std::vector<rclcpp::Parameter> & params){
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
+  const auto & state = this->get_current_state().label();
+  const bool reconfigure_allowed = (state == "unconfigured" || state == "configuring");
 
   for (const auto & p : params) {
     if (p.get_name() == "feedback_rate") {
@@ -134,8 +135,7 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(const std
       RCLCPP_INFO(get_logger(), "feedback_rate -> %.1f Hz", feedback_rate_);
 
     } else if (p.get_name() == "hardware.wheel_separation" || p.get_name() == "hardware.wheel_radius") {
-      const auto & state = this->get_current_state().label();
-      if (state != "unconfigured") {
+      if (!reconfigure_allowed) {
         result.successful = false;
         result.reason = p.get_name() + " requires reconfigure (currently " + state + ")";
         return result;
@@ -143,9 +143,11 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(const std
 
     } else if (p.get_name().rfind("topic_names.", 0) == 0 ||
                p.get_name().rfind("qos.", 0) == 0) {
-      result.successful = false;
-      result.reason = p.get_name() + " cannot be changed at runtime — reconfigure the node";
-      return result;
+      if (!reconfigure_allowed) {
+        result.successful = false;
+        result.reason = p.get_name() + " requires reconfigure (currently " + state + ")";
+        return result;
+      }
     }
   }
   return result;

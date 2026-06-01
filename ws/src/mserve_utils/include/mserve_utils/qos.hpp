@@ -45,8 +45,8 @@ inline rclcpp::QoS load(
     params, logger, base + ".reliability", defs.reliability, "qos");
   const auto dur = mserve_utils::get_or_declare_param(
     params, logger, base + ".durability",  defs.durability,  "qos");
-  const int depth = static_cast<int>(mserve_utils::get_or_declare_param(
-    params, logger, base + ".depth", static_cast<double>(defs.depth), "qos"));
+  const int depth = mserve_utils::get_or_declare_param(
+    params, logger, base + ".depth", defs.depth, "qos");
 
   rclcpp::QoS qos(depth);
   if (rel == "best_effort") { qos.best_effort(); } else { qos.reliable(); }

@@ -4,6 +4,20 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT_DIR"
 
+docker compose up -d robot-mserve >/dev/null
+
+if ! docker compose exec -T robot-mserve test -f /ws/install/setup.bash; then
+  echo "ERROR: /ws/install/setup.bash was not found inside the container."
+  echo "The workspace has not been built yet."
+  echo
+  echo "Build it first with:"
+  echo "  scripts/05_utils/docker_build_workspace.sh"
+  echo
+  echo "Or run the raw build command:"
+  echo "  docker compose exec robot-mserve bash -lc 'source /opt/ros/jazzy/setup.bash && cd /ws && colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_drivechain mserve_description mserve_bringup'"
+  exit 1
+fi
+
 docker compose exec robot-mserve bash -lc '
   cd /ws &&
   source /opt/ros/jazzy/setup.bash &&
