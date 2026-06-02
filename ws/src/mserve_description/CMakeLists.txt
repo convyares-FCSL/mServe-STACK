@@ -3,7 +3,7 @@ project(mserve_description LANGUAGES CXX)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY launch params rviz urdf
+install(DIRECTORY launch params rviz urdf worlds
   DESTINATION share/${PROJECT_NAME}
 )
 

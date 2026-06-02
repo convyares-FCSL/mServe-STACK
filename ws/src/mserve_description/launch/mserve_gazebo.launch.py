@@ -9,6 +9,7 @@ from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitut
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from launch.actions import ExecuteProcess
 
 
 def generate_launch_description():
@@ -17,6 +18,12 @@ def generate_launch_description():
     package_share = Path(get_package_share_directory('mserve_description'))
     xacro_file = package_share / 'urdf' / 'mserve.urdf.xacro'
     bridge_config = package_share / 'params' / 'mserve_gazebo_bridge.yaml'
+    world = LaunchConfiguration('world')
+    world_file = PathJoinSubstitution([
+        FindPackageShare('mserve_description'),
+        'worlds',
+        world,
+    ])
 
     # Declare launch arguments for Gazebo and the spawn service.
     gz_args = LaunchConfiguration('gz_args')
@@ -43,7 +50,7 @@ def generate_launch_description():
             )
         ),
         launch_arguments={
-            'gz_args': gz_args,
+            'gz_args': ['-r ', world_file],
             'on_exit_shutdown': 'true',
         }.items(),
     )
@@ -88,16 +95,33 @@ def generate_launch_description():
         condition=IfCondition(use_bridge),
     )
 
+    # Optionally launch RViz to visualize the robot and Gazebo data.
+    rviz_config = package_share / 'rviz' / 'mserve.rviz'
+    rviz = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', str(rviz_config)],
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(LaunchConfiguration('launch_rviz')),
+    )
+
     # Construct the launch description with all the declared arguments and actions.
     return LaunchDescription([
         DeclareLaunchArgument(
             'gz_args',
-            default_value='empty.sdf',
-            description='Arguments passed to ros_gz_sim/gz_sim.launch.py.',
+            default_value='',
+            description='Additional arguments passed to ros_gz_sim/gz_sim.launch.py.',
+        ),
+        DeclareLaunchArgument(
+            'world',
+            default_value='basic.sdf',
+            description='World file name under mserve_description/worlds.',
         ),
         DeclareLaunchArgument(
             'world_name',
-            default_value='empty',
+            default_value='basic',
             description='Gazebo world name used by the spawn service.',
         ),
         DeclareLaunchArgument(
@@ -135,8 +159,14 @@ def generate_launch_description():
             default_value='true',
             description='Use Gazebo time for ROS nodes launched here.',
         ),
+        DeclareLaunchArgument(
+            'launch_rviz',
+            default_value='true',
+            description='Launch RViz to visualize the robot and Gazebo topics.',
+        ),
         gazebo,
         robot_state_publisher,
         bridge,
+        rviz,
         TimerAction(period=2.0, actions=[spawn_mserve]),
     ])

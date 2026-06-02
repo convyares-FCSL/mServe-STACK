@@ -8,6 +8,7 @@ All project documentation should live in this folder unless it is a short root-l
 - `packages.md`: planned ROS 2 package skeletons.
 - `milestones.md`: staged build plan.
 - `testing-and-scripts.md`: script and test strategy.
+- `simulation_hil.md`: current simulation status, next steps, and hardware-in-loop plan.
 - `TODO.md`: task tracker.
 - `session.md`: session notes, decisions, and what changed.
 
