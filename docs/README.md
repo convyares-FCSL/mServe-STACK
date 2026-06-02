@@ -9,6 +9,7 @@ All project documentation should live in this folder unless it is a short root-l
 - `milestones.md`: staged build plan.
 - `testing-and-scripts.md`: script and test strategy.
 - `simulation_hil.md`: current simulation status, next steps, and hardware-in-loop plan.
+- `remote-rviz-setup.md`: guide to running RViz on a development laptop connected to ROS/Gazebo on a remote machine (e.g., NVIDIA Thor).
 - `TODO.md`: task tracker.
 - `session.md`: session notes, decisions, and what changed.
 
