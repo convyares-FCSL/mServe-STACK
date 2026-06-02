@@ -50,7 +50,7 @@ def generate_launch_description():
             )
         ),
         launch_arguments={
-            'gz_args': ['-r ', world_file],
+            'gz_args': ['-r ', world_file, ' ', gz_args],
             'on_exit_shutdown': 'true',
         }.items(),
     )

@@ -24,11 +24,13 @@ echo "  RViz Config:    $RVIZ_CONFIG"
 echo ""
 
 # Set ROS 2 environment for distributed networking
+export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 export ROS_LOCALHOST_ONLY=0
 export ROS_DISCOVERY_SERVER=${ROS_DISCOVERY_SERVER:-$THOR_IP:$DISCOVERY_PORT}
 
 echo "ROS 2 Network Configuration:"
+echo "  RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"
 echo "  ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 echo "  ROS_LOCALHOST_ONLY=0"
 echo "  ROS_DISCOVERY_SERVER=$ROS_DISCOVERY_SERVER"

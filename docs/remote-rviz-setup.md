@@ -1,213 +1,306 @@
-# Running RViz on Laptop with Simulation on NVIDIA Thor
+# Hybrid RViz and Teleop from WSL with Gazebo on NVIDIA Thor
 
-This guide explains how to visualize the mServe simulation and ROS data in RViz on your development laptop while the simulation and all ROS nodes run on the NVIDIA Thor machine.
+This guide covers the hybrid setup:
 
-## Prerequisites
+- **Thor** runs Gazebo, ROS 2 nodes, `robot_state_publisher`, and `ros_gz_bridge`.
+- **Windows laptop / WSL** runs RViz and keyboard teleop.
+- ROS 2 traffic crosses the network through Fast DDS discovery.
 
-- **NVIDIA Thor**: Running mServe from `/home/ecm/Workspace/projects/mServe-STACK`
-- **Your Laptop**: ROS 2 Jazzy installed
-- **Network**: Tailscale/Tailshare tunnel OR same local network
+This is a good target now that Gazebo is working on Thor. The main thing to get right is WSL networking: discovery can work while topic data still fails if Thor cannot route back to the address WSL advertises.
 
-## Thor Connection Info
+## Chance of Success
 
-- **Tailscale IP** (recommended): `100.110.87.8`
-- **Local network IP**: Run on Thor: `hostname -I`
+High, if WSL has a reachable network address.
 
-## Step 1: Start Discovery Server on Thor
+- **Best path:** install / run Tailscale inside WSL, so WSL has its own `100.x.x.x` address.
+- **Also good:** same LAN with WSL mirrored networking enabled.
+- **Risky path:** Tailscale only on Windows host while ROS runs inside WSL. ROS nodes may appear, but topic data can fail because WSL advertises an internal NAT address.
 
-SSH into Thor and start a Fast DDS discovery server:
+## Network Targets
+
+On Thor:
 
 ```bash
-ssh ecm@100.110.87.8
+hostname -I
+tailscale ip -4
+```
 
-# On Thor, terminal 1:
+Use Thor's Tailscale IP if WSL also has Tailscale. Current known Thor Tailscale IP:
+
+```text
+100.110.87.8
+```
+
+On WSL, check that WSL itself has a Tailscale IP:
+
+```bash
+tailscale ip -4
+```
+
+If that command does not return a `100.x.x.x` address, install / start Tailscale inside WSL or use same-LAN/mirrored networking instead.
+
+## Step 1: Start Fast DDS Discovery on Thor
+
+On Thor, terminal 1:
+
+```bash
 source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+
 fastdds discovery -i 0 -l 0.0.0.0 -p 11888
-
-# Leave this running
 ```
 
-This is required for Tailscale use because plain ROS 2 DDS discovery relies on
-multicast, and Tailscale does not carry that multicast traffic.
+Leave this running.
 
-## Step 2: Start the Simulation on Thor
+Why: Tailscale and WSL do not reliably carry DDS multicast discovery. The discovery server gives all ROS participants a known unicast meeting point.
 
-SSH into Thor and launch the simulation:
+## Step 2: Start Gazebo and ROS on Thor
+
+On Thor, terminal 2:
 
 ```bash
-# On Thor, terminal 2:
-export ROS_DISCOVERY_SERVER=127.0.0.1:11888
 cd /home/ecm/Workspace/projects/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh
-
-# Leave this running — don't close the terminal
-```
-
-This is the preferred launch path on Thor because it:
-
-- uses the real project path on Thor
-- builds into `ws/build_host`, `ws/install_host`, and `ws/log_host`
-- avoids stale `install/setup.bash` assumptions
-- keeps the ROS nodes registered with the local discovery server on Thor
-
-The terminal will show Gazebo startup messages and the bridge connecting topics. It's normal to see it pause briefly while loading.
-
-If you want the manual equivalent on Thor:
-
-```bash
-cd /home/ecm/Workspace/projects/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
+
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
 export ROS_DISCOVERY_SERVER=127.0.0.1:11888
-colcon build --symlink-install --packages-select mserve_description \
-  --build-base build_host \
-  --install-base install_host \
-  --log-base log_host
-source install_host/setup.bash
-ros2 launch mserve_description mserve_gazebo.launch.py
+
+scripts/05_utils/launch_mserve_description_gazebo.sh launch_rviz:=false
 ```
 
-## Step 3: On Your Laptop — Quick Start
+Use `launch_rviz:=false` because RViz will run on WSL.
 
-**Option A: Using the helper script (easiest)**
+The Gazebo helper script builds `mserve_description`, sources `ws/install_host/setup.bash`, starts Gazebo, starts `robot_state_publisher`, and starts the ROS/Gazebo bridge.
 
-```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
-./scripts/launch_remote_rviz.sh 100.110.87.8
-```
+## Step 3: Configure WSL ROS Environment
 
-**Option B: Manual setup**
+On WSL:
 
 ```bash
-# Set network environment
+source /opt/ros/jazzy/setup.bash
+
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 export ROS_DISCOVERY_SERVER=100.110.87.8:11888
 
-# Source ROS and launch RViz
-source /opt/ros/jazzy/setup.bash
+ros2 daemon stop
+ros2 daemon start
+```
+
+If using Thor's LAN IP instead of Tailscale, replace `100.110.87.8` with Thor's LAN IP.
+
+## Step 4: Verify WSL Can See Thor
+
+On WSL:
+
+```bash
+ros2 node list
+ros2 topic list
+```
+
+Expected nodes include things like:
+
+```text
+/robot_state_publisher
+/mserve_gz_bridge
+```
+
+Expected topics include:
+
+```text
+/robot_description
+/tf
+/tf_static
+/joint_states
+/odom
+/cmd_vel
+/clock
+```
+
+Then test data, not just discovery:
+
+```bash
+ros2 topic echo /odom --once
+ros2 topic echo /robot_description --once
+```
+
+If `ros2 node list` works but `ros2 topic echo` hangs, that is usually a WSL reachability problem. Prefer Tailscale inside WSL, not only on Windows.
+
+## Step 5: Launch RViz on WSL
+
+If this repo is also checked out in WSL:
+
+```bash
+cd /home/ecm/Workspace/projects/mServe-STACK
+./scripts/launch_remote_rviz.sh 100.110.87.8 ws/src/mserve_description/rviz/mserve.rviz
+```
+
+If the repo is not checked out in WSL, just start RViz:
+
+```bash
 rviz2
 ```
 
-## Step 3: Configure RViz Display
-## Step 4: Configure RViz Display
+In RViz:
 
-RViz starts with an empty scene. Add displays:
+- Fixed Frame: `base_link` or `odom`
+- Add `RobotModel`
+- Set RobotModel description source to `Topic`
+- Description Topic: `/robot_description`
+- Add `TF`
+- Add `Odometry` on `/odom`
 
-1. **Set Fixed Frame** (top toolbar):
-   - Click the dropdown showing "No fixed frame"
-   - Select `odom`
+## Step 6: Run Teleop from WSL
 
-2. **Add transforms** (bottom-left, Add button → TF)
-   - Shows robot coordinate frame tree
-
-3. **Add robot model** (Add → RobotModel)
-   - Displays the mServe URDF from Thor's `/robot_description`
-
-4. **Add odometry** (Add → Odometry)
-   - Plots the robot's path from `/odom` topic
-
-5. **Optional: Add laser scan** (Add → LaserScan, topic: `/scan`)
-   - Shows LIDAR data if enabled in URDF
-
-## Step 5: Verify Connection
-
-Check that RViz sees Thor's topics:
+Install teleop if needed:
 
 ```bash
-# In a new laptop terminal
-export ROS_LOCALHOST_ONLY=0
+sudo apt update
+sudo apt install ros-jazzy-teleop-twist-keyboard
+```
+
+Run:
+
+```bash
+cd /home/ecm/Workspace/projects/mServe-STACK
+./scripts/launch_remote_teleop.sh 100.110.87.8
+```
+
+Keep keyboard focus in the teleop terminal. Watch the robot move in Gazebo on Thor and update in RViz on WSL.
+
+## Verify Teleop Reaches Thor
+
+On Thor, in another terminal with the same ROS environment:
+
+```bash
 source /opt/ros/jazzy/setup.bash
+source /home/ecm/Workspace/projects/mServe-STACK/ws/install_host/setup.bash
 
-# Should list Thor's nodes
-ros2 node list
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export ROS_DISCOVERY_SERVER=127.0.0.1:11888
 
-# Should show Thor's topics
-ros2 topic list
+ros2 topic echo /cmd_vel
+```
 
-# Should show transform data
-ros2 topic echo /tf | head -20
+While pressing teleop keys in WSL, Thor should print `Twist` messages.
+
+You can also check the Gazebo side:
+
+```bash
+GZ_IP=127.0.0.1 gz topic -e -t /cmd_vel
 ```
 
 ## Troubleshooting
 
-### RViz Starts But No Data Appears
+### WSL sees no ROS nodes
 
-1. **Check Thor is running:**
-   ```bash
-   ssh ecm@100.110.87.8 "source /opt/ros/jazzy/setup.bash && export ROS_DISCOVERY_SERVER=127.0.0.1:11888 && source /home/ecm/Workspace/projects/mServe-STACK/ws/install_host/setup.bash && ros2 node list"
-   ```
-
-2. **Verify network settings on laptop:**
-   ```bash
-   echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
-   echo "ROS_DISCOVERY_SERVER=$ROS_DISCOVERY_SERVER"
-   echo "ROS_LOCALHOST_ONLY=$ROS_LOCALHOST_ONLY"
-   ```
-
-3. **Restart ROS 2 discovery:**
-   ```bash
-   ros2 daemon stop && sleep 1 && ros2 daemon start
-   ros2 topic list  # Should show Thor's topics now
-   ```
-
-4. **Check the discovery server is reachable from laptop:**
-   ```bash
-   nc -vz 100.110.87.8 11888
-   ```
-
-### Firewall Issues
-
-If topics don't appear, check firewall and TCP reachability to the discovery server:
+Check discovery server reachability:
 
 ```bash
-# On Thor and laptop (Linux), allow the discovery server port
-sudo ufw allow 11888/tcp
-
-# Optional for same-LAN multicast DDS use:
-sudo ufw allow in 7400:7409/udp
+nc -vz 100.110.87.8 11888
 ```
 
-### Still No Connection?
-
-Use SSH tunnel as fallback:
+Also verify both sides use the same environment:
 
 ```bash
-# On laptop, create tunnel
-ssh -L 11888:localhost:11888 ecm@100.110.87.8
+echo "$RMW_IMPLEMENTATION"
+echo "$ROS_DOMAIN_ID"
+echo "$ROS_LOCALHOST_ONLY"
+echo "$ROS_DISCOVERY_SERVER"
+```
 
-# In a new terminal on laptop:
-export ROS_DISCOVERY_SERVER=localhost:11888
+### WSL sees nodes but no topic data
+
+This is the classic WSL DDS data-plane issue.
+
+Fix options:
+
+1. Run Tailscale inside WSL and use WSL's own Tailscale address.
+2. Use Windows/WSL mirrored networking and same-LAN IPs.
+3. Avoid WSL networking for RViz and run RViz directly on a Linux machine.
+
+### RViz starts but the robot does not appear
+
+Check:
+
+```bash
+ros2 topic echo /robot_description --once
+ros2 topic echo /tf_static --once
+ros2 topic echo /joint_states --once
+```
+
+If `/robot_description` works but TF does not, restart RViz after Thor is already running.
+
+### Teleop publishes but Gazebo does not move
+
+Check ROS side on Thor:
+
+```bash
+ros2 topic echo /cmd_vel
+```
+
+Check bridge side on Thor:
+
+```bash
+GZ_IP=127.0.0.1 gz topic -e -t /cmd_vel
+```
+
+If ROS sees `/cmd_vel` but Gazebo does not, inspect the bridge node:
+
+```bash
+ros2 node list
+ros2 topic list | grep cmd_vel
+```
+
+## Quick Commands
+
+Thor terminal 1:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
+fastdds discovery -i 0 -l 0.0.0.0 -p 11888
+```
+
+Thor terminal 2:
+
+```bash
+cd /home/ecm/Workspace/projects/mServe-STACK
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export ROS_DISCOVERY_SERVER=127.0.0.1:11888
+scripts/05_utils/launch_mserve_description_gazebo.sh launch_rviz:=false
+```
+
+WSL RViz terminal:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export ROS_DISCOVERY_SERVER=100.110.87.8:11888
 rviz2
 ```
 
-## Saving Your RViz Config
-
-Once displays are set up correctly:
-
-1. **File → Save Config As** → `mserve_remote.rviz`
-2. Next time, use: `./scripts/launch_remote_rviz.sh 100.110.87.8 mserve_remote.rviz`
-
-## Network Reference
-
-| Connection | IP | Use Case |
-|-----------|-----|----------|
-| Tailscale | 100.110.87.8 | Recommended (works over internet) |
-| Local network | See `hostname -I` on Thor | If on same WiFi/Ethernet |
-
-## Next: Teleoperation from Laptop
-
-Once RViz displays the robot:
+WSL teleop terminal:
 
 ```bash
-# On laptop, in a new terminal
-export ROS_LOCALHOST_ONLY=0
 source /opt/ros/jazzy/setup.bash
-
-# Launch keyboard teleop — sends /cmd_vel to Thor
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export ROS_DISCOVERY_SERVER=100.110.87.8:11888
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
-
-# Press arrow keys to move the robot
-# Watch RViz update in real-time
 ```

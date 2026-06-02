@@ -18,6 +18,11 @@ ROS_LOG_DIR="$LOG_BASE/ros"
 mkdir -p "$ROS_LOG_DIR"
 export ROS_LOG_DIR
 
+# Keep Gazebo Transport local by default. On hosts with multiple network
+# interfaces, automatic IP selection can prevent the GUI and spawn client from
+# discovering the server, which looks like Gazebo has frozen.
+export GZ_IP="${GZ_IP:-127.0.0.1}"
+
 if ! command -v xacro >/dev/null 2>&1; then
   echo "ERROR: xacro is not installed or not on PATH."
   echo "Install it with:"
@@ -50,5 +55,24 @@ set +u
 source "$INSTALL_BASE/setup.bash"
 set -u
 
+LAUNCH_ARGS=("$@")
+HAS_GZ_ARGS=false
+for ARG in "$@"; do
+  if [[ "$ARG" == gz_args:=* ]]; then
+    HAS_GZ_ARGS=true
+    break
+  fi
+done
+
+if [ "$HAS_GZ_ARGS" = false ]; then
+  if [ -n "${MSERVE_GZ_ARGS:-}" ]; then
+    LAUNCH_ARGS=("gz_args:=$MSERVE_GZ_ARGS" "${LAUNCH_ARGS[@]}")
+  elif [ "$(uname -m)" = "aarch64" ]; then
+    # OGRE2 can render Gazebo primitives black or incomplete on some Jetson
+    # EGL stacks. Prefer OGRE on ARM unless the caller chooses another renderer.
+    LAUNCH_ARGS=("gz_args:=--render-engine ogre --render-engine-gui ogre" "${LAUNCH_ARGS[@]}")
+  fi
+fi
+
 echo "[mserve_description] launching Gazebo description view"
-ros2 launch mserve_description mserve_gazebo.launch.py "$@"
+ros2 launch mserve_description mserve_gazebo.launch.py "${LAUNCH_ARGS[@]}"
