@@ -112,704 +112,88 @@
       <heading_deg>0</heading_deg>
     </spherical_coordinates>
 
-    <model name="Construction Barrel">
-      <link name="link">
-        <inertial>
-          <pose>0 0 0.4 0 -0 0</pose>
-          <mass>500</mass>
-          <inertia>
-            <ixx>51.2096</ixx>
-            <iyy>51.2096</iyy>
-            <izz>25</izz>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyz>0</iyz>
-          </inertia>
-        </inertial>
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
+    <include>
+      <uri>model://construction_barrel</uri>
+      <name>Construction Barrel</name>
       <pose>-0.756237 1.39226 0 0 -0 0</pose>
-    </model>
+    </include>
 
-    <model name="Construction Barrel_0">
-      <link name="link">
-        <inertial>
-          <pose>0 0 0.4 0 -0 0</pose>
-          <mass>500</mass>
-          <inertia>
-            <ixx>51.2096</ixx>
-            <iyy>51.2096</iyy>
-            <izz>25</izz>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyz>0</iyz>
-          </inertia>
-        </inertial>
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
+    <include>
+      <uri>model://construction_barrel</uri>
+      <name>Construction Barrel_0</name>
       <pose>1.80022 0.377178 0 0 -0 0</pose>
-    </model>
+    </include>
 
-    <model name="Construction Cone">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-2.19745 -2.25046 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_0">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-1.40494 -2.55135 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_1">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-0.501986 -2.9745 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_2">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>2.09724 -2.18232 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_3">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-3.69879 0.345038 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_4">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-0.406438 -4.23374 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_5">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>2.38815 -3.2576 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_6">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>2.39316 -4.49605 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_7">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-3.00495 -2.78053 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Cone_8">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.10</radius>
-                <length>0.35</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <inertial>
-          <pose>0 0 0 0 -0 0</pose>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
-      <pose>-4.64786 -0.646522 0 0 -0 0</pose>
-    </model>
-
-    <model name="Construction Barrel_1">
-      <link name="link">
-        <inertial>
-          <pose>0 0 0.4 0 -0 0</pose>
-          <mass>500</mass>
-          <inertia>
-            <ixx>51.2096</ixx>
-            <iyy>51.2096</iyy>
-            <izz>25</izz>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyz>0</iyz>
-          </inertia>
-        </inertial>
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
+    <include>
+      <uri>model://construction_barrel</uri>
+      <name>Construction Barrel_1</name>
       <pose>-5.3108 -2.23708 0 0 -0 0</pose>
-    </model>
+    </include>
 
-    <model name="Construction Barrel_2">
-      <link name="link">
-        <inertial>
-          <pose>0 0 0.4 0 -0 0</pose>
-          <mass>500</mass>
-          <inertia>
-            <ixx>51.2096</ixx>
-            <iyy>51.2096</iyy>
-            <izz>25</izz>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyz>0</iyz>
-          </inertia>
-        </inertial>
-        <collision name="collision">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <contact>
-              <ode/>
-            </contact>
-            <bounce/>
-            <friction>
-              <torsional>
-                <ode/>
-              </torsional>
-              <ode/>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-              <cylinder>
-                <radius>0.14</radius>
-                <length>0.50</length>
-              </cylinder>
-            </geometry>
-        </visual>
-        <self_collide>0</self_collide>
-        <enable_wind>0</enable_wind>
-        <kinematic>0</kinematic>
-      </link>
+    <include>
+      <uri>model://construction_barrel</uri>
+      <name>Construction Barrel_2</name>
       <pose>-2.07692 -4.26198 0 0 -0 0</pose>
-    </model>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone</name>
+      <pose>-2.19745 -2.25046 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_0</name>
+      <pose>-1.40494 -2.55135 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_1</name>
+      <pose>-0.501986 -2.9745 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_2</name>
+      <pose>2.09724 -2.18232 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_3</name>
+      <pose>-3.69879 0.345038 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_4</name>
+      <pose>-0.406438 -4.23374 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_5</name>
+      <pose>2.38815 -3.2576 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_6</name>
+      <pose>2.39316 -4.49605 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_7</name>
+      <pose>-3.00495 -2.78053 0 0 -0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://construction_cone</uri>
+      <name>Construction Cone_8</name>
+      <pose>-4.64786 -0.646522 0 0 -0 0</pose>
+    </include>
   </world>
 </sdf>

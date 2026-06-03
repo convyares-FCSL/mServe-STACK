@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -111,7 +111,7 @@ def generate_launch_description():
     )
 
     # Optionally launch RViz to visualize the robot and Gazebo data.
-    rviz_config = package_share / 'rviz' / 'mserve.rviz'
+    rviz_config = package_share / 'rviz' / 'mserve_gazebo.rviz'
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -122,8 +122,15 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('launch_rviz')),
     )
 
+    # Register the package's models directory so Gazebo resolves model:// URIs.
+    gz_resource_path = AppendEnvironmentVariable(
+        'GZ_SIM_RESOURCE_PATH',
+        str(package_share / 'models'),
+    )
+
     # Construct the launch description with all the declared arguments and actions.
     return LaunchDescription([
+        gz_resource_path,
         DeclareLaunchArgument(
             'gz_args',
             default_value='',
@@ -172,7 +179,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_bridge',
             default_value='true',
-            description='Bridge Gazebo cmd_vel, odom, tf, joint_states, and clock topics into ROS 2.',
+            description='Bridge Gazebo cmd_vel, odom, tf, joint_states, scan, camera image, camera info, and clock topics into ROS 2.',
         ),
         DeclareLaunchArgument(
             'use_sim_time',

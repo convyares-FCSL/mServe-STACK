@@ -1,0 +1,62 @@
+<?xml version="1.0" ?>
+<!--
+  Construction Barrel — size parameters
+  ======================================
+  radius : 0.14 m   (barrel half-width; update all 2 occurrences below)
+  length : 0.50 m   (barrel height;     update all 2 occurrences below)
+
+  Inertia centre z = length / 2  (currently 0.25)
+  Inertia ixx/iyy  = mass*(3*r²+h²)/12  (currently 51.2096 for mass=500)
+  Inertia izz      = mass*r²/2          (currently 25.0    for mass=500)
+-->
+<sdf version="1.9">
+  <model name="construction_barrel">
+    <static>false</static>
+    <link name="link">
+      <inertial>
+        <pose>0 0 0.25 0 0 0</pose>  <!-- z = length/2 -->
+        <mass>500</mass>
+        <inertia>
+          <ixx>51.2096</ixx>
+          <iyy>51.2096</iyy>
+          <izz>25</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.14</radius>  <!-- barrel radius -->
+            <length>0.50</length>  <!-- barrel height -->
+          </cylinder>
+        </geometry>
+        <max_contacts>10</max_contacts>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <bounce/>
+          <friction>
+            <torsional>
+              <ode/>
+            </torsional>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius>0.14</radius>  <!-- barrel radius -->
+            <length>0.50</length>  <!-- barrel height -->
+          </cylinder>
+        </geometry>
+      </visual>
+      <self_collide>0</self_collide>
+      <enable_wind>0</enable_wind>
+      <kinematic>0</kinematic>
+    </link>
+  </model>
+</sdf>

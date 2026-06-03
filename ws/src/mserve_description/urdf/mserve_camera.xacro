@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="inertial_macros.xacro"/>
+
+  <!-- Raspberry Pi Camera Module 3 style defaults. Keep these isolated so a
+       later hardware swap only needs this file updated. -->
+  <xacro:property name="camera_depth" value="0.0115"/>
+  <xacro:property name="camera_width" value="0.025"/>
+  <xacro:property name="camera_height" value="0.024"/>
+  <xacro:property name="camera_mass" value="0.005"/>
+  <xacro:property name="camera_offset" value="0.005"/>
+  <xacro:property name="camera_x" value="${chassis_length + camera_depth / 2.0 + camera_offset}"/>
+  <xacro:property name="camera_y" value="0.0"/>
+  <xacro:property name="camera_z" value="${chassis_height + camera_height / 2.0}"/>
+
+  <xacro:property name="camera_image_topic" value="camera/image_raw"/>
+  <xacro:property name="camera_info_topic" value="camera/camera_info"/>
+  <xacro:property name="camera_update_rate" value="30.0"/>
+  <xacro:property name="camera_horizontal_fov" value="1.1789332498235952"/>
+  <xacro:property name="camera_image_width" value="1280"/>
+  <xacro:property name="camera_image_height" value="720"/>
+  <xacro:property name="camera_clip_near" value="0.05"/>
+  <xacro:property name="camera_clip_far" value="12.0"/>
+
+  <xacro:macro name="mserve_camera" params="parent_link:='chassis'">
+    <joint name="camera_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="camera_link"/>
+      <origin xyz="${camera_x} ${camera_y} ${camera_z}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="camera_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${camera_depth} ${camera_width} ${camera_height}"/>
+        </geometry>
+        <material name="trim_grey"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${camera_depth} ${camera_width} ${camera_height}"/>
+        </geometry>
+      </collision>
+      <xacro:inertial_box
+        mass="${camera_mass}"
+        x="${camera_depth}"
+        y="${camera_width}"
+        z="${camera_height}"
+        origin_xyz="0 0 0"
+        origin_rpy="0 0 0"/>
+    </link>
+
+    <!-- Optical frame for REP-103 camera consumers -->
+    <joint name="camera_optical_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child link="camera_link_optical"/>
+      <origin xyz="0 0 0" rpy="${-pi / 2.0} 0 ${-pi / 2.0}"/>
+    </joint>
+
+    <link name="camera_link_optical"/>
+
+    <gazebo reference="camera_link">
+      <sensor name="pi_camera_module_3" type="camera">
+        <pose>0 0 0 0 0 0</pose>
+        <topic>${camera_image_topic}</topic>
+        <always_on>true</always_on>
+        <update_rate>${camera_update_rate}</update_rate>
+        <visualize>true</visualize>
+        <gz_frame_id>camera_link_optical</gz_frame_id>
+        <camera name="camera_sensor">
+          <camera_info_topic>${camera_info_topic}</camera_info_topic>
+          <horizontal_fov>${camera_horizontal_fov}</horizontal_fov>
+          <image>
+            <format>R8G8B8</format>
+            <width>${camera_image_width}</width>
+            <height>${camera_image_height}</height>
+          </image>
+          <clip>
+            <near>${camera_clip_near}</near>
+            <far>${camera_clip_far}</far>
+          </clip>
+        </camera>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

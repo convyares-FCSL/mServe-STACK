@@ -7,6 +7,7 @@ Articulated Robotics tutorial:
 
 - `urdf/mserve.urdf.xacro` as the top-level robot description
 - `urdf/mserve_core.xacro` for the main mobile base geometry
+- `urdf/mserve_camera.xacro` for the current camera mount, optical frame, and Gazebo camera sensor
 - `urdf/mserve_lidar.xacro` for the RPLIDAR C1 mount and Gazebo laser sensor
 - `urdf/inertial_macros.xacro` for reusable inertia helpers
 - `urdf/mserve_gazebo.xacro` for Gazebo-specific contact and drive-system tuning
@@ -20,8 +21,9 @@ The model currently includes:
 
 - a differential-drive base with left/right wheel joints
 - a fixed caster wheel
+- a Raspberry Pi Camera Module 3-style RGB camera on `camera_link`
 - an RPLIDAR C1-style lidar on `lidar_link`
-- reserved frames for camera, display, and an arm mount
+- reserved frames for display and an arm mount
 
 Install missing ROS packages on Ubuntu if needed:
 
@@ -39,6 +41,12 @@ If you want keyboard teleop for Gazebo testing as well:
 
 ```bash
 sudo apt install ros-jazzy-teleop-twist-keyboard
+```
+
+If you want an easy image viewer for the simulated camera:
+
+```bash
+sudo apt install ros-jazzy-rqt-image-view
 ```
 
 ## Launch Normal
@@ -137,6 +145,13 @@ Optional checks:
 ```bash
 ros2 topic echo /odom
 ros2 topic echo /scan
+ros2 topic echo /camera/camera_info
+```
+
+Optional image viewer:
+
+```bash
+ros2 run rqt_image_view rqt_image_view /camera/image_raw
 ```
 
 ## Gazebo Integration
@@ -146,6 +161,10 @@ The modern Gazebo Sim (Harmonic) integration uses:
 - **Systems**: `DiffDrive` (differential drive control) and `JointStatePublisher` defined in
   `urdf/mserve_gazebo.xacro`. Per the [Harmonic migration guide](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/),
   model-specific systems belong with the model definition, not at the world level.
+- **Camera Sensor**: `urdf/mserve_camera.xacro` adds a camera sensor on `camera_link`
+  with a REP-103 optical frame on `camera_link_optical`, a 75 degree diagonal
+  field of view mapped to a 16:9 image, and ROS-facing topics on
+  `/camera/image_raw` and `/camera/camera_info`.
 - **Lidar Sensor**: `urdf/mserve_lidar.xacro` adds a `gpu_lidar` sensor on `lidar_link`
   using the RPLIDAR C1 nominal scan rate, 360 degree coverage, and 12 m max range.
 - **Bridge Configuration**: `params/mserve_gazebo_bridge.yaml` bridges the following topics:
@@ -154,6 +173,8 @@ The modern Gazebo Sim (Harmonic) integration uses:
   - `tf` (Gazebo → ROS)
   - `joint_states` (Gazebo → ROS)
   - `scan` (Gazebo → ROS)
+  - `camera/image_raw` (Gazebo → ROS)
+  - `camera/camera_info` (Gazebo → ROS)
   - `clock` (Gazebo → ROS)
 
 ### Testing the Gazebo Integration
@@ -186,6 +207,12 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/cm
 ros2 topic echo /odom
 ```
 
+**Terminal 4**: View camera output
+
+```bash
+ros2 run rqt_image_view rqt_image_view /camera/image_raw
+```
+
 ### Validation
 
 - xacro expands cleanly
@@ -209,6 +236,8 @@ Notes:
 - `headless:=true` switches Gazebo to `-s --headless-rendering`, which avoids
   the Gazebo GUI while still allowing rendered sensors such as the lidar to
   publish into ROS 2 for RViz.
+- The camera bridge overrides the ROS `frame_id` to `camera_link_optical` so
+  image consumers see the standard optical frame convention.
 - The default world file is `basic.sdf`, so the default spawn service world name
   is `basic`.
 - `use_bridge:=true` enables the bridge node (default).
