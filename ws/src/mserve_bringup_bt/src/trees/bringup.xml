@@ -1,0 +1,9 @@
+<root BTCPP_format="4">
+    <BehaviorTree ID="Main">
+        <ChangeStateNode 
+            name="configure_base"
+            node_name="mserve_base" 
+            transition="1"
+        />
+    </BehaviorTree>
+</root>

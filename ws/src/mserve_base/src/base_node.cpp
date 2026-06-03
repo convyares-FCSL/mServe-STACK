@@ -23,6 +23,8 @@ BaseNode::BaseNode(const rclcpp::NodeOptions & options): rclcpp_lifecycle::Lifec
     [this](const std::vector<rclcpp::Parameter> & params) {
       return this->on_parameters(params);
     });
+
+  RCLCPP_INFO(get_logger(), "Mserve_base base_node constructed");
 }
 
 // ==============================================================================

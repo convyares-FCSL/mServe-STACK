@@ -191,10 +191,15 @@ def generate_launch_description():
             default_value='true',
             description='Launch RViz to visualize the robot and Gazebo topics.',
         ),
+        DeclareLaunchArgument(
+            'spawn_delay',
+            default_value='10.0',
+            description='Seconds to wait for Gazebo to be ready before spawning the robot.',
+        ),
         gazebo,
         gazebo_headless,
         robot_state_publisher,
         bridge,
         rviz,
-        TimerAction(period=2.0, actions=[spawn_mserve]),
+        TimerAction(period=LaunchConfiguration('spawn_delay'), actions=[spawn_mserve]),
     ])

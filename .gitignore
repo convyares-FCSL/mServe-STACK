@@ -1,6 +1,11 @@
 .env
 .env.local
 
+build/
+install/
+log/
+temp/
+
 # ROS 2 workspace output
 ws/build/
 ws/build_host/

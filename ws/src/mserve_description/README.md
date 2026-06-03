@@ -7,7 +7,8 @@ Articulated Robotics tutorial:
 
 - `urdf/mserve.urdf.xacro` as the top-level robot description
 - `urdf/mserve_core.xacro` for the main mobile base geometry
-- `urdf/mserve_camera.xacro` for the current camera mount, optical frame, and Gazebo camera sensor
+- `urdf/mserve_depth_camera.xacro` for the generic RGBD depth camera mount, optical frame, and Gazebo sensor (active)
+- `urdf/mserve_camera.xacro` for the Raspberry Pi Camera Module 3 RGB-only camera (disabled — commented out in `mserve.urdf.xacro`)
 - `urdf/mserve_lidar.xacro` for the RPLIDAR C1 mount and Gazebo laser sensor
 - `urdf/inertial_macros.xacro` for reusable inertia helpers
 - `urdf/mserve_gazebo.xacro` for Gazebo-specific contact and drive-system tuning
@@ -16,14 +17,39 @@ Articulated Robotics tutorial:
   and `joint_state_publisher_gui`
 - `launch/mserve_gazebo.launch.py` to start Gazebo Sim and spawn the robot
 - `rviz/mserve.rviz` as the saved RViz layout
+- `models/construction_barrel/` local obstacle model (cylinder)
+- `models/construction_cone/` local obstacle model (cone)
+- `worlds/basic.sdf` default world with pre-placed barrels and cones
 
-The model currently includes:
+The robot model currently includes:
 
 - a differential-drive base with left/right wheel joints
 - a fixed caster wheel
-- a Raspberry Pi Camera Module 3-style RGB camera on `camera_link`
+- a generic RGBD depth camera on `camera_link` (RGB + depth + point cloud)
 - an RPLIDAR C1-style lidar on `lidar_link`
 - reserved frames for display and an arm mount
+
+### Obstacle models
+
+Barrels and cones are defined as local SDF models under `models/` and placed in
+`worlds/basic.sdf` via `<include>` blocks. The launch file adds the `models/`
+directory to `GZ_SIM_RESOURCE_PATH` automatically so Gazebo can resolve the
+`model://` URIs without any manual environment setup.
+
+To adjust the size of an obstacle, edit the `model.sdf` for that model. Each
+file has a comment block at the top listing the parameters and which lines to
+update:
+
+```bash
+# Cone size
+ws/src/mserve_description/models/construction_cone/model.sdf
+
+# Barrel size
+ws/src/mserve_description/models/construction_barrel/model.sdf
+```
+
+Because the workspace uses `--symlink-install`, size changes take effect on the
+next Gazebo launch without a rebuild.
 
 Install missing ROS packages on Ubuntu if needed:
 
@@ -70,7 +96,7 @@ Manual RViz launch:
 cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
-source install/setup.bash
+source install_host/setup.bash
 ros2 launch mserve_description mserve_rviz.launch.py
 ```
 
@@ -96,6 +122,26 @@ This script:
 - avoids conflicts with Docker `/ws` symlink installs
 - launches `mserve_gazebo.launch.py`
 - accepts `--headless` as a shortcut for `headless:=true`
+- passes any extra arguments through to `ros2 launch` (see launch arguments below)
+
+#### Launch arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `spawn_delay` | `10.0` | Seconds to wait before spawning the robot. Increase on slow machines. |
+| `headless` | `false` | Run Gazebo server-only with headless rendering. |
+| `world` | `basic.sdf` | World file name under `worlds/`. |
+| `world_name` | `basic` | Gazebo world name used by the spawn service. |
+| `use_bridge` | `true` | Bridge Gazebo topics into ROS 2. |
+| `launch_rviz` | `true` | Launch RViz alongside Gazebo. |
+
+```bash
+# Slower machine — give Gazebo more time before spawning
+scripts/05_utils/launch_mserve_description_gazebo.sh spawn_delay:=15.0
+
+# Headless with a longer spawn delay
+scripts/05_utils/launch_mserve_description_gazebo.sh --headless spawn_delay:=15.0
+```
 
 Manual Gazebo launch:
 
@@ -103,7 +149,7 @@ Manual Gazebo launch:
 cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
-source install/setup.bash
+source install_host/setup.bash
 ros2 launch mserve_description mserve_gazebo.launch.py
 ```
 
@@ -113,7 +159,7 @@ Manual headless Gazebo launch:
 cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
-source install/setup.bash
+source install_host/setup.bash
 ros2 launch mserve_description mserve_gazebo.launch.py headless:=true
 ```
 
@@ -152,6 +198,7 @@ Optional image viewer:
 
 ```bash
 ros2 run rqt_image_view rqt_image_view /camera/image_raw
+ros2 run rqt_image_view rqt_image_view /camera/depth/image_raw
 ```
 
 ## Gazebo Integration
@@ -161,10 +208,15 @@ The modern Gazebo Sim (Harmonic) integration uses:
 - **Systems**: `DiffDrive` (differential drive control) and `JointStatePublisher` defined in
   `urdf/mserve_gazebo.xacro`. Per the [Harmonic migration guide](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/),
   model-specific systems belong with the model definition, not at the world level.
-- **Camera Sensor**: `urdf/mserve_camera.xacro` adds a camera sensor on `camera_link`
-  with a REP-103 optical frame on `camera_link_optical`, a 75 degree diagonal
-  field of view mapped to a 16:9 image, and ROS-facing topics on
-  `/camera/image_raw` and `/camera/camera_info`.
+- **Depth Camera Sensor**: `urdf/mserve_depth_camera.xacro` adds a generic RGBD
+  camera on `camera_link` with a REP-103 optical frame on `camera_link_optical`,
+  ~69° horizontal FOV, 640×480 resolution, and 0.1–10 m depth range. ROS topics:
+  - `camera/image_raw` — RGB image
+  - `camera/depth/image_raw` — depth image (float32, metres)
+  - `camera/points` — point cloud (`sensor_msgs/PointCloud2`)
+  - `camera/camera_info` — camera calibration info
+  The Pi Camera (`mserve_camera.xacro`) is retained but commented out in
+  `mserve.urdf.xacro` and can be re-enabled by swapping the includes.
 - **Lidar Sensor**: `urdf/mserve_lidar.xacro` adds a `gpu_lidar` sensor on `lidar_link`
   using the RPLIDAR C1 nominal scan rate, 360 degree coverage, and 12 m max range.
 - **Bridge Configuration**: `params/mserve_gazebo_bridge.yaml` bridges the following topics:
@@ -173,8 +225,10 @@ The modern Gazebo Sim (Harmonic) integration uses:
   - `tf` (Gazebo → ROS)
   - `joint_states` (Gazebo → ROS)
   - `scan` (Gazebo → ROS)
-  - `camera/image_raw` (Gazebo → ROS)
+  - `camera/image_raw` (Gazebo → ROS, RGB)
   - `camera/camera_info` (Gazebo → ROS)
+  - `camera/depth/image_raw` (Gazebo → ROS, depth float32)
+  - `camera/points` (Gazebo → ROS, PointCloud2)
   - `clock` (Gazebo → ROS)
 
 ### Testing the Gazebo Integration
@@ -300,6 +354,25 @@ ros2 param list | grep robot_description
 # In the terminal where Gazebo was launched, look for error messages
 # Or check the launch output for warnings about failed bridges
 ```
+
+### Robot not visible in the Gazebo entity tree
+
+The robot is spawned after a configurable delay (`spawn_delay`, default 10 s).
+On slower machines Gazebo may still be initialising when the spawn fires, causing
+it to silently drop the request. If the entity tree shows the world objects
+(ground plane, barrels, cones) but not the robot, increase the delay:
+
+```bash
+scripts/05_utils/launch_mserve_description_gazebo.sh spawn_delay:=20.0
+```
+
+### World obstacles not loading (model:// URI errors)
+
+If Gazebo logs `Unable to find uri[model://construction_barrel]` and exits, the
+`GZ_SIM_RESOURCE_PATH` is not set correctly. The launch file sets it
+automatically, so this usually means the package was not sourced before launch.
+Always use the launch script rather than calling `ros2 launch` directly, or
+source `install_host/setup.bash` before launching manually.
 
 ### Common Issues
 

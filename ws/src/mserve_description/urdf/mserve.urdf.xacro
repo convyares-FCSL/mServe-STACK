@@ -4,9 +4,13 @@
   <!-- Include the core robot definition -->
   <xacro:include filename="mserve_core.xacro"/>
 
-  <!-- Include Camera -->
-  <xacro:include filename="mserve_camera.xacro"/>
-  <xacro:mserve_camera parent_link="chassis"/>
+  <!-- Pi Camera (disabled — replaced by depth camera below) -->
+  <!-- <xacro:include filename="mserve_camera.xacro"/> -->
+  <!-- <xacro:mserve_camera parent_link="chassis"/> -->
+
+  <!-- Depth Camera -->
+  <xacro:include filename="mserve_depth_camera.xacro"/>
+  <xacro:mserve_depth_camera parent_link="chassis"/>
 
   <!-- Include Lidar -->
   <xacro:include filename="mserve_lidar.xacro"/>
