@@ -4,6 +4,10 @@
   <!-- Include the core robot definition -->
   <xacro:include filename="mserve_core.xacro"/>
 
+  <!-- Include Lidar -->
+  <xacro:include filename="mserve_lidar.xacro"/>
+  <xacro:mserve_lidar parent_link="chassis"/>
+
   <!-- Include Gazebo-specific simulation tuning -->
   <xacro:include filename="mserve_gazebo.xacro"/>
   

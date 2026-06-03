@@ -7,6 +7,7 @@
   <xacro:property name="diff_drive_frame_id" value="odom"/>
   <xacro:property name="diff_drive_child_frame_id" value="base_link"/>
   <xacro:property name="diff_drive_odom_publish_frequency" value="50.0"/>
+  <xacro:property name="robot_total_mass" value="${chassis_mass + 2.0 * wheel_mass + caster_mass + lidar_riser_mass + lidar_mass + camera_mass + display_mass + arm_mount_mass}"/>
   <xacro:property name="diff_drive_max_linear_velocity" value="${wheel_rated_velocity * wheel_radius}"/>
   <xacro:property name="diff_drive_max_angular_velocity" value="${2.0 * diff_drive_max_linear_velocity / wheel_separation}"/>
   <xacro:property name="diff_drive_max_linear_acceleration" value="${2.0 * wheel_rated_torque / (wheel_radius * robot_total_mass)}"/>

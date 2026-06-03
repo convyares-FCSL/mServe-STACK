@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- RPLIDAR C1 envelope and scan characteristics -->
+  <xacro:property name="lidar_radius" value="0.04"/>
+  <xacro:property name="lidar_length" value="0.04"/>
+  <xacro:property name="lidar_mass" value="0.11"/>
+  <xacro:property name="lidar_riser_radius" value="0.012"/>
+  <xacro:property name="lidar_riser_height" value="0.06"/>
+  <xacro:property name="lidar_riser_mass" value="0.03"/>
+  <xacro:property name="lidar_offset" value="0.00"/>
+  <xacro:property name="lidar_x" value="${chassis_length / 2.0 + lidar_offset}"/>
+  <xacro:property name="lidar_y" value="0.0"/>
+  <xacro:property name="lidar_riser_z" value="${chassis_height + lidar_riser_height / 2.0}"/>
+  <xacro:property name="lidar_z" value="${lidar_riser_height / 2.0 + lidar_length / 2.0}"/>
+  <xacro:property name="lidar_scan_topic" value="scan"/>
+  <xacro:property name="lidar_update_rate" value="10.0"/>
+  <xacro:property name="lidar_horizontal_samples" value="500"/>
+  <xacro:property name="lidar_min_angle" value="${-pi}"/>
+  <xacro:property name="lidar_max_angle" value="${pi}"/>
+  <xacro:property name="lidar_min_range" value="0.05"/>
+  <xacro:property name="lidar_max_range" value="12.0"/>
+  <xacro:property name="lidar_range_resolution" value="0.015"/>
+
+  <material name="sensor_green">
+    <color rgba="0.27 0.67 0.47 1.0"/>
+  </material>
+
+  <xacro:macro name="mserve_lidar" params="parent_link:='chassis'">
+    <joint name="lidar_riser_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="lidar_riser_link"/>
+      <origin xyz="${lidar_x} ${lidar_y} ${lidar_riser_z}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="lidar_riser_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${lidar_riser_radius}" length="${lidar_riser_height}"/>
+        </geometry>
+        <material name="trim_grey"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${lidar_riser_radius}" length="${lidar_riser_height}"/>
+        </geometry>
+      </collision>
+      <xacro:inertial_cylinder
+        mass="${lidar_riser_mass}"
+        radius="${lidar_riser_radius}"
+        length="${lidar_riser_height}"
+        origin_xyz="0 0 0"
+        origin_rpy="0 0 0"/>
+    </link>
+
+    <joint name="lidar_joint" type="fixed">
+      <parent link="lidar_riser_link"/>
+      <child link="lidar_link"/>
+      <origin xyz="0 0 ${lidar_z}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="lidar_link">
+      <visual>
+        <geometry>
+          <cylinder radius="${lidar_radius}" length="${lidar_length}"/>
+        </geometry>
+        <material name="sensor_green"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${lidar_radius}" length="${lidar_length}"/>
+        </geometry>
+      </collision>
+      <xacro:inertial_cylinder
+        mass="${lidar_mass}"
+        radius="${lidar_radius}"
+        length="${lidar_length}"
+        origin_xyz="0 0 0"
+        origin_rpy="0 0 0"/>
+    </link>
+
+    <gazebo reference="lidar_link">
+      <sensor name="rplidar_c1" type="gpu_lidar">
+        <pose>0 0 0 0 0 0</pose>
+        <topic>${lidar_scan_topic}</topic>
+        <update_rate>${lidar_update_rate}</update_rate>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <gz_frame_id>lidar_link</gz_frame_id>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>${lidar_horizontal_samples}</samples>
+              <resolution>1</resolution>
+              <min_angle>${lidar_min_angle}</min_angle>
+              <max_angle>${lidar_max_angle}</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>1</samples>
+              <resolution>1</resolution>
+              <min_angle>0</min_angle>
+              <max_angle>0</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>${lidar_min_range}</min>
+            <max>${lidar_max_range}</max>
+            <resolution>${lidar_range_resolution}</resolution>
+          </range>
+        </ray>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

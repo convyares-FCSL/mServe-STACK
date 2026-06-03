@@ -8,6 +8,40 @@ set +u
 source "$ROOT_DIR/scripts/01_setup/env_setup.sh" >/dev/null
 set -u
 
+SHOW_HELP=false
+USER_WANTS_HEADLESS=false
+LAUNCH_ARGS=()
+
+for ARG in "$@"; do
+  case "$ARG" in
+    --help|-h)
+      SHOW_HELP=true
+      ;;
+    --headless)
+      USER_WANTS_HEADLESS=true
+      ;;
+    *)
+      LAUNCH_ARGS+=("$ARG")
+      ;;
+  esac
+done
+
+if [ "$SHOW_HELP" = true ]; then
+  cat <<'EOF'
+Usage:
+  launch_mserve_description_gazebo.sh [--headless] [ros2 launch args...]
+
+Options:
+  --headless   Run Gazebo server-only with headless rendering enabled.
+
+Examples:
+  scripts/05_utils/launch_mserve_description_gazebo.sh
+  scripts/05_utils/launch_mserve_description_gazebo.sh --headless
+  scripts/05_utils/launch_mserve_description_gazebo.sh world:=empty.sdf
+EOF
+  exit 0
+fi
+
 cd "$ROOT_DIR/ws"
 
 BUILD_BASE="$ROOT_DIR/ws/build_host"
@@ -55,9 +89,12 @@ set +u
 source "$INSTALL_BASE/setup.bash"
 set -u
 
-LAUNCH_ARGS=("$@")
+if [ "$USER_WANTS_HEADLESS" = true ]; then
+  LAUNCH_ARGS=("headless:=true" "${LAUNCH_ARGS[@]}")
+fi
+
 HAS_GZ_ARGS=false
-for ARG in "$@"; do
+for ARG in "${LAUNCH_ARGS[@]}"; do
   if [[ "$ARG" == gz_args:=* ]]; then
     HAS_GZ_ARGS=true
     break

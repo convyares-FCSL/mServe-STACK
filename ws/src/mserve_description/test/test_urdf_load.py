@@ -20,6 +20,7 @@ def test_xacro_expands_to_expected_links_and_joints():
 
     links = {link.attrib['name'] for link in robot.findall('link')}
     joints = {joint.attrib['name']: joint.attrib['type'] for joint in robot.findall('joint')}
+    lidar_sensor = robot.find("./gazebo[@reference='lidar_link']/sensor[@name='rplidar_c1']")
 
     assert {
         'base_link',
@@ -27,6 +28,7 @@ def test_xacro_expands_to_expected_links_and_joints():
         'left_wheel',
         'right_wheel',
         'caster_wheel',
+        'lidar_riser_link',
         'lidar_link',
         'camera_link',
         'display_link',
@@ -36,3 +38,8 @@ def test_xacro_expands_to_expected_links_and_joints():
     assert joints['left_wheel_joint'] == 'continuous'
     assert joints['right_wheel_joint'] == 'continuous'
     assert joints['chassis_joint'] == 'fixed'
+    assert joints['lidar_riser_joint'] == 'fixed'
+    assert joints['lidar_joint'] == 'fixed'
+    assert lidar_sensor is not None
+    assert lidar_sensor.attrib['type'] == 'gpu_lidar'
+    assert lidar_sensor.findtext('topic') == 'scan'

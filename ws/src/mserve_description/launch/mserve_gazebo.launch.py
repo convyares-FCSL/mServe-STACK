@@ -4,12 +4,12 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
+from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import ExecuteProcess
 
 
 def generate_launch_description():
@@ -35,6 +35,7 @@ def generate_launch_description():
     yaw = LaunchConfiguration('yaw')
     use_bridge = LaunchConfiguration('use_bridge')
     use_sim_time = LaunchConfiguration('use_sim_time')
+    headless = LaunchConfiguration('headless')
 
     # Use xacro to process the robot description and pass it as a parameter.
     robot_description = ParameterValue(
@@ -53,6 +54,20 @@ def generate_launch_description():
             'gz_args': ['-r ', world_file, ' ', gz_args],
             'on_exit_shutdown': 'true',
         }.items(),
+        condition=UnlessCondition(headless),
+    )
+
+    gazebo_headless = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution(
+                [FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py']
+            )
+        ),
+        launch_arguments={
+            'gz_args': ['-r -s --headless-rendering ', world_file, ' ', gz_args],
+            'on_exit_shutdown': 'true',
+        }.items(),
+        condition=IfCondition(headless),
     )
 
     # Launch the robot state publisher to publish the robot description and use Gazebo time.
@@ -115,6 +130,11 @@ def generate_launch_description():
             description='Additional arguments passed to ros_gz_sim/gz_sim.launch.py.',
         ),
         DeclareLaunchArgument(
+            'headless',
+            default_value='false',
+            description='Run Gazebo server-only with headless rendering for sensors such as the lidar.',
+        ),
+        DeclareLaunchArgument(
             'world',
             default_value='basic.sdf',
             description='World file name under mserve_description/worlds.',
@@ -165,6 +185,7 @@ def generate_launch_description():
             description='Launch RViz to visualize the robot and Gazebo topics.',
         ),
         gazebo,
+        gazebo_headless,
         robot_state_publisher,
         bridge,
         rviz,
