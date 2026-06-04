@@ -1,9 +1,71 @@
 <root BTCPP_format="4">
     <BehaviorTree ID="Main">
-        <ChangeStateNode 
-            name="configure_base"
-            node_name="mserve_base" 
-            transition="1"
-        />
+        <Sequence name="main">
+
+            <Sequence name="base_sequence">
+                <Fallback name="config_base_fallback">
+                    <Inverter>
+                        <IsInState
+                            name="is_base_inactive"
+                            node_name="mserve_base"
+                            state="unconfigured"
+                        />
+                    </Inverter>
+                    <ChangeStateNode
+                        name="configure_base"
+                        node_name="mserve_base"
+                        transition="configure"
+                    />
+                </Fallback>
+
+                <Fallback name="activate_base_fallback">
+                    <Inverter>
+                        <IsInState
+                            name="is_base_active"
+                            node_name="mserve_base"
+                            state="inactive"
+                        />
+                    </Inverter>
+                    <ChangeStateNode
+                        name="activate_base"
+                        node_name="mserve_base"
+                        transition="activate"
+                    />
+                </Fallback>
+            </Sequence>
+
+            <Sequence name="drivechain_sequence">
+                <Fallback name="config_drivechain_fallback">
+                    <Inverter>
+                        <IsInState
+                            name="is_drivechain_inactive"
+                            node_name="mserve_drivechain"
+                            state="unconfigured"
+                        />
+                    </Inverter>
+                    <ChangeStateNode
+                        name="configure_drivechain"
+                        node_name="mserve_drivechain"
+                        transition="configure"
+                    />
+                </Fallback>
+
+                <Fallback name="activate_drivechain_fallback">
+                    <Inverter>
+                        <IsInState
+                            name="is_drivechain_active"
+                            node_name="mserve_drivechain"
+                            state="inactive"
+                        />
+                    </Inverter>
+                    <ChangeStateNode
+                        name="activate_drivechain"
+                        node_name="mserve_drivechain"
+                        transition="activate"
+                    />
+                </Fallback>
+            </Sequence>
+
+        </Sequence>
     </BehaviorTree>
 </root>

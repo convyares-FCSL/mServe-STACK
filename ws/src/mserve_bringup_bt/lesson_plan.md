@@ -36,6 +36,45 @@
 
 ---
 
+## What we covered (session 2)
+
+### Extended to full sequence
+- Added `Sequence` node to XML — stops at first `FAILURE`, which is the correct bringup behaviour
+- Named transitions (`"configure"`, `"activate"`) via `inline static const std::unordered_map` in the node — no magic numbers in XML
+- `InputPort<std::string>` + map lookup in `tick()` converts name to lifecycle transition ID
+
+### Instance-per-XML-node model
+- The factory constructs **one C++ instance per `<ChangeStateNode>` tag** at `createTreeFromFile` time
+- Constructor cost matters: it runs N times at tree load, once per node in the XML
+- Keep constructors light — register clients, store names, nothing expensive
+- Service clients are cheap (DDS endpoint registration only), so one-per-instance is fine at this scale
+- For complex trees with many nodes hitting the same service: `behaviortree_ros2` handles client sharing and async properly — see Phase 3 below
+
+---
+
+## Planned phases
+
+### Phase 2 — condition nodes + resilience (next)
+- `GetStateNode` — condition node that checks current lifecycle state before attempting a transition
+- Retry decorator in XML — `<RetryUntilSuccessful>` wrapping each action, no C++ changes
+- Prevents re-run failures when nodes are already in the target state
+
+### Phase 3 — production grade with `behaviortree_ros2`
+- `behaviortree_ros2` is the production library (BehaviorTree/BehaviorTree.ROS2 on GitHub)
+- Provides `RosActionNode`, `RosServiceNode`, `RosTopicSubNode` wrappers with proper async, client sharing, and executor integration
+- Replaces `spin_until_future_complete` hack with a proper non-blocking async pattern
+- Required for trees that need to run alongside a live ROS executor (topics, actions, services simultaneously)
+- Build from source — not in apt for Jazzy
+- Goal: port `ChangeStateNode` to inherit from `BT::RosServiceNode<lifecycle_msgs::srv::ChangeState>`
+
+### Phase 4 — integration
+- Launch file starts all managed nodes + BT manager together
+- Groot2 live visualisation via `BT::PublisherZMQ`
+- Graceful shutdown subtree on SIGINT
+- Web UI demoted to debug/override only
+
+---
+
 ## Next session — where to pick up
 
 See `todo.md`.

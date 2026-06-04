@@ -28,8 +28,21 @@
 - [ ] **Groot2 visualisation**
   - Add `BT::PublisherZMQ` to `build()` so Groot2 can connect and show the live tree ticking
 
-## Later / phase 2
+## Phase 3 — production grade (behaviortree_ros2)
 
-- [ ] Replace `tickWhileRunning()` with a proper ROS executor loop so the node can also respond to topics/services while the tree is running
-- [ ] Launch file that starts all managed nodes + the BT manager together
-- [ ] Port the web UI lifecycle controls to "debug/override" mode only
+- [ ] **Build `behaviortree_ros2` from source**
+  - Clone BehaviorTree/BehaviorTree.ROS2 into `ws/src/`
+  - Not in apt for Jazzy — source build only
+- [ ] **Port `ChangeStateNode` to `BT::RosServiceNode`**
+  - Inherits from `BT::RosServiceNode<lifecycle_msgs::srv::ChangeState>`
+  - Replaces `spin_until_future_complete` with proper async pattern
+  - Handles client sharing and executor integration correctly
+- [ ] **Replace `tickWhileRunning()` with a proper ROS executor loop**
+  - Node can respond to topics/services while tree is ticking
+
+## Phase 4 — integration
+
+- [ ] Launch file that starts all managed nodes + BT manager together
+- [ ] Groot2 live visualisation via `BT::PublisherZMQ`
+- [ ] Graceful shutdown subtree on SIGINT
+- [ ] Port the web UI lifecycle controls to debug/override only
