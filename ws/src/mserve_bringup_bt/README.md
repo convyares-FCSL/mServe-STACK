@@ -1,56 +1,106 @@
 # mserve_bringup_bt
 
-BehaviorTree.CPP-based lifecycle manager for mServe. Replaces manual web UI lifecycle control with an automatic behaviour tree that configures and activates managed nodes in order.
+BehaviorTree.CPP lifecycle manager for mServe using `behaviortree_ros2`.
+Replaces manual web UI lifecycle control with an automatic behaviour tree that
+configures and activates managed nodes in order, idempotently and with retries.
 
 ## What it does
 
-- Loads a behaviour tree from `trees/bringup.xml` at startup
-- For each managed node in the tree, creates a `ChangeState` service client at tree load time
-- Ticks the tree, driving each lifecycle node through configure → activate in sequence
-- Returns `FAILURE` if any transition is rejected or times out
+- Loads `trees/bringup.xml` at startup — no C++ changes needed to add nodes
+- Checks current lifecycle state before each transition — safe to re-run
+- Drives `mserve_base` and `mserve_drivechain` through configure → activate
+- Retries failed transitions up to 3 times before giving up
+- Non-blocking service calls via `behaviortree_ros2` `RosServiceNode`
 
 ## Package structure
 
 ```
 src/
-  main.cpp              ROS 2 node (BaseNode) + BT nodes (ChangeStateNode)
+  main.cpp              BaseNode, IsInState, ChangeStateNode
   trees/
-    bringup.xml         Tree definition — edit this to change bringup order
+    bringup.xml         Tree definition — edit to change bringup order
+lesson_plan.md          Concept notes from learning sessions
+todo.md                 Remaining work and phase roadmap
 ```
 
-## Running natively (no Docker)
+## System setup — fresh machine
+
+```bash
+# BT.CPP core
+sudo apt install ros-jazzy-behaviortree-cpp
+
+# behaviortree_ros2 build dep
+sudo apt install ros-jazzy-generate-parameter-library
+
+# behaviortree_ros2 source build
+cd ~/ai-workspace/projects/mServe-STACK/ws/src
+git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+
+# Build in order
+cd ~/ai-workspace/projects/mServe-STACK/ws
+colcon build --packages-select btcpp_ros2_interfaces
+colcon build --packages-select behaviortree_ros2
+colcon build --packages-select mserve_bringup_bt --symlink-install
+```
+
+## Running natively
 
 ```bash
 cd ~/ai-workspace/projects/mServe-STACK/ws
 source install/setup.bash
 
-# Terminal 1 — start managed node(s)
+# Terminal 1
 ros2 run mserve_base base_node
 
-# Terminal 2 — run the BT lifecycle manager
+# Terminal 2
+ros2 run mserve_drivechain drivechain_node
+
+# Terminal 3
 ros2 run mserve_bringup_bt bringup_bt
 ```
 
-## How to add a node to bringup
+## How to add a managed node (XML only)
 
-1. Add a `<ChangeStateNode>` entry in `trees/bringup.xml`:
-   ```xml
-   <ChangeStateNode name="configure_drivechain" node_name="mserve_drivechain" transition="1"/>
-   ```
-2. Rebuild — no C++ changes needed.
+```xml
+<Sequence name="my_node_sequence">
+    <Fallback name="config_my_node">
+        <Inverter>
+            <IsInState name="check_unconfigured" node_name="my_node" state="unconfigured"/>
+        </Inverter>
+        <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure" node_name="my_node" transition="configure"/>
+        </RetryUntilSuccessful>
+    </Fallback>
+    <Fallback name="activate_my_node">
+        <IsInState name="check_active" node_name="my_node" state="active"/>
+        <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate" node_name="my_node" transition="activate"/>
+        </RetryUntilSuccessful>
+    </Fallback>
+</Sequence>
+```
 
-## Transition IDs
+## Lifecycle transitions
 
-| ID | Transition  |
-|----|-------------|
-| 1  | configure   |
-| 3  | activate    |
-| 4  | deactivate  |
-| 6  | cleanup     |
+| Name       | From         | To           |
+|------------|-------------|-------------|
+| configure  | unconfigured | inactive    |
+| activate   | inactive     | active      |
+| deactivate | active       | inactive    |
+| cleanup    | inactive     | unconfigured|
+| shutdown   | any          | finalized   |
 
 ## Dependencies
 
-- `behaviortree_cpp` (4.9.0, installed via `ros-jazzy-behaviortree-cpp`)
-- `lifecycle_msgs`
-- `ament_index_cpp`
-- `rclcpp`
+- `behaviortree_cpp` — `ros-jazzy-behaviortree-cpp` (apt)
+- `behaviortree_ros2` — source build (BehaviorTree/BehaviorTree.ROS2)
+- `btcpp_ros2_interfaces` — source build (same repo)
+- `mserve_utils` — transition name lookup (`lifecycle.hpp`)
+- `lifecycle_msgs`, `ament_index_cpp`, `rclcpp`
+
+## Learning snapshots
+
+| Stage | Location | What it covers |
+|---|---|---|
+| Stage 1 | `../../learning/btcpp_stage_1/` | Raw BT.CPP — `SyncActionNode`, manual service calls |
+| Stage 2 | `../../learning/btcpp_stage_2/` | `behaviortree_ros2` — `RosServiceNode`, non-blocking |
