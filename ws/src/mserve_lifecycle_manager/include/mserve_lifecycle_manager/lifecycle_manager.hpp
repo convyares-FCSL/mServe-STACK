@@ -6,6 +6,7 @@
 #include "lifecycle_msgs/msg/state.hpp"
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_ros2/bt_service_node.hpp>
+#include <behaviortree_cpp/loggers/groot2_publisher.h>
 
 namespace lifecyclemanager {
 
@@ -62,10 +63,13 @@ class LifecycleManager : public rclcpp::Node {
         void build() ;
 
     private:
-
+    // The behavior tree instance
     BT::Tree tree_;
+    BT::Tree shutdown_tree_;
     rclcpp::TimerBase::SharedPtr tick_timer_;
-    
+
+    // Publisher for visualizing the tree in Groot2
+    std::unique_ptr<BT::Groot2Publisher> groot2_publisher_;
 };
 
 } // namespace lifecyclemanager

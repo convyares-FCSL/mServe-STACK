@@ -1,0 +1,14 @@
+<root BTCPP_format="4">
+    <TreeNodesModel>
+        <Action ID="ChangeStateNode">
+            <input_port name="node_name" type="std::string"/>
+            <input_port name="transition" type="std::string"/>
+            <input_port name="service_name" type="std::string" default="">Service name</input_port>
+        </Action>
+        <Action ID="IsInState">
+            <input_port name="node_name" type="std::string"/>
+            <input_port name="state" type="std::string"/>
+            <input_port name="service_name" type="std::string" default="">Service name</input_port>
+        </Action>
+    </TreeNodesModel>
+</root>

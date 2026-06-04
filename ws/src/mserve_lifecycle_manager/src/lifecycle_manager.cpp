@@ -1,6 +1,8 @@
 #include "mserve_lifecycle_manager/lifecycle_manager.hpp"
 #include "mserve_utils/lifecycle.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <behaviortree_cpp/xml_parsing.h>
+#include <fstream>
 
 namespace lifecyclemanager {
 
@@ -133,14 +135,20 @@ void LifecycleManager::build() {
             return std::make_unique<ChangeStateNode>(name, config, BT::RosNodeParams(this->shared_from_this()));
     });
 
-    // Load the behavior tree from an XML file and calls constructor of the nodes
+    // Export the tree model to an XML file for visualization in Groot2
+    std::string models_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/node_models.xml";
+    std::ofstream(models_path) << BT::writeTreeNodesModelXML(factory);
+
+    // Load the behavior tree from an XML file
     std::string tree_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/bringup.xml";
     tree_ = factory.createTreeFromFile(tree_path);
 
-    /*
+    // Load the shutdown tree from an XML file
+    std::string shutdown_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/shutdown.xml";
+    shutdown_tree_ = factory.createTreeFromFile(shutdown_path);
+
     // Create a ZMQ publisher to visualize the tree in Groot2
-    BT::PublisherZMQ publisher(tree_);
-    */
+    groot2_publisher_ = std::make_unique<BT::Groot2Publisher>(tree_);
 
     // Execute the tree
     RCLCPP_INFO(this->get_logger(), "Starting behavior tree execution...");
@@ -150,8 +158,12 @@ void LifecycleManager::build() {
         if (status != BT::NodeStatus::RUNNING) {
             tick_timer_->cancel();
             RCLCPP_INFO(get_logger(), "Bringup complete, shutting down.");
-            rclcpp::shutdown();
         }
+    });
+
+    rclcpp::on_shutdown([this]() {
+        RCLCPP_INFO(get_logger(), "Shutdown signal received, running shutdown tree...");
+        shutdown_tree_.tickWhileRunning();
     });
 }
 
