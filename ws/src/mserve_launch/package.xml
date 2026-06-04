@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>mserve_bringup</name>
+  <name>mserve_launch</name>
   <version>0.1.0</version>
   <description>Launch and bringup support for the mServe system.</description>
   <maintainer email="ecm@example.com">ecm</maintainer>

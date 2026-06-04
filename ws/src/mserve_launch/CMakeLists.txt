@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(mserve_bringup LANGUAGES CXX)
+project(mserve_launch LANGUAGES CXX)
 
 find_package(ament_cmake REQUIRED)
 

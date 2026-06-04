@@ -1,8 +1,7 @@
-# mserve_bringup_bt
+# mserve_lifecycle_manager
 
 BehaviorTree.CPP lifecycle manager for mServe using `behaviortree_ros2`.
-Replaces manual web UI lifecycle control with an automatic behaviour tree that
-configures and activates managed nodes in order, idempotently and with retries.
+Automatically configures and activates managed nodes in order, idempotently and with retries.
 
 ## What it does
 
@@ -10,17 +9,20 @@ configures and activates managed nodes in order, idempotently and with retries.
 - Checks current lifecycle state before each transition — safe to re-run
 - Drives `mserve_base` and `mserve_drivechain` through configure → activate
 - Retries failed transitions up to 3 times before giving up
-- Non-blocking service calls via `behaviortree_ros2` `RosServiceNode`
+- Non-blocking 100ms timer tick alongside live ROS executor
 
 ## Package structure
 
 ```
+include/mserve_lifecycle_manager/
+  lifecycle_manager.hpp     Class declaration
 src/
-  main.cpp              BaseNode, IsInState, ChangeStateNode
+  lifecycle_manager.cpp     LifecycleManager, IsInState, ChangeStateNode
+  main.cpp                  Entry point
   trees/
-    bringup.xml         Tree definition — edit to change bringup order
-lesson_plan.md          Concept notes from learning sessions
-todo.md                 Remaining work and phase roadmap
+    bringup.xml             Tree definition — edit to change bringup order
+lesson_plan.md              Concept notes from learning sessions
+todo.md                     Remaining work and phase roadmap
 ```
 
 ## System setup — fresh machine
@@ -40,13 +42,20 @@ git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
 cd ~/ai-workspace/projects/mServe-STACK/ws
 colcon build --packages-select btcpp_ros2_interfaces
 colcon build --packages-select behaviortree_ros2
-colcon build --packages-select mserve_bringup_bt --symlink-install
+colcon build --packages-select mserve_lifecycle_manager --symlink-install
 ```
 
-## Running natively
+## Running via launch (recommended)
 
 ```bash
 cd ~/ai-workspace/projects/mServe-STACK/ws
+source install/setup.bash
+ros2 launch mserve_launch mserve_min.launch.py
+```
+
+## Running manually
+
+```bash
 source install/setup.bash
 
 # Terminal 1
@@ -56,10 +65,10 @@ ros2 run mserve_base base_node
 ros2 run mserve_drivechain drivechain_node
 
 # Terminal 3
-ros2 run mserve_bringup_bt bringup_bt
+ros2 run mserve_lifecycle_manager lifecycle_manager
 ```
 
-## How to add a managed node (XML only)
+## How to add a managed node (XML only, no C++ needed)
 
 ```xml
 <Sequence name="my_node_sequence">
@@ -103,4 +112,4 @@ ros2 run mserve_bringup_bt bringup_bt
 | Stage | Location | What it covers |
 |---|---|---|
 | Stage 1 | `../../learning/btcpp_stage_1/` | Raw BT.CPP — `SyncActionNode`, manual service calls |
-| Stage 2 | `../../learning/btcpp_stage_2/` | `behaviortree_ros2` — `RosServiceNode`, non-blocking |
+| Stage 2 | `../../learning/btcpp_stage_2/` | `behaviortree_ros2` — `RosServiceNode`, non-blocking, file split |

@@ -12,4 +12,5 @@ colcon build --symlink-install --packages-select \
   mserve_base \
   mserve_drivechain \
   mserve_description \
-  mserve_bringup
+  mserve_launch \
+  mserve_lifecycle_manager

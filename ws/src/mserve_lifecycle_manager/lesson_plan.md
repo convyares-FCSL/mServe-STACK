@@ -7,7 +7,7 @@
 - Compiled a single-file smoke test with `g++` directly (no CMake) to confirm linking works
 - `SyncActionNode`, `tick()`, `NodeStatus::SUCCESS`, `tickWhileRunning()` all confirmed working
 
-### Created ROS 2 package `mserve_bringup_bt`
+### Created ROS 2 package `mserve_lifecycle_manager`
 - `ros2 pkg create` scaffolds `CMakeLists.txt` and `package.xml`
 - `find_package` + `ament_target_dependencies` replaces manual `-I`/`-L` flags
 - `install(TARGETS ...)` to `lib/${PROJECT_NAME}` makes `ros2 run` work

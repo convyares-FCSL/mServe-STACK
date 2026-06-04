@@ -1,4 +1,4 @@
-# mserve_bringup_bt — TODO
+# mserve_lifecycle_manager — TODO
 
 ## Stage 1 — COMPLETE
 
@@ -12,18 +12,14 @@
 - [ ] Split `main.cpp` — deferred, `behaviortree_ros2` will define the right boundaries
 - [ ] Graceful shutdown subtree — deferred to Stage 2
 
-## Phase 3 — production grade (behaviortree_ros2)
+## Stage 3 — COMPLETE
 
-- [x] **Build `behaviortree_ros2` from source**
-  - Cloned BehaviorTree/BehaviorTree.ROS2 into `ws/src/`
-  - `btcpp_ros2_interfaces` built first, then `behaviortree_ros2`
-  - Required `ros-jazzy-generate-parameter-library` apt install
-- [ ] **Port `ChangeStateNode` to `BT::RosServiceNode`**
-  - Inherits from `BT::RosServiceNode<lifecycle_msgs::srv::ChangeState>`
-  - Replaces `spin_until_future_complete` with proper async pattern
-  - Handles client sharing and executor integration correctly
-- [ ] **Replace `tickWhileRunning()` with a proper ROS executor loop**
-  - Node can respond to topics/services while tree is ticking
+- [x] Build `behaviortree_ros2` from source
+- [x] Port `ChangeStateNode` and `IsInState` to `BT::RosServiceNode`
+- [x] Replace `tickWhileRunning()` with wall timer + `rclcpp::spin()`
+- [x] Split `main.cpp` into `lifecycle_manager.hpp`, `lifecycle_manager.cpp`, `main.cpp`
+- [x] Non-blocking execution — 100ms timer, executor handles ROS callbacks concurrently
+- [x] Snapshot archived to `learning/btcpp_stage_2/`
 
 ## Phase 4 — integration
 

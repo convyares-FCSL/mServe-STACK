@@ -2,9 +2,17 @@
 
 This folder is reserved for utility and automation scripts used during development, testing, and container setup.
 
-Available scripts:
+## Fresh machine setup (run in order)
+
+```bash
+bash scripts/01_setup/deps_setup.sh      # apt deps + clone/build BehaviorTree.ROS2
+bash scripts/02_bootstrap/build_workspace.sh  # build all mServe packages
+```
+
+## Available scripts
 - `01_setup/env_setup.sh` — configure shell environment for ROS 2 and workspace commands.
-- `02_bootstrap/build_workspace.sh` — build the core mServe packages.
+- `01_setup/deps_setup.sh` — install apt deps and clone/build source dependencies (BehaviorTree.ROS2). Run once on a fresh machine.
+- `02_bootstrap/build_workspace.sh` — build all mServe packages.
 - `03_packages/build_packages.sh` — build selected packages.
 - `04_tests/run_tests.sh` — run unit tests for the first milestones.
 - `05_utils/docker_build_workspace.sh` — build the current ROS workspace inside the Docker container.
