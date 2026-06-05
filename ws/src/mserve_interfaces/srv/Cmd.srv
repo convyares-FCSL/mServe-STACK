@@ -1,0 +1,11 @@
+# Raw PLC command contract — mirrors TwinCAT function block ST_Cmd.
+# Use only when you need to bypass the typed subsystem services and
+# send a command directly in the PLC wire format.
+# Normal callers should use the typed services (BoosterCmd, etc.).
+
+uint32   id
+uint32   cmd
+int32[5] payload
+---
+uint32 ack_id
+int32  result

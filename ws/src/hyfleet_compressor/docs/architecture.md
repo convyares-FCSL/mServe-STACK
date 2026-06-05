@@ -12,6 +12,24 @@ internal BT tree, calls capability servers via RosActionNode.
 
 ---
 
+## Telemetry topic — closed decision
+
+A single `compressor_telemetry` topic (type `mserve_interfaces/msg/CompressorTelemetry`)
+carries all sensor data for the entire compressor subsystem. Both `BoosterNode` instances
+subscribe to this topic and extract their relevant fields using config-driven array indices.
+
+Rationale: some sensors are physically shared between boosters (e.g. interstage pressure
+transducer). A single topic is also the natural boundary for PLC→ROS bridging — the PLC
+publishes one telemetry packet per cycle. Per-booster topics would require a splitter node
+and make shared sensors awkward.
+
+BT condition nodes take `pt_index` (or `vfd_index`) as an input port. The same C++ node
+type works for both booster instances — the index in the XML distinguishes them.
+
+This decision is closed. Do not reopen.
+
+---
+
 ## TreeExecutionServer — closed decision
 
 TreeExecutionServer is NOT used. It is not a lifecycle node and cannot be lifecycle

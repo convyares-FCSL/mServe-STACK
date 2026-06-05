@@ -1,6 +1,11 @@
-int32 id
-CompressorCmd cmd
-int32[5] payload
+# srv/BCompressorrCmd.srv
+uint8 INVALID = 0
+uint8 CONTROL_HEATER = 1
+
+uint8 cmd
+
+bool    enable        # CONTROL_HEATER - turns on/off heater
+float64   setpoint    # CONTROL_HEATER - gives a setpoint for heater
 ---
-int32 ack_id
-HResult result
+bool    success
+string  message

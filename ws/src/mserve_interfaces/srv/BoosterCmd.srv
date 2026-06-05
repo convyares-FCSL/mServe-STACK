@@ -1,6 +1,15 @@
-int32 id
-BoosterCmd cmd
-int32[5] payload
+# srv/BoosterCmd.srv
+uint8 START_VFD   = 1
+uint8 STOP_VFD    = 2
+uint8 SET_PCSV    = 3
+uint8 CONTROL_SV  = 4
+
+uint8 cmd
+
+bool    enable        # SET_PCSV / CONTROL_SV — energise the targeted device
+string  device_id     # CONTROL_SV — which valve; bridge owns the lookup
+float64 speed_rpm     # START_VFD — VFD speed (rpm)
+float64 cpm           # SET_PCSV  — compression rate (cpm)
 ---
-int32 ack_id
-HResult result
+bool    success
+string  message

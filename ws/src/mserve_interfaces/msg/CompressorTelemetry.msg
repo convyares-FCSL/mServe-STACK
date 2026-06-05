@@ -9,19 +9,15 @@ uint8 LOCKOUT = 4
 uint8 mode
 
 # Devices 
-float64[10] hbu_pt_bar
-float64[6] hpu_pt_bar
-float64[12] hbu_tt_celsius
-float64 hpu_tt_celsius
-float64 hpu_ls_percent
-bool[8] hbu_ps
-float64 vfd1_energy_kj
-float64 vfd1_power_kw
-float64 vfd1_speed_rpm
-float64 vfd2_energy_kj
-float64 vfd2_power_kw
-float64 vfd2_speed_rpm
-bool heater1_on
-bool heater2_on
+float64[10] hbu_pt_bar          # Hydrogren Pressure Transducer
+float64[6] hpu_pt_bar           # Hydrollic Pressure Transducer
+float64[12] hbu_tt_celsius      # Hydrogren + Coolant Temperature Transducer
+bool[8] hbu_ps                  # Booster Position Sensor
+float64[2] vfd_speed_rpm        # VFD speed
+float64[2] vfd_energy_kj        # VFD Energy
+float64[2] vfd_power_kw         # VFD Power
+bool[2] heater_on               # Heater Status
+float64 hpu_tt_celsius          # Hydrolic Tank Temperature
+float64 hpu_ls_percent          # Hydrolic Tank Fill Percent
 
 builtin_interfaces/Time timestamp

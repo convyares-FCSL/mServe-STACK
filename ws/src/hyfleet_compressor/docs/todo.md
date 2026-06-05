@@ -38,14 +38,78 @@ building the real state machine.
 
 Unblocked once Stage 1 verified end-to-end.
 
-- [ ] Custom BT node: `StartBooster` (SyncActionNode)
-- [ ] Custom BT node: `StopBooster` (SyncActionNode)
-- [ ] Phase 2: `PressureInRange` — RosTopicSubNode condition
-- [ ] Phase 2: `TemperatureOK` — RosTopicSubNode condition
-- [ ] Phase 3: `ForceStopRequested` — blackboard condition node
-- [ ] Phase 3: Reactive Parallel wrapping operation + safety monitor
-- [ ] Booster state machine in XML: IDLE → STARTING → RUNNING → STOPPING → FAULT
-- [ ] Write booster status back to action feedback each tick
+Mapping from archive `Booster::update()` state machine. Each hardware command
+becomes a RosServiceNode; each telemetry check becomes a RosTopicSubNode.
+Timing delays use built-in `Wait` node — no C++ needed.
+
+### Prerequisite — hardware interfaces (CONFIRMED from archive)
+
+All hardware commands go through ONE multiplexed `BoosterCmd` service per booster.
+All telemetry comes from ONE topic. Simpler than expected.
+
+**Command service** (one per booster instance):
+- Service: `/low_booster/booster_cmd` / `/high_booster/booster_cmd`
+- Type: `mserve_interfaces/srv/BoosterCmd`
+- Commands: `START_VFD=1`, `STOP_VFD=2`, `SET_PCSV=3`, `CONTROL_SV=4`
+- Named typed fields — no payload encoding in BT layer
+- ADS bridge owns PLC wire format translation
+- Raw PLC contract available via `mserve_interfaces/srv/Cmd.srv` if needed
+
+**Telemetry topic** (single topic, all data):
+- Topic: `compressor_telemetry`
+- Type: `mserve_interfaces/msg/CompressorTelemetry`
+- Inlet pressure:  `hbu_pt_bar[inlet_pt_index]`  — low=0, high=1
+- Outlet pressure: `hbu_pt_bar[outlet_pt_index]` — low=7, high=2
+- VFD speed: `vfd_speed_rpm[vfd_index]` — low=0, high=1 (array, updated msg)
+- Indices come from config params — booster.xml ports pass them in
+
+- [x] SV service confirmed
+- [x] VFD service confirmed
+- [x] PCSV service confirmed
+- [x] Inlet pressure topic confirmed
+- [x] Outlet pressure topic confirmed
+- [x] VFD speed topic confirmed
+
+### Action nodes (RosServiceNode — all call BoosterCmd service)
+- [x] `StartVFD`  — cmd=START_VFD, fields: speed_rpm
+- [x] `StopVFD`   — cmd=STOP_VFD, no fields
+- [x] `SetPCSV`   — cmd=SET_PCSV, fields: enable, cpm
+- [x] `ControlSV` — cmd=CONTROL_SV, fields: device_id, enable
+
+### Condition nodes (RosTopicSubNode)
+- [ ] `InletPressureStable` — rolling window stability check (stub only, TODO)
+- [x] `VFDAtSpeed` — vfd_speed_rpm[vfd_index] >= target_speed
+- [x] `OutletAtPressure` — hbu_pt_bar[outlet_pt_index] >= target_pressure
+- [x] `InletPressureSafe` — hbu_pt_bar[inlet_pt_index] >= safe_pressure
+
+### Node registration and params
+- [ ] Register all 7 BT nodes with factory in `on_configure`
+- [ ] Declare ROS params: `vfd_target_speed`, `vfd_index`, `inlet_pt_index`,
+      `outlet_pt_index`, `safe_pressure`, `pcsv_cpm`, `inlet_sv_id`, `hpu_sv_id`,
+      `vfd_delay_ms`, `stabilization_ms`, `telemetry_topic`
+- [ ] Read params in `on_configure`, write to blackboard
+- [ ] Write service name `/{node_name}/booster_cmd` to blackboard at configure time
+- [ ] Goal callback: select `active_tree_` from `goal->command`, write `target_pressure`
+- [ ] Tick timer updated to use `active_tree_` pointer
+- [ ] `BoosterNode` header: add four `BT::Tree` members + `active_tree_` pointer
+
+### XML trees — one per command
+- [ ] `booster_start.xml` — Parallel(failure_threshold=1):
+      Sequence: ControlSV(inlet,open) → InletPressureStable → StartVFD →
+      Wait(vfd_delay_ms) → VFDAtSpeed → Wait(stabilization_ms) →
+      ControlSV(HPU,open) → SetPCSV(enable) → OutletAtPressure
+      ∥ Safety: InletPressureSafe
+- [ ] `booster_start_idle.xml` — same as start but holds at target (no StopVFD at end)
+- [ ] `booster_stop.xml` — Sequence: SetPCSV(disable) → ControlSV(HPU,close) →
+      StopVFD → VFDAtSpeed(zero) → ControlSV(inlet,close)
+- [ ] `booster_safe_stop.xml` — Sequence: SetPCSV(disable) → ControlSV(HPU,close) →
+      StopVFD → ControlSV(inlet,close) (no ramp-down wait)
+
+### Remaining C++ nodes
+- [ ] `InletPressureStable` — rolling window stability check (replace stub)
+
+### Feedback
+- [ ] Publish outlet pressure + percent_complete to action feedback each tick
 
 ---
 

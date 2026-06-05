@@ -35,6 +35,8 @@ find_package(mserve_utils REQUIRED)
 add_library(booster_node_lib SHARED
   src/booster_node.cpp
   src/booster_action.cpp
+  src/booster_bt_actions.cpp
+  src/booster_bt_conditions.cpp
 )
 
 # PUBLIC:  include/ — exported to any package that links this library.
@@ -56,6 +58,7 @@ ament_target_dependencies(booster_node_lib
   mserve_interfaces
   mserve_utils
   behaviortree_cpp
+  behaviortree_ros2     
   ament_index_cpp
 )
 
