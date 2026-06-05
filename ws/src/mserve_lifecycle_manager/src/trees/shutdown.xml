@@ -2,7 +2,22 @@
     <BehaviorTree ID="Shutdown">
         <Sequence name="main">
 
-            <Sequence name="drivechain_sequence">
+            <Sequence name="compression_sequence">
+            <Fallback name="shutdown_compression_fallback">
+                <IsInState
+                    name="is_compression_finalized"
+                    node_name="hyfleet_compression"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_compression"
+                    node_name="hyfleet_compression"
+                    transition="shutdown"
+                />
+            </Fallback>
+        </Sequence>
+
+        <Sequence name="drivechain_sequence">
                 <Fallback name="shutdown_drivechain_fallback">
                     <IsInState
                         name="is_drivechain_inactive"

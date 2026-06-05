@@ -26,6 +26,14 @@ def generate_launch_description():
         parameters=[params_file]
     )
 
+    compression_node = Node(
+        package='hyfleet_compression',
+        executable='compression_node',
+        name='hyfleet_compression',
+        output='screen',
+        parameters=[params_file]
+    )
+
     lifecycle_manager = Node(
         package='mserve_lifecycle_manager',
         executable='lifecycle_manager',
@@ -36,5 +44,6 @@ def generate_launch_description():
     return LaunchDescription([
         base_node,
         drivechain_node,
+        compression_node,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])

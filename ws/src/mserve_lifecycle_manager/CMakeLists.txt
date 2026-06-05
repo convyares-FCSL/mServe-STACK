@@ -15,7 +15,6 @@ find_package(behaviortree_cpp REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
-# find_package(ZeroMQ REQUIRED)
 
 # include_directories(include)
 add_executable(lifecycle_manager  src/main.cpp src/lifecycle_manager.cpp)

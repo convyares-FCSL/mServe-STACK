@@ -62,7 +62,37 @@
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
-    </Sequence>
+      <Sequence name="compression_sequence">
+        <Fallback name="config_compression_fallback">
+          <Inverter>
+            <IsInState name="is_compression_inactive"
+                       node_name="hyfleet_compression"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_compression"
+                             node_name="hyfleet_compression"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_compression_fallback">
+          <Inverter>
+            <IsInState name="is_compression_active"
+                       node_name="hyfleet_compression"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_compression"
+                             node_name="hyfleet_compression"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
+    </Sequence> 
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->

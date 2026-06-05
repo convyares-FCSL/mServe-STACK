@@ -21,8 +21,9 @@ src/
   main.cpp                  Entry point
   trees/
     bringup.xml             Tree definition — edit to change bringup order
-lesson_plan.md              Concept notes from learning sessions
-todo.md                     Remaining work and phase roadmap
+docs/
+    lesson_plan.md              Concept notes from learning sessions
+    todo.md                     Remaining work and phase roadmap
 ```
 
 ## System setup — fresh machine
