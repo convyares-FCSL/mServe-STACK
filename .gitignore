@@ -17,7 +17,7 @@ ws/install_host/
 ws/log/
 ws/log_host/
 ws/core
-ws/src/hyfleet_compression/archive
+ws/src/hyfleet_compressor/archive
 
 # Python
 __pycache__/

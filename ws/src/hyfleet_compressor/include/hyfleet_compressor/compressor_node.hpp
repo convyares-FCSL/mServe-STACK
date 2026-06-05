@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -7,15 +9,18 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 // ==============================================================================
-// CompressionNode: a lifecycle node that compresses data.
+// CompressorNode: a lifecycle node that compresses data.
 // ==============================================================================
 
-namespace hyfleet_compression {
+namespace hyfleet_compressor {
 
-class CompressionNode : public rclcpp_lifecycle::LifecycleNode {
+class CompressorAction;
+
+class CompressorNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-  explicit CompressionNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
-
+  explicit CompressorNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  ~CompressorNode() override;
+  
 protected:
   // Lifecycle states
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_configure(const rclcpp_lifecycle::State &) override;
@@ -28,6 +33,11 @@ private:
   // Param change 
   rcl_interfaces::msg::SetParametersResult on_parameters(const std::vector<rclcpp::Parameter> & params);
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+
+  // Action Server
+  std::unique_ptr<CompressorAction> compressor_action_;
+  rclcpp::CallbackGroup::SharedPtr action_callback_group_;
+ 
 };
 
-} // namespace hyfleet_compression
+} // namespace hyfleet_compressor

@@ -3,13 +3,13 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executors/multi_threaded_executor.hpp"
-#include "hyfleet_compression/compression_node.hpp"
+#include "hyfleet_compressor/compressor_node.hpp"
 
 int main(int argc, char ** argv) {
   rclcpp::init(argc, argv);
 
   try {
-    auto node = std::make_shared<hyfleet_compression::CompressionNode>();
+    auto node = std::make_shared<hyfleet_compressor::CompressorNode>();
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node->get_node_base_interface());
     executor.spin();
