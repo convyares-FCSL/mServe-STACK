@@ -21,23 +21,16 @@ building the real state machine.
 - [x] Lifecycle node shell (configure / activate / deactivate / cleanup / shutdown)
 - [x] Launched twice: `low_booster` and `high_booster`
 - [x] Wired into lifecycle manager bringup tree
-- [ ] Public header — add members:
-  - `rclcpp_action::Server<ControlCompressor>::SharedPtr action_server_`
-  - `rclcpp::CallbackGroup::SharedPtr action_cb_group_`
-  - `std::shared_ptr<GoalHandleControlCompressor> active_goal_`
-  - `BT::BehaviorTreeFactory factory_`
-  - `BT::Tree tree_`
-  - `rclcpp::TimerBase::SharedPtr tick_timer_`
-- [ ] `on_configure()` — create action server (Reentrant cb group), create factory,
-      register nodes, load tree from XML
-- [ ] `on_activate()` — set `accepting_goals_ = true`
-- [ ] `on_deactivate()` — set `accepting_goals_ = false`, abort active goal
-- [ ] `on_cleanup()` — destroy action server, tree, reset factory
-- [ ] Action server callbacks: `handle_goal`, `handle_cancel`, `handle_accepted`
-- [ ] `handle_accepted` — write goal to blackboard, start `tick_timer_`
-- [ ] Tick timer callback — `tree_.tickOnce()`, check result, succeed/abort goal
-- [ ] Simple XML tree: `config/booster_tree.xml` — Sequence → LogMessage → AlwaysSuccess
-- [ ] Verify: `ros2 action send_goal /low_booster/control ...` → succeeds
+- [x] `ControlBooster.action` defined in `mserve_interfaces` (command, target_pressure, feedback)
+- [x] `BoosterAction` class — action server in Reentrant cb group, goal callback pattern
+- [x] `active_goal_` owned by `BoosterNode`, `BoosterAction` notifies via `set_goal_callback`
+- [x] `on_configure()` — action server, goal callback, factory, tree loaded from XML
+- [x] `on_activate()` / `on_deactivate()` — toggle `accepting_goals_`
+- [x] `on_cleanup()` — abort active goal, cancel timer, reset tree, unconfigure action server
+- [x] Tick timer — 100ms wall timer, `tickOnce()`, succeed/abort on completion
+- [x] `src/trees/booster.xml` — Stage 1: `AlwaysSuccess` placeholder
+- [x] Action name `~/control_booster` — resolves to `/low_booster/control_booster` per instance
+- [x] Verified: `ros2 action send_goal /low_booster/control_booster ...` → `SUCCEEDED`
 
 ---
 

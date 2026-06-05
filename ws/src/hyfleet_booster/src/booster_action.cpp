@@ -1,5 +1,6 @@
 #include "include/booster_action.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 namespace hyfleet_booster
@@ -44,21 +45,16 @@ void BoosterAction::configure(rclcpp::CallbackGroup::SharedPtr callback_group) {
 }
 
 void BoosterAction::unconfigure() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
 
-    if (active_goal_) {
-        auto result = std::make_shared<ControlBooster::Result>();
-        result->accepted = false;
-        result->message = "BoosterAction unconfigured";
-        active_goal_->abort(result);
-        active_goal_.reset();
-    }
-
+    accepting_goals_ = false;
+    goal_callback_ = nullptr;
     action_server_.reset();
     callback_group_.reset();
 }
 
 void BoosterAction::toggle_enable(bool state) {
+    std::scoped_lock lock(mutex_);
     accepting_goals_ = state;
 }
 
@@ -83,21 +79,27 @@ rclcpp_action::CancelResponse BoosterAction::handle_cancel( const std::shared_pt
 }
 
 void BoosterAction::handle_accepted(const std::shared_ptr<GoalHandleControlBooster> goal_handle) {
+    if (!goal_handle) {
+        RCLCPP_WARN(node_.get_logger(), "Accepted booster goal handle is null");
+        return;
+    }
+
     const auto goal = goal_handle->get_goal();
     if (!goal) {
         RCLCPP_WARN(node_.get_logger(), "Accepted booster goal has null goal");
         return;
     }
 
+    std::function<void(std::shared_ptr<GoalHandleControlBooster>)> callback;
+
     {
         std::scoped_lock lock(mutex_);
-        active_goal_ = goal_handle;
+        callback = goal_callback_;
     }
 
-    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: cmd=%u pressure=%.1f",
-        goal->command, goal->target_pressure);
+    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: cmd=%u pressure=%.1f", static_cast<unsigned>(goal->command), goal->target_pressure);
 
-    // TODO: write goal fields to blackboard and start BT tick timer
+    if (callback) { callback(goal_handle); }
 }
 
 // ==============================================================================
@@ -130,6 +132,13 @@ void BoosterAction::publish_feedback(const std::shared_ptr<GoalHandleControlBoos
     feedback->pressure = 0.0;
     feedback->percent_complete = 0.0;
     goal_handle->publish_feedback(feedback);
+}
+
+void BoosterAction::set_goal_callback(std::function<void(std::shared_ptr<GoalHandleControlBooster>)> cb) {
+    {
+        std::scoped_lock lock(mutex_);
+        goal_callback_ = std::move(cb);
+    }
 }
 
 }  // namespace hyfleet_booster

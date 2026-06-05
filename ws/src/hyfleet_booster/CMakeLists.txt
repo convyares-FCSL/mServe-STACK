@@ -55,6 +55,8 @@ ament_target_dependencies(booster_node_lib
   rclcpp_action
   mserve_interfaces
   mserve_utils
+  behaviortree_cpp
+  ament_index_cpp
 )
 
 # ==============================================================================
@@ -91,6 +93,10 @@ install(TARGETS booster_node_lib
   RUNTIME DESTINATION bin
 )
 
+install(DIRECTORY src/trees/
+  DESTINATION share/${PROJECT_NAME}/trees
+  FILES_MATCHING PATTERN "*.xml")
+  
 install(TARGETS booster_node
   DESTINATION lib/${PROJECT_NAME}
 )
