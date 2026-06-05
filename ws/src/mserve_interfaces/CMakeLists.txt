@@ -6,6 +6,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/ControlBooster.action"
   "action/ControlCompressor.action"
   "action/Dock.action"
 

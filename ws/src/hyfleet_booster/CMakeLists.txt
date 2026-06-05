@@ -34,6 +34,7 @@ find_package(mserve_utils REQUIRED)
 
 add_library(booster_node_lib SHARED
   src/booster_node.cpp
+  src/booster_action.cpp
 )
 
 # PUBLIC:  include/ — exported to any package that links this library.
