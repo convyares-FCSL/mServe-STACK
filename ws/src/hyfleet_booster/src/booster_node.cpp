@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <vector>
+#include <chrono>
 #include <hyfleet_booster/booster_node.hpp>
 #include "include/booster_action.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#include <chrono>
+#include "include/booster_bt_actions.hpp"
+#include "include/booster_bt_conditions.hpp"
 
 namespace hyfleet_booster {
 using namespace std::chrono_literals;
@@ -37,9 +39,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
       
     booster_action_->set_goal_callback([this](auto goal_handle) { this->on_booster_goal_accepted(goal_handle); });
 
-    // Load tree 
-    std::string tree_path = ament_index_cpp::get_package_share_directory("hyfleet_booster")  + "/trees/booster.xml";
-    tree_ = factory_.createTreeFromFile(tree_path);
+    // BT node registration and tree loading
+    bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt");
+    register_bt_nodes();
+    build_bt_trees();
 
   } catch (const std::exception & error) {
     RCLCPP_ERROR(get_logger(), "Failed to configure booster: %s", error.what());
@@ -60,8 +63,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn BoosterNode::on_deactivate(const rclcpp_lifecycle::State &){
   booster_action_->toggle_enable(false);
 
-  stop_tick_timer();
-  tree_.haltTree();
+  set_tick_timer(false);
+  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
 
   if (active_goal_) {
     booster_action_->abort_goal(active_goal_, "booster node deactivated");
@@ -78,9 +81,11 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
       active_goal_.reset();
   }
 
-  stop_tick_timer();
-  tree_.haltTree();
-  tree_ = BT::Tree{};
+  set_tick_timer(false);
+  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
+  trees_ = {};
+
+  bt_node_.reset();
 
   if (booster_action_) {
     booster_action_->unconfigure();
@@ -91,8 +96,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn BoosterNode::on_shutdown(const rclcpp_lifecycle::State &){
-  stop_tick_timer();
-  tree_.haltTree();
+  set_tick_timer(false);
+  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
 
   if (active_goal_ && booster_action_) {
     booster_action_->abort_goal(active_goal_, "booster node shutdown");
@@ -101,6 +106,93 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
 
   RCLCPP_INFO(get_logger(), "Hyfleet_booster booster_node shutdown");
   return CallbackReturn::SUCCESS;
+}
+
+// ==============================================================================
+// Behavoir Tree
+// ==============================================================================
+
+void BoosterNode::register_bt_nodes(){
+    // Register Actions
+    factory_.registerBuilder<StartVFD>("StartVFD",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<StartVFD>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<StopVFD>("StopVFD",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<StopVFD>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<SetPCSV>("SetPCSV",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<SetPCSV>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<ControlSV>("ControlSV",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<ControlSV>(name, config, BT::RosNodeParams(bt_node_));
+    });
+
+  
+    // Register Conditions
+    factory_.registerBuilder<InletPressureStable>("InletPressureStable",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<InletPressureStable>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<VFDAtSpeed>("VFDAtSpeed",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<VFDAtSpeed>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<OutletAtPressure>("OutletAtPressure",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<OutletAtPressure>(name, config, BT::RosNodeParams(bt_node_));
+    });
+    factory_.registerBuilder<InletPressureSafe>("InletPressureSafe",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<InletPressureSafe>(name, config, BT::RosNodeParams(bt_node_));
+    });
+}
+
+void BoosterNode::build_bt_trees(){
+    const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_booster") + "/trees/";
+    trees_[0] = factory_.createTreeFromFile(base + "start_tree.xml");
+    trees_[1] = factory_.createTreeFromFile(base + "start_idle_tree.xml");
+    trees_[2] = factory_.createTreeFromFile(base + "stop_tree.xml");
+    trees_[3] = factory_.createTreeFromFile(base + "stop_force_tree.xml");
+}
+
+bool BoosterNode::select_tree(uint8_t command) {
+  switch (command) {
+      case ControlBooster::Goal::START:      active_tree_ = &trees_[0]; return true;
+      case ControlBooster::Goal::START_IDLE: active_tree_ = &trees_[1]; return true;
+      case ControlBooster::Goal::STOP:       active_tree_ = &trees_[2]; return true;
+      case ControlBooster::Goal::SAFE_STOP:  active_tree_ = &trees_[3]; return true;
+      default: return false;
+  }
+}
+
+void BoosterNode::tick_tree_once(){
+  if (!active_goal_) { set_tick_timer(false); return; }
+
+  if (!active_tree_) { set_tick_timer(false); return; }
+
+  const auto status = active_tree_->tickOnce();
+
+  if (status == BT::NodeStatus::RUNNING) { return; }
+
+  if (status == BT::NodeStatus::SUCCESS) {
+    booster_action_->succeed_goal(active_goal_);
+    RCLCPP_INFO(get_logger(), "Booster goal completed successfully");
+  } else if (status == BT::NodeStatus::FAILURE) {
+    booster_action_->abort_goal(active_goal_, "booster tree failed");
+    RCLCPP_WARN(get_logger(), "Booster goal aborted because tree returned FAILURE");
+  } else {
+    booster_action_->abort_goal(active_goal_, "booster tree returned unexpected status");
+    RCLCPP_ERROR(get_logger(), "Booster tree returned unexpected status");
+  }
+
+  active_tree_->haltTree();
+  active_tree_ = nullptr;
+  active_goal_.reset();
+  set_tick_timer(false);
 }
 
 // ==============================================================================
@@ -126,48 +218,26 @@ void BoosterNode::on_booster_goal_accepted(std::shared_ptr<GoalHandleControlBoos
     active_goal_.reset();
   }
 
-  tree_.haltTree();
+  if (active_tree_) { active_tree_->haltTree(); }
+
+  if (!select_tree(goal_handle->get_goal()->command)) {
+    RCLCPP_ERROR(get_logger(), "Unknown command: %d", goal_handle->get_goal()->command);
+    booster_action_->abort_goal(goal_handle, "unknown command");
+    return;
+  }
 
   active_goal_ = std::move(goal_handle);
-  start_tick_timer();
+  set_tick_timer(true);
 
   RCLCPP_INFO(get_logger(), "Booster goal accepted, BT tick timer started");
 }
 
-void BoosterNode::start_tick_timer() {
-  stop_tick_timer();
-
-  tick_timer_ = create_wall_timer(100ms, [this]() { this->tick_tree_once(); });
-}
-
-void BoosterNode::stop_tick_timer() {
-  if (tick_timer_) {  tick_timer_->cancel(); }
-}
-
-void BoosterNode::tick_tree_once(){
-  if (!active_goal_) {
-    stop_tick_timer();
-    return;
+void BoosterNode::set_tick_timer(bool enable) {
+  if (tick_timer_) { tick_timer_->cancel(); tick_timer_.reset(); }
+  if (enable) {
+    tick_timer_ = create_wall_timer(100ms, [this]() { this->tick_tree_once(); });
   }
-
-  const auto status = tree_.tickOnce();
-
-  if (status == BT::NodeStatus::RUNNING) { return; }
-
-  if (status == BT::NodeStatus::SUCCESS) {
-    booster_action_->succeed_goal(active_goal_);
-    RCLCPP_INFO(get_logger(), "Booster goal completed successfully");
-  } else if (status == BT::NodeStatus::FAILURE) {
-    booster_action_->abort_goal(active_goal_, "booster tree failed");
-    RCLCPP_WARN(get_logger(), "Booster goal aborted because tree returned FAILURE");
-  } else {
-    booster_action_->abort_goal(active_goal_, "booster tree returned unexpected status");
-    RCLCPP_ERROR(get_logger(), "Booster tree returned unexpected status");
-  }
-
-  tree_.haltTree();
-  active_goal_.reset();
-  stop_tick_timer();
 }
+
 
 }  // namespace hyfleet_booster

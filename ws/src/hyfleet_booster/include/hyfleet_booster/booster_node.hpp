@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,16 +43,23 @@ private:
   rclcpp::CallbackGroup::SharedPtr action_callback_group_;
   std::shared_ptr<GoalHandleControlBooster> active_goal_;
   
-  // The behavior tree instance
-  BT::Tree tree_;
+  // Behavior tree
   BT::BehaviorTreeFactory factory_;
-
-  // BT execution
-  void on_booster_goal_accepted(std::shared_ptr<GoalHandleControlBooster> goal_handle);
-  void start_tick_timer();
-  void stop_tick_timer();
+  std::array<BT::Tree, 4> trees_;  // indexed by command - 1: START, START_IDLE, STOP, SAFE_STOP
+  BT::Tree* active_tree_ = nullptr;
+  void register_bt_nodes();
+  void build_bt_trees();
+  bool select_tree(uint8_t command);
   void tick_tree_once();
+
+  // Timing
+  void on_booster_goal_accepted(std::shared_ptr<GoalHandleControlBooster> goal_handle);
+  void set_tick_timer(bool enable);
   rclcpp::TimerBase::SharedPtr tick_timer_;
+
+  // ROS client node for BT nodes — RosNodeParams requires rclcpp::Node, not LifecycleNode
+  std::shared_ptr<rclcpp::Node> bt_node_;
+
 };
 
 } // namespace hyfleet_booster
