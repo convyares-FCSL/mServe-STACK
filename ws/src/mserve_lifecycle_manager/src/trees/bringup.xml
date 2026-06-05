@@ -62,6 +62,66 @@
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
+      <Sequence name="low_booster_sequence">
+        <Fallback name="low_booster_fallback">
+          <Inverter>
+            <IsInState name="is_low_booster_inactive"
+                       node_name="low_booster"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_low_booster"
+                             node_name="low_booster"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_low_booster_fallback">
+          <Inverter>
+            <IsInState name="is_low_booster_active"
+                       node_name="low_booster"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_low_booster"
+                             node_name="low_booster"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
+      <Sequence name="high_booster_sequence">
+        <Fallback name="high_booster_fallback">
+          <Inverter>
+            <IsInState name="is_high_booster_inactive"
+                       node_name="high_booster"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_high_booster"
+                             node_name="high_booster"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_high_booster_fallback">
+          <Inverter>
+            <IsInState name="is_high_booster_active"
+                       node_name="high_booster"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_high_booster"
+                             node_name="high_booster"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
       <Sequence name="compression_sequence">
         <Fallback name="config_compression_fallback">
           <Inverter>

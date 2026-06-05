@@ -26,9 +26,26 @@ def generate_launch_description():
         parameters=[params_file]
     )
 
-    compression_node = Node(
-        package='hyfleet_compression',
-        executable='compression_node',
+
+    low_booster_node = Node(
+        package='hyfleet_booster',
+        executable='booster_node',
+        name='low_booster',
+        output='screen',
+        parameters=[params_file]
+    )
+
+    high_booster_node = Node(
+        package='hyfleet_booster',
+        executable='booster_node',
+        name='high_booster',
+        output='screen',
+        parameters=[params_file]
+    )
+
+    compressor_node = Node(
+        package='hyfleet_compressor',
+        executable='compressor_node',
         name='hyfleet_compression',
         output='screen',
         parameters=[params_file]
@@ -44,6 +61,8 @@ def generate_launch_description():
     return LaunchDescription([
         base_node,
         drivechain_node,
-        compression_node,
+        low_booster_node,
+        high_booster_node,
+        compressor_node,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])

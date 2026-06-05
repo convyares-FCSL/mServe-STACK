@@ -14,12 +14,12 @@ See `architecture.md` for the full design rationale.
 Goal: each booster as an independent lifecycle node with its own action server and
 simple state machine. No BT yet. Tested standalone before coordinator exists.
 
-### New packages / nodes needed
-- [ ] `hyfleet_low_booster` package — `LowBoosterNode` lifecycle node
-- [ ] `hyfleet_high_booster` package — `HighBoosterNode` lifecycle node
-- [ ] Each has its own action server (`/low_booster/control`, `/high_booster/control`)
-- [ ] Add both to lifecycle manager bringup/shutdown trees
-- [ ] Add both to launch file
+### New package needed
+- [ ] `hyfleet_booster` package — single `BoosterNode` lifecycle node
+- [ ] Launched twice: once as `low_booster`, once as `high_booster`
+- [ ] Config file drives all differences (pressure limits, topics, etc.)
+- [ ] Add both instances to lifecycle manager bringup/shutdown trees
+- [ ] Add both instances to launch file (`low_booster_config.yaml` / `high_booster_config.yaml`)
 
 ### Per booster node
 - [ ] Lifecycle callbacks: configure / activate / deactivate / cleanup / shutdown

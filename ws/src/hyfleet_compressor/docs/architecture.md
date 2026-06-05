@@ -16,17 +16,14 @@ communication uses ROS interfaces exclusively.
                           TreeExecutionServer + BT
                           Single external entry point for orchestrator
 
-/low_booster/control      LowBoosterNode
-                          Action server
-                          Own state machine / BT
-                          Own telemetry interpretation
-                          Own command generation
+/low_booster/control      BoosterNode (hyfleet_booster package)
+                          Launched with low_booster_config.yaml
+                          Action server, own state machine / BT
+                          Own telemetry interpretation, own command generation
 
-/high_booster/control     HighBoosterNode
-                          Action server
-                          Own state machine / BT
-                          Own telemetry interpretation
-                          Own command generation
+/high_booster/control     BoosterNode (hyfleet_booster package)
+                          Same binary, launched with high_booster_config.yaml
+                          Identical code — config drives all differences
 
 /cmd_sender               Hardware output boundary
 
