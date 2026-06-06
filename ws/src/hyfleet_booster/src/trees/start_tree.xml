@@ -8,11 +8,11 @@
           enable="true" 
         />
 
-        <InletPressureStable 
-          topic_name="{telemetry_topic}" 
-          inlet_pt_index="{inlet_pt_index}" 
+        <InletPressureStable
+          inlet_pt_index="{inlet_pt_index}"
           stabilization_samples="{stabilization_samples}"
           stability_tolerance="{stability_tolerance}"
+          stability_timeout_ms="{stability_timeout_ms}"
         />
 
         <StartVFD 
@@ -22,10 +22,11 @@
 
         <Sleep msec="{vfd_delay_ms}" />
 
-        <VFDAtSpeed 
-          topic_name="{telemetry_topic}" 
+        <VFDAtSpeed
           vfd_index="{vfd_index}"
-          target_speed="{speed_rpm}" 
+          target_speed="{speed_rpm}"
+          ramp_tolerance="{ramp_tolerance}"
+          ramp_timeout_ms="{ramp_timeout_ms}"
         />
 
         <Sleep msec="{vfd_stabilization_ms}" />
@@ -42,17 +43,15 @@
           cpm="{cpm}" 
         />
 
-        <OutletAtPressure 
-          topic_name="{telemetry_topic}" 
+        <OutletAtPressure
           outlet_pt_index="{outlet_pt_index}"
-          target_pressure="{target_pressure}" 
+          target_pressure="{target_pressure}"
         />
       </Sequence>
 
-      <InletPressureSafe 
-        topic_name="{telemetry_topic}" 
+      <InletPressureSafe
         inlet_pt_index="{inlet_pt_index}"
-        safe_pressure="{safe_pressure}" 
+        safe_pressure="{safe_pressure}"
       />
     </Parallel>
   </BehaviorTree>

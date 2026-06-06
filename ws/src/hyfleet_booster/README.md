@@ -31,8 +31,9 @@ src/
   include/
     booster_action.hpp      BoosterAction class (internal)
     booster_bt_actions.hpp  BT action node declarations (StartVFD, StopVFD, SetPCSV, ControlSV)
-    booster_bt_conditions.hpp  BT condition node declarations (InletPressureStable, VFDAtSpeed,
+    booster_bt_conditions.hpp  BT node declarations (InletPressureStable, VFDAtSpeed, VFDStopped,
                                OutletAtPressure, InletPressureSafe)
+    booster_telemetry_cache.hpp  Thread-safe telemetry cache (owned by BoosterNode, shared via blackboard)
     booster_bt_actions.cpp
     booster_bt_conditions.cpp
 trees/
@@ -56,15 +57,17 @@ where it can be read, reordered, and extended without recompiling.
 |---|---|---|
 | `WAIT_COMMAND` | tree entry point — starts when goal arrives | — |
 | `RAMP_VFD_UP` | `StartVFD` | Action |
-| `VFD_DELAY` | `Wait` | Built-in |
-| `WAIT_RAMP` | `VFDAtSpeed` | Condition |
-| `WAIT_STABILIZATION` | `Wait` | Built-in |
+| `VFD_DELAY` | `Sleep msec` | Built-in |
+| `WAIT_RAMP` | `VFDAtSpeed` | StatefulActionNode (Wait) |
+| `WAIT_STABILIZATION` | `Sleep msec` | Built-in |
 | `ENERGISE_VALVE` | `ControlSV` (HPU open) | Action |
 | `PCSV_ON` | `SetPCSV` (enable) | Action |
+| outlet fill wait | `OutletAtPressure` | StatefulActionNode (Wait) |
 | `PCSV_OFF` | `SetPCSV` (disable) | Action |
 | `DEENERGISE_VALVE` | `ControlSV` (HPU close) | Action |
 | `RAMP_VFD_DOWN` | `StopVFD` | Action |
-| `WAIT_STOP` | `VFDAtSpeed` (zero + stop threshold) | Condition |
+| `WAIT_STOP` | `VFDStopped` | StatefulActionNode (Wait) |
+| inlet safety monitor | `InletPressureSafe` | ConditionNode (Gate) |
 
 ### Action nodes — `RosServiceNode`
 
@@ -80,49 +83,64 @@ BT nodes set named fields — no payload encoding in the BT layer.
 | `commands.pcsv` | `SetPCSV` | `SET_PCSV=3` | `service_name`, `enable`, `cpm` |
 | `commands.sv` (any valve) | `ControlSV` | `CONTROL_SV=4` | `service_name`, `sv_index`, `enable` |
 
-### Condition nodes — `RosTopicSubNode`
+### Telemetry nodes — shared cache
+
+`BoosterNode` owns a single `rclcpp::Subscription<CompressorTelemetry>` (created at configure,
+destroyed at cleanup). The callback writes to a `BoosterTelemetryCache` (thread-safe, mutex-guarded).
+The cache `shared_ptr` is placed on the blackboard once at configure; all BT nodes and the tick loop
+call `cache->latest()` to read. No BT node touches a subscription.
 
 All telemetry comes from **one topic**: `compressor_telemetry`
 (type `mserve_interfaces/msg/CompressorTelemetry`).
-Pressure values are in `hbu_pt_bar[]`; VFD speed is in `vfd_speed_rpm[]`.
-Indices are configured per instance via ROS params — the same node type works for both boosters.
+Pressure values are in `pt_bar[]`; VFD speed in `vfd_speed_rpm[]`; VFD state in `vfd_state[]`.
+Indices are configured per instance via ROS params.
+
+**Wait nodes (`BT::StatefulActionNode`)** — block until target state reached; may return RUNNING.
 
 | Archive check | BT node | Field | Key ports |
 |---|---|---|---|
-| `is_inlet_stable()` | `InletPressureStable` | `hbu_pt_bar[inlet_pt_index]` | `topic_name`, `inlet_pt_index` |
-| `vfd_speed >= target - deadband` | `VFDAtSpeed` | `vfd_speed_rpm[vfd_index]` | `topic_name`, `vfd_index`, `target_speed` |
-| `outlet_pressure >= target` | `OutletAtPressure` | `hbu_pt_bar[outlet_pt_index]` | `topic_name`, `outlet_pt_index`, `target_pressure` |
-| `inlet_pressure >= safe_pressure` | `InletPressureSafe` | `hbu_pt_bar[inlet_pt_index]` | `topic_name`, `inlet_pt_index`, `safe_pressure` |
+| `is_inlet_stable()` | `InletPressureStable` | `pt_bar[inlet_pt_index]` | `inlet_pt_index`, `stabilization_samples`, `stability_tolerance`, `stability_timeout_ms` |
+| `vfd_speed ≈ target` | `VFDAtSpeed` | `vfd_speed_rpm[vfd_index]` | `vfd_index`, `target_speed`, `ramp_tolerance`, `ramp_timeout_ms` |
+| `outlet_pressure >= target` | `OutletAtPressure` | `pt_bar[outlet_pt_index]` | `outlet_pt_index`, `target_pressure` |
+| `vfd_speed ≈ 0 && state != RUNNING` | `VFDStopped` | `vfd_speed_rpm[vfd_index]`, `vfd_state[vfd_index]` | `vfd_index`, `stop_threshold`, `stop_timeout_ms` |
+
+**Gate nodes (`BT::ConditionNode`)** — instantaneous check; SUCCESS or FAILURE only, never RUNNING.
+
+| Archive check | BT node | Field | Key ports |
+|---|---|---|---|
+| `inlet_pressure >= safe_pressure` | `InletPressureSafe` | `pt_bar[inlet_pt_index]` | `inlet_pt_index`, `safe_pressure` |
 
 ### Built-in nodes — no C++ needed
 
 | Archive timer | BT node | Blackboard key |
 |---|---|---|
-| `vfd_delay_` (cycle count) | `Wait` | `vfd_delay_s` |
-| `wait_stabilization_` (cycle count) | `Wait` | `stabilization_s` |
+| `vfd_delay_` (cycle count) | `Sleep msec` | `vfd_delay_ms` |
+| `wait_stabilization_` (cycle count) | `Sleep msec` | `vfd_stabilization_ms` |
 
 ---
 
 ## XML tree structure (start_tree.xml)
 
 ```xml
-<Parallel failure_threshold="1">
+<Parallel success_count="1" failure_count="1">
 
   <Sequence name="startup">
     <ControlSV service_name="{service_name}" sv_index="{inlet_sv_index}" enable="true"/>
-    <InletPressureStable topic_name="{telemetry_topic}" inlet_pt_index="{inlet_pt_index}"/>
+    <InletPressureStable inlet_pt_index="{inlet_pt_index}"
+                         stabilization_samples="{stabilization_samples}"
+                         stability_tolerance="{stability_tolerance}"
+                         stability_timeout_ms="{stability_timeout_ms}"/>
     <StartVFD service_name="{service_name}" speed_rpm="{speed_rpm}"/>
-    <Wait delay="{vfd_delay_s}"/>
-    <VFDAtSpeed topic_name="{telemetry_topic}" vfd_index="{vfd_index}" target_speed="{speed_rpm}"/>
-    <Wait delay="{stabilization_s}"/>
+    <Sleep msec="{vfd_delay_ms}"/>
+    <VFDAtSpeed vfd_index="{vfd_index}" target_speed="{speed_rpm}"
+                ramp_tolerance="{ramp_tolerance}" ramp_timeout_ms="{ramp_timeout_ms}"/>
+    <Sleep msec="{vfd_stabilization_ms}"/>
     <ControlSV service_name="{service_name}" sv_index="{hpu_sv_index}" enable="true"/>
     <SetPCSV service_name="{service_name}" enable="true" cpm="{cpm}"/>
-    <OutletAtPressure topic_name="{telemetry_topic}" outlet_pt_index="{outlet_pt_index}"
-                      target_pressure="{target_pressure}"/>
+    <OutletAtPressure outlet_pt_index="{outlet_pt_index}" target_pressure="{target_pressure}"/>
   </Sequence>
 
-  <InletPressureSafe topic_name="{telemetry_topic}" inlet_pt_index="{inlet_pt_index}"
-                     safe_pressure="{safe_pressure}"/>
+  <InletPressureSafe inlet_pt_index="{inlet_pt_index}" safe_pressure="{safe_pressure}"/>
 
 </Parallel>
 ```
@@ -197,6 +215,9 @@ they arrive with the `ControlBooster` goal. Speed/CPM hardware ceilings are `con
 |
 | `vfd_delay_ms` | int | 2000 | Wait after VFD start before checking speed (ms) |
 | `vfd_stabilization_ms` | int | 1000 | Wait after VFD at speed before opening HPU (ms) |
+| `stability_timeout_ms` | int | 10000 | Max time for inlet pressure to stabilise before startup (ms) |
+| `ramp_timeout_ms` | int | 30000 | Max time for VFD to reach target speed (ms) |
+| `stop_timeout_ms` | int | 15000 | Max time for VFD to reach stopped state (ms) |
 |
 | `ramp_tolerance` | double | 25.0 | Band around target — VFD considered at speed (rpm) |
 | `stop_threshold` | double | 25.0 | Below this — VFD considered stopped (rpm) |

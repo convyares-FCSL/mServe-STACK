@@ -1,120 +1,115 @@
 #pragma once
 
+#include <chrono>
 #include <deque>
-#include "rclcpp/rclcpp.hpp"
+#include <rclcpp/rclcpp.hpp>
 #include <builtin_interfaces/msg/time.hpp>
-#include <behaviortree_ros2/bt_topic_sub_node.hpp>
+#include <behaviortree_cpp/bt_factory.h>
 #include <mserve_interfaces/msg/compressor_telemetry.hpp>
-
 
 namespace hyfleet_booster {
 
 // ==============================================================================
-// BT condition nodes :  Inlet Pressure Stable
+// Classification:
+//   Gate  (instantaneous yes/no, SUCCESS/FAILURE only) → BT::ConditionNode
+//   Wait  (RUNNING until a state is reached)           → BT::StatefulActionNode
 // ==============================================================================
- 
-class InletPressureStable : public BT::RosTopicSubNode<mserve_interfaces::msg::CompressorTelemetry> {
+
+// ==============================================================================
+// WAIT — Inlet Pressure Stable
+// Accumulates a rolling window; returns SUCCESS once variation <= tolerance.
+// Belongs before VFD start to confirm stable supply pressure.
+// ==============================================================================
+
+class InletPressureStable : public BT::StatefulActionNode {
     public:
-        InletPressureStable(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
+        InletPressureStable(const std::string& name, const BT::NodeConfiguration& config);
 
-        // Define the ports for the node
-        static BT::PortsList providedPorts() ;
+        static BT::PortsList providedPorts();
 
-        // Receives the most recent message and returns SUCCESS or FAILURE
-        BT::NodeStatus onTick(const std::shared_ptr<mserve_interfaces::msg::CompressorTelemetry>& last_msg) override;
-
-        // Keep last message
-        inline bool latchLastMessage() const override { return true; }
+        BT::NodeStatus onStart()   override;
+        BT::NodeStatus onRunning() override;
+        void           onHalted()  override;
 
     private:
-        std::deque<double> window_;
-        builtin_interfaces::msg::Time last_stamp_{};
-};
-
-
-// ==============================================================================
-// BT condition nodes :  VFD At Speed
-// ==============================================================================
- 
-class VFDAtSpeed : public BT::RosTopicSubNode<mserve_interfaces::msg::CompressorTelemetry> {
-    public:
-        VFDAtSpeed(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
-
-        // Define the ports for the node
-        static BT::PortsList providedPorts() ;
-
-        // Receives the most recent message and returns SUCCESS or FAILURE
-        BT::NodeStatus onTick(const std::shared_ptr<mserve_interfaces::msg::CompressorTelemetry>& last_msg) override;
-
-        // Keep last message
-        inline bool latchLastMessage() const override { return true; }
-
-    private:
-
+        std::chrono::steady_clock::time_point start_time_;
+        std::chrono::milliseconds             timeout_{};
+        std::deque<double>                    window_;
+        builtin_interfaces::msg::Time         last_stamp_{};
 };
 
 // ==============================================================================
-// BT condition nodes :  VFD Stopped
+// WAIT — VFD At Speed
+// Polls until |speed - target| <= ramp_tolerance. Wall-clock timeout → FAILURE.
 // ==============================================================================
- 
-class VFDStopped : public BT::RosTopicSubNode<mserve_interfaces::msg::CompressorTelemetry> {
+
+class VFDAtSpeed : public BT::StatefulActionNode {
     public:
-        VFDStopped(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
+        VFDAtSpeed(const std::string& name, const BT::NodeConfiguration& config);
 
-        // Define the ports for the node
-        static BT::PortsList providedPorts() ;
+        static BT::PortsList providedPorts();
 
-        // Receives the most recent message and returns SUCCESS or FAILURE
-        BT::NodeStatus onTick(const std::shared_ptr<mserve_interfaces::msg::CompressorTelemetry>& last_msg) override;
-
-        // Keep last message
-        inline bool latchLastMessage() const override { return true; }
+        BT::NodeStatus onStart()   override;
+        BT::NodeStatus onRunning() override;
+        void           onHalted()  override;
 
     private:
-
+        std::chrono::steady_clock::time_point start_time_;
+        std::chrono::milliseconds             timeout_{};
+        double                                tolerance_{};
 };
 
 // ==============================================================================
-// BT condition nodes :  Outlet At Pressure 
+// WAIT — VFD Stopped
+// Polls until speed <= stop_threshold and state != VFD_RUNNING.
+// Wall-clock timeout → FAILURE.
 // ==============================================================================
- 
-class OutletAtPressure : public BT::RosTopicSubNode<mserve_interfaces::msg::CompressorTelemetry> {
+
+class VFDStopped : public BT::StatefulActionNode {
     public:
-        OutletAtPressure(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
+        VFDStopped(const std::string& name, const BT::NodeConfiguration& config);
 
-        // Define the ports for the node
-        static BT::PortsList providedPorts() ;
+        static BT::PortsList providedPorts();
 
-        // Receives the most recent message and returns SUCCESS or FAILURE
-        BT::NodeStatus onTick(const std::shared_ptr<mserve_interfaces::msg::CompressorTelemetry>& last_msg) override;
-
-        // Keep last message
-        inline bool latchLastMessage() const override { return true; }
+        BT::NodeStatus onStart()   override;
+        BT::NodeStatus onRunning() override;
+        void           onHalted()  override;
 
     private:
-
+        std::chrono::steady_clock::time_point start_time_;
+        std::chrono::milliseconds             timeout_{};
 };
 
 // ==============================================================================
-// BT condition nodes :  Inlet Pressure Safe 
+// WAIT — Outlet At Pressure
+// Polls until outlet pressure >= target_pressure. No wall-clock timeout:
+// fill time is storage-dependent; stall detection (Stage 4) is the failure mode.
 // ==============================================================================
- 
-class InletPressureSafe : public BT::RosTopicSubNode<mserve_interfaces::msg::CompressorTelemetry> {
+
+class OutletAtPressure : public BT::StatefulActionNode {
     public:
-        InletPressureSafe(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
+        OutletAtPressure(const std::string& name, const BT::NodeConfiguration& config);
 
-        // Define the ports for the node
-        static BT::PortsList providedPorts() ;
+        static BT::PortsList providedPorts();
 
-        // Receives the most recent message and returns SUCCESS or FAILURE
-        BT::NodeStatus onTick(const std::shared_ptr<mserve_interfaces::msg::CompressorTelemetry>& last_msg) override;
+        BT::NodeStatus onStart()   override;
+        BT::NodeStatus onRunning() override;
+        void           onHalted()  override;
+};
 
-        // Keep last message
-        inline bool latchLastMessage() const override { return true; }
-        
-    private:
+// ==============================================================================
+// GATE — Inlet Pressure Safe
+// Instantaneous check: FAILURE if supply pressure < safe_pressure.
+// Aborts startup immediately — correct semantics for a safety monitor.
+// ==============================================================================
 
+class InletPressureSafe : public BT::ConditionNode {
+    public:
+        InletPressureSafe(const std::string& name, const BT::NodeConfiguration& config);
+
+        static BT::PortsList providedPorts();
+
+        BT::NodeStatus tick() override;
 };
 
 } // namespace hyfleet_booster
-

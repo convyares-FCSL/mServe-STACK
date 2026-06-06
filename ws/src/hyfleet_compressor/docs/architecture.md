@@ -162,7 +162,9 @@ Per-instance limits (pressure varies low vs high booster) remain **parameters**,
 
 Two values are derived, not params:
 - **Service name**: `/{node_name}/booster_cmd` — architecture contract
-- **Telemetry topic**: `compressor_telemetry` — architecture contract
+- **Telemetry topic**: `compressor_telemetry` — architecture contract. `BoosterNode` owns the
+  subscription; BT nodes never subscribe directly. A thread-safe `BoosterTelemetryCache`
+  (`shared_ptr` on blackboard) is the single source of truth for all telemetry consumers.
 
 All params follow one rule: **not changeable while ACTIVE**. `on_parameters` rejects any change in that state. Changes made while INACTIVE or UNCONFIGURED take effect on the next `on_configure`.
 
@@ -183,14 +185,17 @@ Tolerances, timing, safety thresholds, pressure limits. Tuned during commissioni
 
 `ramp_tolerance`, `stop_threshold`, `min_pressure_bar`, `max_pressure_bar`, `safe_pressure`,
 `target_deadband`, `min_temp_inlet`, `max_temp_inlet`, `min_temp_outlet`, `max_temp_outlet`,
-`stability_tolerance`, `vfd_delay_ms`, `stabilization_ms`, `stabilization_samples`
+`stability_tolerance`, `vfd_delay_ms`, `vfd_stabilization_ms`, `stabilization_samples`,
+`stability_timeout_ms`, `ramp_timeout_ms`, `stop_timeout_ms`
 
 ---
 
 ## Telemetry — `CompressorTelemetry`
 
-Single topic `compressor_telemetry`, published by ADS bridge at ~10 Hz. Both boosters subscribe
-and extract their slice by config-driven array index.
+Single topic `compressor_telemetry`, published by ADS bridge at ~10 Hz. `BoosterNode` owns one
+subscription per instance; the callback writes to `BoosterTelemetryCache`. BT nodes and the tick
+loop read via `cache->latest()` — no BT node holds a subscription. Array indices (PT, TT, VFD, SV,
+PS) are config-driven params — same node binary serves both booster instances.
 
 Key fields (current):
 ```
@@ -225,10 +230,12 @@ can never disagree about whether something is dangerous.
 
 ## Booster BT — blackboard contents
 
-Written at configure time (from params):
-`service_name`, `telemetry_topic`, `vfd_index`, `inlet_pt_index`, `outlet_pt_index`,
-`inlet_sv_id`, `hpu_sv_id`, `ramp_tolerance`, `stop_threshold`, `safe_pressure`,
-`target_deadband`, `vfd_delay_s`, `stabilization_s`, `stabilization_samples`
+Written at configure time (from params / architecture contracts):
+`service_name`, `telemetry_cache` (shared_ptr — not a param, created at configure),
+`vfd_index`, `inlet_pt_index`, `outlet_pt_index`, all other hardware indices,
+`ramp_tolerance`, `stop_threshold`, `safe_pressure`, `target_deadband`,
+`vfd_delay_ms`, `vfd_stabilization_ms`, `stabilization_samples`,
+`stability_timeout_ms`, `ramp_timeout_ms`, `stop_timeout_ms`
 
 Written at goal-accept time (from goal):
 `target_pressure`, `cpm`, `speed_rpm`
@@ -283,9 +290,10 @@ string message
 ### Stage 1 — BoosterNode with action server + BT ✓
 Lifecycle node, action server, BT factory, tree from XML. Simple placeholder tree.
 
-### Stage 2 — Booster BT state machine (in progress)
-Real state machine: RosServiceNode hardware commands, RosTopicSubNode telemetry conditions,
-Parallel safety monitor.
+### Stage 2 — Booster BT state machine ✓
+Real state machine: RosServiceNode hardware commands, telemetry cache shared via blackboard,
+StatefulActionNode wait nodes (VFDAtSpeed, VFDStopped, InletPressureStable, OutletAtPressure),
+ConditionNode gate (InletPressureSafe), Parallel safety monitor, action feedback per tick.
 
 ### Stage 3 — CompressorNode coordinator
 Action server + coordinator BT tree. RosActionNode calling booster servers.

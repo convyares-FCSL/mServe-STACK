@@ -70,6 +70,9 @@ void BoosterNode::declare_params(){
       mserve_utils::timing_min, mserve_utils::timing_max);
   declare_parameter<int>("vfd_delay_ms", 2000, milliseconds_descriptor);
   declare_parameter<int>("vfd_stabilization_ms", 1000, milliseconds_descriptor);
+  declare_parameter<int>("stability_timeout_ms", 10000, milliseconds_descriptor);
+  declare_parameter<int>("ramp_timeout_ms", 30000, milliseconds_descriptor);
+  declare_parameter<int>("stop_timeout_ms", 15000, milliseconds_descriptor);
 
   // VFD Speed
   const auto speed_descriptor = mserve_utils::make_double_range_descriptor(
@@ -89,7 +92,6 @@ void BoosterNode::load_params(){
   auto & p = *get_node_parameters_interface();
   // Architecture contracts (hardcoded)
   blackboard_->set("service_name", std::string("/") + get_name() + "/booster_cmd");
-  blackboard_->set("telemetry_topic", std::string("compressor_telemetry"));
 
   // Hardware mapping (blackboard only)
   // VFD
@@ -161,6 +163,12 @@ void BoosterNode::load_params(){
   blackboard_->set("vfd_delay_ms", vfd_delay_ms);
   const int vfd_stabilization_ms = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_stabilization_ms", 1000, "Wait after VFD at speed before opening HPU (ms)");
   blackboard_->set("vfd_stabilization_ms", vfd_stabilization_ms);
+  const int stability_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "stability_timeout_ms", 10000, "Max time for inlet pressure to stabilise before startup (ms)");
+  blackboard_->set("stability_timeout_ms", stability_timeout_ms);
+  const int ramp_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "ramp_timeout_ms", 30000, "Max time for VFD to reach target speed (ms)");
+  blackboard_->set("ramp_timeout_ms", ramp_timeout_ms);
+  const int stop_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "stop_timeout_ms", 15000, "Max time for VFD to reach stopped state (ms)");
+  blackboard_->set("stop_timeout_ms", stop_timeout_ms);
 
   // VFD Speed
   const double stop_threshold = mserve_utils::get_or_declare_param(p, get_logger(), "stop_threshold", 25.0, "Band around target — VFD considered at speed (rpm)");

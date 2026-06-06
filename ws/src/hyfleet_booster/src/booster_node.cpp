@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 
 #include <hyfleet_booster/booster_node.hpp>
@@ -5,6 +6,7 @@
 #include "include/booster_action.hpp"
 #include "include/booster_bt_actions.hpp"
 #include "include/booster_bt_conditions.hpp"
+#include "include/booster_telemetry_cache.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace hyfleet_booster {
@@ -42,6 +44,16 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
     // BT node : Create blackboard, load params, register nodes and build trees
     bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt");
     blackboard_ = BT::Blackboard::create();
+
+    // Telemetry: node owns the subscription; cache is shared with BT nodes via blackboard
+    telemetry_cache_ = std::make_shared<BoosterTelemetryCache>();
+    blackboard_->set("telemetry_cache", telemetry_cache_);
+    telemetry_sub_ = create_subscription<mserve_interfaces::msg::CompressorTelemetry>(
+      "compressor_telemetry", 10,
+      [this](std::shared_ptr<const mserve_interfaces::msg::CompressorTelemetry> msg) {
+        telemetry_cache_->update(msg, now());
+      });
+
     load_params();
     register_bt_nodes();
     build_bt_trees();
@@ -87,6 +99,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
   if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
   trees_ = {};
 
+  telemetry_sub_.reset();
+  telemetry_cache_.reset();
   bt_node_.reset();
 
   if (booster_action_) {
@@ -134,27 +148,12 @@ void BoosterNode::register_bt_nodes(){
     });
 
   
-    // Register Conditions
-    factory_.registerBuilder<InletPressureStable>("InletPressureStable",
-      [this](const std::string& name, const BT::NodeConfig& config) {
-        return std::make_unique<InletPressureStable>(name, config, BT::RosNodeParams(bt_node_));
-    });
-    factory_.registerBuilder<VFDAtSpeed>("VFDAtSpeed",
-      [this](const std::string& name, const BT::NodeConfig& config) {
-        return std::make_unique<VFDAtSpeed>(name, config, BT::RosNodeParams(bt_node_));
-    });
-    factory_.registerBuilder<VFDStopped>("VFDStopped",
-      [this](const std::string& name, const BT::NodeConfig& config) {
-        return std::make_unique<VFDStopped>(name, config, BT::RosNodeParams(bt_node_));
-    });
-    factory_.registerBuilder<OutletAtPressure>("OutletAtPressure",
-      [this](const std::string& name, const BT::NodeConfig& config) {
-        return std::make_unique<OutletAtPressure>(name, config, BT::RosNodeParams(bt_node_));
-    });
-    factory_.registerBuilder<InletPressureSafe>("InletPressureSafe",
-      [this](const std::string& name, const BT::NodeConfig& config) {
-        return std::make_unique<InletPressureSafe>(name, config, BT::RosNodeParams(bt_node_));
-    });
+    // Register Conditions — plain ConditionNode, read telemetry from shared cache on blackboard
+    factory_.registerNodeType<InletPressureStable>("InletPressureStable");
+    factory_.registerNodeType<VFDAtSpeed>("VFDAtSpeed");
+    factory_.registerNodeType<VFDStopped>("VFDStopped");
+    factory_.registerNodeType<OutletAtPressure>("OutletAtPressure");
+    factory_.registerNodeType<InletPressureSafe>("InletPressureSafe");
 }
 
 void BoosterNode::build_bt_trees(){
@@ -181,6 +180,25 @@ void BoosterNode::tick_tree_once(){
   if (!active_tree_) { set_tick_timer(false); return; }
 
   const auto status = active_tree_->tickOnce();
+
+  // Publish feedback every tick — pressure from cache, percent_complete for start goals only
+  {
+    auto [msg, stamp] = telemetry_cache_->latest();
+    if (msg) {
+      int outlet_idx = 0;
+      double target  = 1.0;
+      if (!blackboard_->get("outlet_pt_index", outlet_idx) ||
+          !blackboard_->get("target_pressure", target)) { return; }
+      const double pressure = msg->pt_bar[outlet_idx];
+      const uint8_t cmd = active_goal_->get_goal()->command;
+      const bool is_start = (cmd == ControlBooster::Goal::START ||
+                             cmd == ControlBooster::Goal::START_IDLE);
+      auto fb = std::make_shared<ControlBooster::Feedback>();
+      fb->pressure         = pressure;
+      fb->percent_complete = is_start ? std::clamp(pressure / target * 100.0, 0.0, 100.0) : 0.0;
+      active_goal_->publish_feedback(fb);
+    }
+  }
 
   if (status == BT::NodeStatus::RUNNING) { return; }
 

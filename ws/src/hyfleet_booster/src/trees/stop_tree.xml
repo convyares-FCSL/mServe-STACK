@@ -11,9 +11,10 @@
 
       <StopVFD service_name="{service_name}" />
 
-      <VFDStopped topic_name="{telemetry_topic}"
+      <VFDStopped
                   vfd_index="{vfd_index}"
-                  stop_threshold="{stop_threshold}" />
+                  stop_threshold="{stop_threshold}"
+                  stop_timeout_ms="{stop_timeout_ms}" />
 
       <ControlSV service_name="{service_name}"
                  sv_index="{inlet_sv_index}"

@@ -13,11 +13,14 @@
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/blackboard.h>
 #include "mserve_interfaces/action/control_booster.hpp"
+#include "mserve_interfaces/msg/compressor_telemetry.hpp"
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 namespace hyfleet_booster {
 using ControlBooster = mserve_interfaces::action::ControlBooster;
 using GoalHandleControlBooster = rclcpp_action::ServerGoalHandle<ControlBooster>;
+
+class BoosterTelemetryCache;
 
 class BoosterAction;
 
@@ -63,6 +66,10 @@ private:
 
   // ROS client node for BT nodes — RosNodeParams requires rclcpp::Node, not LifecycleNode
   std::shared_ptr<rclcpp::Node> bt_node_;
+
+  // Telemetry — node owns the subscription; cache is shared with BT nodes via blackboard
+  std::shared_ptr<BoosterTelemetryCache> telemetry_cache_;
+  rclcpp::Subscription<mserve_interfaces::msg::CompressorTelemetry>::SharedPtr telemetry_sub_;
 
   // Misc
   double min_pressure_bar_;
