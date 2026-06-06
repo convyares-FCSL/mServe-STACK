@@ -121,20 +121,43 @@ All telemetry comes from ONE topic. Simpler than expected.
 
 ## Stage 3 — CompressorNode coordinator
 
-Unblocked once Stage 2 verified.
-
 Lesson plan Phase 1 (RosActionNode) and Phase 3 (reactive tree patterns) land here:
 coordinator tree uses `RosActionNode` for long-running booster goals, and Parallel /
 Fallback patterns for SYNC mode and force-stop recovery.
 
-- [ ] Replace current hand-rolled action server with coordinator pattern
-- [ ] Coordinator BT tree loaded from XML
-- [ ] `RosActionNode` wrapping `/low_booster/control_booster`
-- [ ] `RosActionNode` wrapping `/high_booster/control_booster`
-- [ ] Goal routing: LOW / HIGH / SYNC based on `target` blackboard key
-- [ ] SYNC: Parallel calling both booster RosActionNodes
+### Package setup
+- [x] `hyfleet_compressor` package created from `hyfleet_booster` base — stripped back to
+      coordinator core: `ControlCompressor` action, 3 trees (START/STOP/SAFE_STOP),
+      no telemetry cache, no hardware BT nodes, `AlwaysSuccess` placeholder trees
+- [x] `compressor_bt_nodes.hpp/.cpp` stub added — `BoostLow`/`BoostHigh` `RosActionNode`
+      wrappers go here
+- [x] Blackboard architecture contracts: `low_booster_action`, `high_booster_action`
+- [x] `COLCON_IGNORE` on `hyfleet_compressor_archive` to avoid duplicate package name
+- [x] Builds clean; placeholder tree accepts goal and succeeds
+
+### BT nodes — `RosActionNode` wrappers
+- [ ] `BoostLow`  — `RosActionNode<ControlBooster>` → `/low_booster/control_booster`;
+      `setGoal()` fills command/target_pressure/cpm/speed_rpm from blackboard;
+      `onResultReceived()` → SUCCESS / FAILURE; `onFailure()` handles server unreachable
+- [ ] `BoostHigh` — same as `BoostLow` but reads `high_booster_action` from blackboard
+- [ ] Register both nodes in `register_bt_nodes()`
+
+### XML trees
+- [ ] `start_tree.xml` — route on `target` blackboard key:
+      LOW → `BoostLow(START)`;  HIGH → `BoostHigh(START)`;
+      SYNC → `Parallel(BoostLow(START_IDLE), BoostHigh(START))`
+- [ ] `stop_tree.xml`  — route on `target`: LOW / HIGH / SYNC stop paths
+- [ ] `safe_stop_tree.xml` — route on `target`: immediate halt, no ramp-down
+
+### Coordinator params (mode → setpoint profiles)
+- [ ] Declare `default_speed_rpm` (1500), `eco_cpm`, `performance_cpm` in `declare_params()`
+- [ ] Read in `load_params()`, write to blackboard; consumed by `BoostLow`/`BoostHigh` goals
+- [ ] Write `cpm` and `speed_rpm` to blackboard at goal-accept from profile + mode
+
+### Remaining
 - [ ] Force stop: cancel in-flight booster goals via action cancel protocol
 - [ ] Recovery Fallback: graceful stop → force stop path
+- [ ] Feedback: surface booster pressure/percent_complete up to orchestrator each tick
 
 ---
 

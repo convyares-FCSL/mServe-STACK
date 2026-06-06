@@ -16,10 +16,16 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_lifecycle REQUIRED)
 find_package(rclcpp_action REQUIRED)
-find_package(mserve_utils REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
+find_package(behaviortree_ros2 REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(mserve_interfaces REQUIRED)
+find_package(mserve_utils REQUIRED)
 
 # ==============================================================================
 # Library — all node logic lives here so it can be tested independently
@@ -28,7 +34,9 @@ find_package(mserve_interfaces REQUIRED)
 
 add_library(compressor_node_lib SHARED
   src/compressor_node.cpp
+  src/compressor_params.cpp
   src/compressor_action.cpp
+  src/compressor_bt_nodes.cpp
 )
 
 # PUBLIC:  include/ — exported to any package that links this library.
@@ -49,6 +57,9 @@ ament_target_dependencies(compressor_node_lib
   rclcpp_action
   mserve_interfaces
   mserve_utils
+  behaviortree_cpp
+  behaviortree_ros2
+  ament_index_cpp
 )
 
 # ==============================================================================
@@ -59,8 +70,6 @@ add_executable(compressor_node
   src/main.cpp
 )
 
-# Executable only needs the public include/ to find compressor_node.hpp.
-# Internal headers are not needed here — main.cpp just creates the node.
 target_include_directories(compressor_node
   PRIVATE
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -85,11 +94,14 @@ install(TARGETS compressor_node_lib
   RUNTIME DESTINATION bin
 )
 
+install(DIRECTORY src/trees/
+  DESTINATION share/${PROJECT_NAME}/trees
+  FILES_MATCHING PATTERN "*.xml")
+
 install(TARGETS compressor_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Public headers exported for downstream packages
 install(DIRECTORY include/
   DESTINATION include
 )

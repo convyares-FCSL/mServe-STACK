@@ -1,0 +1,25 @@
+<!--
+  TODO: replace AlwaysSuccess with real tree logic.
+  One file per command (START, STOP, SAFE_STOP, etc.).
+
+  Blackboard keys available at tree start:
+    - Architecture contracts (service_name, action topics) — set in load_params()
+    - Goal fields (target_pressure, etc.)              — set in on_subsystem_goal_accepted()
+    - Feedback keys (pressure, percent_complete, etc.) — written by RosActionNode onFeedback()
+
+  Built-in BTcpp v4 nodes useful here:
+    Sleep           — Sleep msec="{key_ms}"   (replaces deprecated Wait)
+    AlwaysSuccess   — placeholder / skip
+    AlwaysFailure   — inject failure for testing
+    ForceSuccess    — wrap a subtree to always return SUCCESS
+    RetryUntilSuccessful — N retries before FAILURE
+    Timeout         — msec="{key_ms}" wrapper
+
+  See hyfleet_booster/src/trees/start_tree.xml for a working example.
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="Main">
+    <!-- TODO: replace with actual tree -->
+    <AlwaysSuccess/>
+  </BehaviorTree>
+</root>

@@ -90,6 +90,7 @@ void BoosterNode::declare_params(){
 // Loads all parameter and updates blackboard
 void BoosterNode::load_params(){
   auto & p = *get_node_parameters_interface();
+  
   // Architecture contracts (hardcoded)
   blackboard_->set("service_name", std::string("/") + get_name() + "/booster_cmd");
 

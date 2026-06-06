@@ -1,0 +1,6 @@
+int32 id
+DispenserCmd cmd
+int32[5] payload
+---
+int32 ack_id
+HResult result

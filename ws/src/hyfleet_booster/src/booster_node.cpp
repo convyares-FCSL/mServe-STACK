@@ -176,7 +176,6 @@ bool BoosterNode::select_tree(uint8_t command) {
 
 void BoosterNode::tick_tree_once(){
   if (!active_goal_) { set_tick_timer(false); return; }
-
   if (!active_tree_) { set_tick_timer(false); return; }
 
   const auto status = active_tree_->tickOnce();
@@ -224,8 +223,10 @@ void BoosterNode::tick_tree_once(){
 // ==============================================================================
 
 void BoosterNode::on_booster_goal_accepted( std::shared_ptr<GoalHandleControlBooster> goal_handle) {
-  // Null check
-  if (!goal_handle) { RCLCPP_WARN(get_logger(), "Received null booster goal handle"); return; }
+  if (!goal_handle) { RCLCPP_WARN(get_logger(), 
+    "Received null booster goal handle"); 
+    return; 
+  }
 
   // Abort existing goal
   if (active_goal_) {

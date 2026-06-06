@@ -97,7 +97,8 @@ void BoosterAction::handle_accepted(const std::shared_ptr<GoalHandleControlBoost
         callback = goal_callback_;
     }
 
-    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: cmd=%u pressure=%.1f", static_cast<unsigned>(goal->command), goal->target_pressure);
+    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: cmd=%u pressure=%.1f", 
+        static_cast<unsigned>(goal->command), goal->target_pressure);
 
     if (callback) { callback(goal_handle); }
 }
