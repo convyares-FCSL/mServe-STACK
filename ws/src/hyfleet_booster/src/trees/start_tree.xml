@@ -1,58 +1,70 @@
 <root BTCPP_format="4">
-  <BehaviorTree ID="BoosterMain">
-    <Parallel success_count="1" failure_count="1">
-      <Sequence name="startup">
-        <ControlSV 
-          service_name="{service_name}"
-          sv_index="{inlet_sv_index}"
-          enable="true" 
-        />
+  <BehaviorTree ID="Start">
+    <Sequence name="start_and_shutdown">
 
-        <InletPressureStable
+      <!-- Safety monitor runs in parallel during startup and compression only.
+           Parallel resolves (success_count=1) when OutletAtPressure succeeds — InletPressureSafe
+           is then halted. Shutdown SubTree runs outside so inlet close does not trip the gate. -->
+      <Parallel success_count="1" failure_count="1">
+
+        <Sequence name="startup">
+          <ControlSV
+            service_name="{service_name}"
+            sv_index="{inlet_sv_index}"
+            enable="true"
+          />
+
+          <InletPressureStable
+            inlet_pt_index="{inlet_pt_index}"
+            stabilization_samples="{stabilization_samples}"
+            stability_tolerance="{stability_tolerance}"
+            stability_timeout_ms="{stability_timeout_ms}"
+          />
+
+          <StartVFD
+            service_name="{service_name}"
+            speed_rpm="{speed_rpm}"
+          />
+
+          <Sleep msec="{vfd_delay_ms}" />
+
+          <VFDAtSpeed
+            vfd_index="{vfd_index}"
+            target_speed="{speed_rpm}"
+            ramp_tolerance="{ramp_tolerance}"
+            ramp_timeout_ms="{ramp_timeout_ms}"
+          />
+
+          <Sleep msec="{vfd_stabilization_ms}" />
+
+          <ControlSV
+            service_name="{service_name}"
+            sv_index="{hpu_sv_index}"
+            enable="true"
+          />
+
+          <SetPCSV
+            service_name="{service_name}"
+            enable="true"
+            cpm="{cpm}"
+          />
+
+          <OutletAtPressure
+            outlet_pt_index="{outlet_pt_index}"
+            target_pressure="{target_pressure}"
+          />
+        </Sequence>
+
+        <InletPressureSafe
           inlet_pt_index="{inlet_pt_index}"
-          stabilization_samples="{stabilization_samples}"
-          stability_tolerance="{stability_tolerance}"
-          stability_timeout_ms="{stability_timeout_ms}"
+          safe_pressure="{safe_pressure}"
         />
 
-        <StartVFD 
-          service_name="{service_name}"
-          speed_rpm="{speed_rpm}" 
-        />
+      </Parallel>
 
-        <Sleep msec="{vfd_delay_ms}" />
+      <!-- Ordered shutdown — shared with STOP command via SubTree -->
+      <SubTree ID="Stop" _autoremap="true"/>
 
-        <VFDAtSpeed
-          vfd_index="{vfd_index}"
-          target_speed="{speed_rpm}"
-          ramp_tolerance="{ramp_tolerance}"
-          ramp_timeout_ms="{ramp_timeout_ms}"
-        />
-
-        <Sleep msec="{vfd_stabilization_ms}" />
-
-        <ControlSV 
-          service_name="{service_name}"
-          sv_index="{hpu_sv_index}"
-          enable="true" 
-        />
-
-        <SetPCSV 
-          service_name="{service_name}"
-          enable="true"
-          cpm="{cpm}" 
-        />
-
-        <OutletAtPressure
-          outlet_pt_index="{outlet_pt_index}"
-          target_pressure="{target_pressure}"
-        />
-      </Sequence>
-
-      <InletPressureSafe
-        inlet_pt_index="{inlet_pt_index}"
-        safe_pressure="{safe_pressure}"
-      />
-    </Parallel>
+    </Sequence>
   </BehaviorTree>
 </root>

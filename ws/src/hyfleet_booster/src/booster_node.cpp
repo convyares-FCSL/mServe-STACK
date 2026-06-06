@@ -153,14 +153,17 @@ void BoosterNode::register_bt_nodes(){
     factory_.registerNodeType<VFDAtSpeed>("VFDAtSpeed");
     factory_.registerNodeType<VFDStopped>("VFDStopped");
     factory_.registerNodeType<OutletAtPressure>("OutletAtPressure");
+    factory_.registerNodeType<PressureBelowThreshold>("PressureBelowThreshold");
     factory_.registerNodeType<InletPressureSafe>("InletPressureSafe");
 }
 
 void BoosterNode::build_bt_trees(){
     const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_booster") + "/trees/";
+    // Register Stop first — referenced as SubTree inside start_tree.xml
+    factory_.registerBehaviorTreeFromFile(base + "stop_tree.xml");
     trees_[0] = factory_.createTreeFromFile(base + "start_tree.xml", blackboard_);
     trees_[1] = factory_.createTreeFromFile(base + "start_idle_tree.xml", blackboard_);
-    trees_[2] = factory_.createTreeFromFile(base + "stop_tree.xml", blackboard_);
+    trees_[2] = factory_.createTree("Stop", blackboard_);
     trees_[3] = factory_.createTreeFromFile(base + "stop_force_tree.xml", blackboard_);
 }
 

@@ -20,6 +20,29 @@ The tree is the state machine. No hand-rolled switch statements.
 
 ---
 
+## Drivetrain state model
+
+Three hardware states drive the command semantics. OFF↔WARM is expensive;
+WARM↔COMPRESSING is cheap. `START_IDLE` exists to pay the expensive transition
+once and then cycle between WARM and COMPRESSING cheaply.
+
+| State | VFD | HPU | PCSV | Notes |
+|---|---|---|---|---|
+| **OFF** | Stopped | Closed | Off | Rest state. Full startup sequence to reach COMPRESSING. |
+| **WARM** | Running | Engaged | Off | PCSV toggle away from compressing. No ramp cost. |
+| **COMPRESSING** | Running | Engaged | Cycling | Pressure rising. |
+
+### Command end states
+
+| Command | End state | Description |
+|---|---|---|
+| `START` | OFF | Self-contained one-shot: ramp up → compress to target → ordered shutdown |
+| `START_IDLE` | WARM (looping) | Compress to target → go WARM → re-engage when outlet drops below `target − reenable_offset_bar` → repeat. Holds open until STOP. |
+| `STOP` | OFF | Ordered shutdown: PCSV off → HPU close → ramp down → inlet close |
+| `SAFE_STOP` | OFF | Immediate halt — no ramp-down wait |
+
+---
+
 ## Package structure
 
 ```
@@ -37,8 +60,8 @@ src/
     booster_bt_actions.cpp
     booster_bt_conditions.cpp
 trees/
-  start_tree.xml            START command — ramp up, stabilise, open HPU, enable PCSV
-  start_idle_tree.xml       START_IDLE — same as start but holds at target pressure
+  start_tree.xml            START — ramp up, compress to target, ordered shutdown → OFF
+  start_idle_tree.xml       START_IDLE — ramp up, compress to target, maintain in WARM/COMPRESSING band
   stop_tree.xml             STOP — disable PCSV, close HPU, ramp down VFD, close inlet
   stop_force_tree.xml       SAFE_STOP — immediate stop, no ramp-down wait
 ```
@@ -103,6 +126,7 @@ Indices are configured per instance via ROS params.
 | `vfd_speed ≈ target` | `VFDAtSpeed` | `vfd_speed_rpm[vfd_index]` | `vfd_index`, `target_speed`, `ramp_tolerance`, `ramp_timeout_ms` |
 | `outlet_pressure >= target` | `OutletAtPressure` | `pt_bar[outlet_pt_index]` | `outlet_pt_index`, `target_pressure` |
 | `vfd_speed ≈ 0 && state != RUNNING` | `VFDStopped` | `vfd_speed_rpm[vfd_index]`, `vfd_state[vfd_index]` | `vfd_index`, `stop_threshold`, `stop_timeout_ms` |
+| outlet dropped below re-enable band | `OutletBelowPressure` | `pt_bar[outlet_pt_index]` | `outlet_pt_index`, `target_pressure`, `reenable_offset_bar` — SYNC only |
 
 **Gate nodes (`BT::ConditionNode`)** — instantaneous check; SUCCESS or FAILURE only, never RUNNING.
 
@@ -223,6 +247,7 @@ they arrive with the `ControlBooster` goal. Speed/CPM hardware ceilings are `con
 | `stop_threshold` | double | 25.0 | Below this — VFD considered stopped (rpm) |
 |
 | `stabilization_samples` | int | 3 | Rolling window depth for `InletPressureStable` |
+| `reenable_offset_bar` | double | 50.0 | START_IDLE re-engage threshold = `target − offset` (bar). Fixed machine property — not a goal field. |
 
 ---
 
@@ -266,9 +291,11 @@ Feedback:
   float64 percent_complete
 ```
 
-`START_IDLE` boosts to target pressure then holds with poppet valve engaged.
-VFD stays available for rapid restart. Used during SYNC mode when the coordinator
-will issue another START shortly after.
+`START_IDLE` compresses to target pressure, then enters a maintain loop: go WARM
+(PCSV off), wait until outlet drops below `target − reenable_offset_bar`, re-engage
+PCSV, compress back to target, repeat. VFD stays running throughout — no ramp cost
+on re-engage. Used for interstage band-control in SYNC mode. The re-enable threshold
+is a fixed operational param (`reenable_offset_bar`), not a goal field.
 
 Goal fields `target_pressure`, `cpm`, and `speed_rpm` are written to the blackboard
 at goal-accept and consumed by the BT tree. They are not ROS parameters.

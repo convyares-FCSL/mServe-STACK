@@ -98,6 +98,28 @@ class OutletAtPressure : public BT::StatefulActionNode {
 };
 
 // ==============================================================================
+// WAIT — Pressure Below Threshold
+// Polls until pt_bar[pt_index] < threshold_bar. Wall-clock timeout → FAILURE.
+// Used in stop sequence to confirm hydraulic lines de-pressurised.
+// Also used in START_IDLE maintain loop to detect outlet droop below re-enable band.
+// ==============================================================================
+
+class PressureBelowThreshold : public BT::StatefulActionNode {
+    public:
+        PressureBelowThreshold(const std::string& name, const BT::NodeConfiguration& config);
+
+        static BT::PortsList providedPorts();
+
+        BT::NodeStatus onStart()   override;
+        BT::NodeStatus onRunning() override;
+        void           onHalted()  override;
+
+    private:
+        std::chrono::steady_clock::time_point start_time_;
+        std::chrono::milliseconds             timeout_{};
+};
+
+// ==============================================================================
 // GATE — Inlet Pressure Safe
 // Instantaneous check: FAILURE if supply pressure < safe_pressure.
 // Aborts startup immediately — correct semantics for a safety monitor.

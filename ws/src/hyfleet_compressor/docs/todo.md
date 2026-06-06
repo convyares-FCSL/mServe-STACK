@@ -117,6 +117,34 @@ All telemetry comes from ONE topic. Simpler than expected.
 ### Feedback
 - [x] Publish outlet pressure + percent_complete to action feedback each tick (from telemetry cache)
 
+### XML tree corrections and SYNC prerequisites
+
+**PARALLEL dependency — done:**
+- [x] All four tree IDs renamed to unique values: `Start`, `StartIdle`, `Stop`, `SafeStop`
+- [x] `stop_tree.xml` — correct controlled shutdown sequence:
+      `SetPCSV(off)` → `PressureBelowThreshold(hyd_a)` → `PressureBelowThreshold(hyd_b)` →
+      `ControlSV(HPU,close)` → `PressureBelowThreshold(hyd_primer)` →
+      `StopVFD` → `ControlSV(inlet,close)` → `VFDStopped`
+- [x] `stop_force_tree.xml` — uncontrolled slam: `Parallel(SetPCSV + HPU SV + StopVFD + inlet SV)`
+- [x] `start_tree.xml` — outer Sequence wraps Parallel (safety guard) + `SubTree ID="Stop"`;
+      InletPressureSafe halted before shutdown so inlet close does not trip the gate
+- [x] `PressureBelowThreshold` — `StatefulActionNode`; polls `pt_bar[pt_index] < threshold_bar`;
+      wall-clock timeout → FAILURE. Used for hyd A/B/primer checks in stop sequence.
+- [x] `hyd_pressure_threshold_bar` (30.0 bar), `hyd_timeout_ms` (10000 ms) params added
+- [x] `stop_tree.xml` registered with factory before `start_tree.xml` is instantiated
+      (SubTree reference requires prior registration)
+
+**SYNC dependencies — note now, implement at Stage 3 SYNC:**
+- [ ] `reenable_offset_bar` (default 50.0 bar) — operational param added; not a goal field.
+      Re-enable threshold = `target_pressure − reenable_offset_bar`. Written to blackboard.
+- [ ] `start_idle_tree.xml` — replace `AlwaysRunning` with correct maintain loop:
+      Phase 1 (startup, same as START): OFF → COMPRESSING → `OutletAtPressure`
+      Transition: `SetPCSV(off)` → WARM
+      Phase 2 (maintain loop): `PressureBelowThreshold(outlet, target−offset)` → `SetPCSV(on)` →
+      `OutletAtPressure(target)` → `SetPCSV(off)` → repeat
+      Holds in WARM between re-engagements. STOP exits from wherever it is → OFF.
+      Note: `PressureBelowThreshold` reused here with `outlet_pt_index` and computed threshold.
+
 ---
 
 ## Stage 3 — CompressorNode coordinator

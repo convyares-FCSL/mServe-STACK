@@ -85,6 +85,15 @@ void BoosterNode::declare_params(){
   const auto sample_count_descriptor =  mserve_utils::make_int_range_descriptor(
     "Number of stabilization samples. Valid range: 1..100.", 1, 100);
   declare_parameter<int>("stabilization_samples", 3, sample_count_descriptor);
+
+  // Hydraulic shutdown checks
+  const auto hyd_pressure_descriptor = mserve_utils::make_double_range_descriptor(
+    "Hydraulic line de-pressurise threshold (bar).", 0.0, 100.0);
+  declare_parameter<double>("hyd_pressure_threshold_bar", 30.0, hyd_pressure_descriptor);
+  declare_parameter<int>("hyd_timeout_ms", 10000, milliseconds_descriptor);
+
+  // START_IDLE maintain loop
+  declare_parameter<double>("reenable_offset_bar", 50.0, pressure_bar_descriptor);
 }
 
 // Loads all parameter and updates blackboard
@@ -180,6 +189,16 @@ void BoosterNode::load_params(){
   // Count
   const int stabilization_samples = mserve_utils::get_or_declare_param(p, get_logger(), "stabilization_samples", 3, "Rolling window depth for `InletPressureStable");
   blackboard_->set("stabilization_samples", stabilization_samples);
+
+  // Hydraulic shutdown checks
+  const double hyd_pressure_threshold_bar = mserve_utils::get_or_declare_param(p, get_logger(), "hyd_pressure_threshold_bar", 30.0, "Hydraulic line de-pressurise threshold (bar)");
+  blackboard_->set("hyd_pressure_threshold_bar", hyd_pressure_threshold_bar);
+  const int hyd_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "hyd_timeout_ms", 10000, "Max wait for hydraulic line to de-pressurise (ms)");
+  blackboard_->set("hyd_timeout_ms", hyd_timeout_ms);
+
+  // START_IDLE maintain loop
+  const double reenable_offset_bar = mserve_utils::get_or_declare_param(p, get_logger(), "reenable_offset_bar", 50.0, "START_IDLE re-engage threshold = target − offset (bar)");
+  blackboard_->set("reenable_offset_bar", reenable_offset_bar);
 }
 
 rcl_interfaces::msg::SetParametersResult BoosterNode::on_parameters(const std::vector<rclcpp::Parameter> & params){

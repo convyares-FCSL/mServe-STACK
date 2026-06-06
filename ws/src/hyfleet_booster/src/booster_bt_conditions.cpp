@@ -271,6 +271,66 @@ BT::NodeStatus OutletAtPressure::onRunning() {
 void OutletAtPressure::onHalted() {}
 
 // ==============================================================================
+// WAIT — Pressure Below Threshold
+// ==============================================================================
+
+PressureBelowThreshold::PressureBelowThreshold(const std::string& name, const BT::NodeConfiguration& config)
+: BT::StatefulActionNode(name, config) {}
+
+BT::PortsList PressureBelowThreshold::providedPorts() {
+    return {
+        BT::InputPort<int>("pt_index"),
+        BT::InputPort<double>("threshold_bar"),
+        BT::InputPort<int>("timeout_ms")
+    };
+}
+
+BT::NodeStatus PressureBelowThreshold::onStart() {
+    auto timeout_res = getInput<int>("timeout_ms");
+    if (!timeout_res) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: missing timeout_ms port");
+        return BT::NodeStatus::FAILURE;
+    }
+    timeout_    = std::chrono::milliseconds(timeout_res.value());
+    start_time_ = std::chrono::steady_clock::now();
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus PressureBelowThreshold::onRunning() {
+    if (std::chrono::steady_clock::now() - start_time_ > timeout_) {
+        RCLCPP_WARN(rclcpp::get_logger(name()), "PressureBelowThreshold: timeout waiting for pressure to drop");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    std::shared_ptr<BoosterTelemetryCache> cache;
+    if (!config().blackboard->get("telemetry_cache", cache) || !cache) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: telemetry_cache not on blackboard");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    auto [msg, stamp] = cache->latest();
+    if (!msg) { return BT::NodeStatus::RUNNING; }
+
+    auto index_res     = getInput<int>("pt_index");
+    auto threshold_res = getInput<double>("threshold_bar");
+    if (!index_res || !threshold_res) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: missing input ports");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    const double pressure  = msg->pt_bar[index_res.value()];
+    const double threshold = threshold_res.value();
+
+    if (pressure < threshold) {
+        RCLCPP_INFO(rclcpp::get_logger(name()), "PressureBelowThreshold: %.1f bar below threshold %.1f bar", pressure, threshold);
+        return BT::NodeStatus::SUCCESS;
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+void PressureBelowThreshold::onHalted() {}
+
+// ==============================================================================
 // GATE — Inlet Pressure Safe
 // ==============================================================================
 

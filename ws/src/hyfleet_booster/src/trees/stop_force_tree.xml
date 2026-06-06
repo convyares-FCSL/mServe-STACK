@@ -1,27 +1,32 @@
 <root BTCPP_format="4">
-  <BehaviorTree ID="BoosterMain">
-    <Sequence name="stop_force">
-      <SetPCSV 
+  <BehaviorTree ID="SafeStop">
+    <!-- Uncontrolled shutdown — slam everything off simultaneously.
+         No hydraulic checks, no VFD ramp confirmation.
+         Used on loss-of-control or safety interlock. -->
+    <Parallel success_count="4" failure_count="1">
+
+      <SetPCSV
         service_name="{service_name}"
         enable="false"
-        cpm="{cpm}" 
+        cpm="0"
       />
 
-      <ControlSV 
+      <ControlSV
         service_name="{service_name}"
         sv_index="{hpu_sv_index}"
-        enable="false" 
+        enable="false"
       />
 
-      <StopVFD 
-        service_name="{service_name}" 
+      <StopVFD
+        service_name="{service_name}"
       />
 
-      <ControlSV 
+      <ControlSV
         service_name="{service_name}"
         sv_index="{inlet_sv_index}"
-        enable="false" 
+        enable="false"
       />
-    </Sequence>
+
+    </Parallel>
   </BehaviorTree>
 </root>
