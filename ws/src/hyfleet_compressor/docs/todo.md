@@ -121,11 +121,13 @@ All telemetry comes from ONE topic. Simpler than expected.
 
 ## Stage 3 — CompressorNode coordinator
 
-Lesson plan Phase 1 (RosActionNode) and Phase 3 (reactive tree patterns) land here:
-coordinator tree uses `RosActionNode` for long-running booster goals, and Parallel /
-Fallback patterns for SYNC mode and force-stop recovery.
+Lesson plan Phase 1 (RosActionNode) and Phase 3 (reactive tree patterns) land here.
+PARALLEL mode proves the coordinator→booster action path and multi-goal handling.
+SYNC mode layers reactive interstage coordination on top of working PARALLEL pieces.
+Coordinator is a router (PARALLEL) and interstage coordinator (SYNC) — boosters do the
+hardware work. No BoosterManager inside CompressorNode.
 
-### Package setup
+### Package setup (done)
 - [x] `hyfleet_compressor` package created from `hyfleet_booster` base — stripped back to
       coordinator core: `ControlCompressor` action, 3 trees (START/STOP/SAFE_STOP),
       no telemetry cache, no hardware BT nodes, `AlwaysSuccess` placeholder trees
@@ -135,38 +137,124 @@ Fallback patterns for SYNC mode and force-stop recovery.
 - [x] `COLCON_IGNORE` on `hyfleet_compressor_archive` to avoid duplicate package name
 - [x] Builds clean; placeholder tree accepts goal and succeeds
 
+### Prerequisites — define before building
+
+- [x] Booster preemption semantics: a new `ControlBooster` goal arriving while the booster
+      is already RUNNING must mean "update target_pressure, keep compressing" not
+      "halt and restart". Define and confirm in `BoosterNode` before coordinator
+      re-goaling is implemented.
+- [ ] SYNC band semantics confirmed: "halt low at 280 bar" = `START_IDLE` (VFD holds ready,
+      no ramp/stabilise cost on re-enable at 220 bar), not a cold `STOP`. START_IDLE
+      exists exactly for this — band-control must use the idle/hold path.
+
+### PARALLEL mode — multi-goal node structure
+
+PARALLEL and SYNC are different problems. PARALLEL: two independent concurrent
+`ControlCompressor` goals (LOW + HIGH) governed by a `targets_overlap` rule.
+SYNC: one goal coordinating both boosters internally.
+
+- [ ] `CompressorNode` replaces single `active_goal_`/`active_tree_` with two independent
+      operation slots keyed by target: `low_op_`, `high_op_` (each holds a goal handle +
+      tree pointer + its own blackboard instance)
+- [ ] Per-operation blackboard — one per active tree; a shared blackboard would let two
+      concurrent trees clobber each other's keys
+- [ ] Single tick timer iterates all active operations each 100 ms tick
+- [ ] `targets_overlap()` rule: LOW + HIGH can coexist; SYNC conflicts with everything
+      (same rule as archive `compressor_action.cpp:362`)
+- [ ] Goal acceptance: apply `targets_overlap` to abort conflicting ops before starting new op
+- [ ] Re-goaling: new LOW goal while LOW is already running = relay updated target to
+      in-flight booster goal (smooth update, no halt); depends on booster preemption above
+- [ ] Mode transition — SYNC arriving while LOW/HIGH running: abort both (reactive abort +
+      safe-state handover), then start SYNC tree. Reverse: LOW/HIGH arriving while SYNC
+      is running → abort SYNC, start requested op.
+
 ### BT nodes — `RosActionNode` wrappers
+
 - [ ] `BoostLow`  — `RosActionNode<ControlBooster>` → `/low_booster/control_booster`;
       `setGoal()` fills command/target_pressure/cpm/speed_rpm from blackboard;
+      `onFeedback()` writes `low_pressure` / `low_percent_complete` to blackboard;
       `onResultReceived()` → SUCCESS / FAILURE; `onFailure()` handles server unreachable
-- [ ] `BoostHigh` — same as `BoostLow` but reads `high_booster_action` from blackboard
+- [ ] `BoostHigh` — same pattern; writes `high_pressure` / `high_percent_complete`
 - [ ] Register both nodes in `register_bt_nodes()`
 
-### XML trees
-- [ ] `start_tree.xml` — route on `target` blackboard key:
-      LOW → `BoostLow(START)`;  HIGH → `BoostHigh(START)`;
-      SYNC → `Parallel(BoostLow(START_IDLE), BoostHigh(START))`
-- [ ] `stop_tree.xml`  — route on `target`: LOW / HIGH / SYNC stop paths
-- [ ] `safe_stop_tree.xml` — route on `target`: immediate halt, no ramp-down
+### XML trees — PARALLEL paths
 
-### Coordinator params (mode → setpoint profiles)
-- [ ] Declare `default_speed_rpm` (1500), `eco_cpm`, `performance_cpm` in `declare_params()`
-- [ ] Read in `load_params()`, write to blackboard; consumed by `BoostLow`/`BoostHigh` goals
-- [ ] Write `cpm` and `speed_rpm` to blackboard at goal-accept from profile + mode
+Each tree is a single `RosActionNode` call; routing is done at the node level (which
+tree is selected) not inside the XML.
 
-### Remaining
-- [ ] Force stop: cancel in-flight booster goals via action cancel protocol
-- [ ] Recovery Fallback: graceful stop → force stop path
-- [ ] Feedback: surface booster pressure/percent_complete up to orchestrator each tick
+- [ ] `start_low_tree.xml`     — `BoostLow(START)`
+- [ ] `start_high_tree.xml`    — `BoostHigh(START)`
+- [ ] `stop_low_tree.xml`      — `BoostLow(STOP)`
+- [ ] `stop_high_tree.xml`     — `BoostHigh(STOP)`
+- [ ] `safe_stop_low_tree.xml` — `BoostLow(SAFE_STOP)`
+- [ ] `safe_stop_high_tree.xml`— `BoostHigh(SAFE_STOP)`
+
+### Feedback — PARALLEL
+
+`onFeedback()` writes to the operation's own blackboard; tick loop reads and publishes
+on that operation's goal handle. Blackboard is the bridge — BT nodes never hold goal
+handle references.
+
+- [ ] Tick loop: for each active op, read its blackboard, publish on its own goal handle
+- [ ] LOW goal handle publishes `low_pressure` / `low_percent_complete`
+- [ ] HIGH goal handle publishes `high_pressure` / `high_percent_complete`
+
+### Coordinator params
+
+- [ ] Declare `default_speed_rpm` (1500), `eco_cpm`, `performance_cpm`
+- [ ] Read in `load_params()`, write to blackboard; consumed by `BoostLow`/`BoostHigh`
+- [ ] Write `cpm` and `speed_rpm` to blackboard at goal-accept from mode profile
+
+### Force stop and recovery
+
+- [ ] Force stop: cancel in-flight booster goals via ROS action cancel protocol
+- [ ] Recovery Fallback: graceful stop → force stop path in XML tree
+
+---
+
+### SYNC mode — reactive interstage coordination
+
+Unblocked after PARALLEL paths work and booster preemption semantics are confirmed.
+SYNC is asymmetric: low is slaved to high, not a symmetric Parallel of equal goals.
+
+#### SYNC interstage BT nodes
+
+- [ ] `InterstageAboveBand` — `ConditionNode`; interstage >= upper threshold (280 bar) →
+      SUCCESS (signal to idle low); reads `interstage_pt_index` from blackboard
+- [ ] `InterstateBelowBand` — `ConditionNode`; interstage <= lower threshold (220 bar) →
+      SUCCESS (signal to re-enable low)
+- [ ] Both read interstage from the compressor's telemetry subscription; coordinator needs
+      its own subscription to `compressor_telemetry` for interstage PT only
+
+#### SYNC XML tree
+
+`start_sync_tree.xml` — asymmetric, three-phase:
+- [ ] Phase 1: `BoostLow(START_IDLE)` — low runs until interstage >= target
+- [ ] Phase 2: `BoostHigh(START)` — bring high booster online
+- [ ] Phase 3: `ReactiveSequence` — re-evaluates interstage condition every tick while
+      high is running; `InterstageAboveBand` → idle low; `InterstateBelowBand` → re-enable
+      low via `BoostLow(START_IDLE)`. Uses `ReactiveSequence` not `Sequence` so the
+      condition gates are re-checked each tick even while a child RosActionNode is RUNNING.
+- [ ] `stop_sync_tree.xml`      — stop high first (dependency order), then low
+- [ ] `safe_stop_sync_tree.xml` — halt both immediately
+
+#### SYNC feedback
+
+- [ ] Single goal handle; feedback = `min(low_pressure, high_pressure)` during Phase 1;
+      `high_pressure` once high is online; `percent_complete` vs `target_pressure`
+
+#### SYNC coordinator telemetry
+
+- [ ] Coordinator subscribes to `compressor_telemetry` for interstage PT only;
+      lightweight — no cache needed, just the latest interstage value on the blackboard
+- [ ] Interstage solenoid command — `RosServiceNode` to `BoosterCmd` for SV control
+- [ ] CPM adjustment on low booster — `RosServiceNode` if dynamic CPM tuning needed
 
 ---
 
 ## Stage 4 — Full integration
 
-### SYNC coordinator
-- [ ] SYNC: `RosTopicSubNode` interstage pressure monitoring
-- [ ] SYNC: `RosServiceNode` CPM adjustment on low booster
-- [ ] SYNC: `RosServiceNode` interstage solenoid command
+### Integration
 - [ ] Safety monitor end-to-end
 - [ ] DiagnosticsPublisher
 - [ ] Groot2 visualisation on both trees

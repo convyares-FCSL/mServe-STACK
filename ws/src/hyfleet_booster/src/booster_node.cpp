@@ -228,15 +228,27 @@ void BoosterNode::on_booster_goal_accepted( std::shared_ptr<GoalHandleControlBoo
     return; 
   }
 
-  // Abort existing goal
   if (active_goal_) {
-    booster_action_->abort_goal(active_goal_, "booster goal replaced by newer goal");
-    active_goal_.reset();
-  }
+    const uint8_t active_cmd = active_goal_->get_goal()->command;
+    const uint8_t new_cmd    = goal_handle->get_goal()->command;
 
-  // Abort existing tree
-  if (active_tree_) {
-    active_tree_->haltTree();
+    if (active_cmd == new_cmd) {
+      // Same command — update target in place, no tree restart
+      booster_action_->abort_goal(active_goal_, "replaced by newer goal");
+      active_goal_.reset();
+      blackboard_->set("target_pressure", goal_handle->get_goal()->target_pressure);
+      blackboard_->set("cpm",             goal_handle->get_goal()->cpm);
+      blackboard_->set("speed_rpm",       goal_handle->get_goal()->speed_rpm);
+      active_goal_ = std::move(goal_handle);
+      // Return early — tree keeps running, timer already active
+      RCLCPP_INFO(get_logger(), "Booster goal updated in place (same command)");
+      return;
+    }
+
+    // Different command — full halt and restart
+    booster_action_->abort_goal(active_goal_, "replaced by newer goal");
+    active_goal_.reset();
+    if (active_tree_) { active_tree_->haltTree(); }
   }
 
   const auto goal = goal_handle->get_goal();
