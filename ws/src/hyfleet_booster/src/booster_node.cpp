@@ -1,11 +1,18 @@
 #include <algorithm>
 #include <vector>
 #include <chrono>
+
 #include <hyfleet_booster/booster_node.hpp>
+#include "hyfleet_booster/booster_limits.hpp"
+#include "mserve_utils/utils.hpp"
+#include "mserve_utils/config.hpp"
 #include "include/booster_action.hpp"
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include "include/booster_bt_actions.hpp"
 #include "include/booster_bt_conditions.hpp"
+#include <rcl_interfaces/msg/integer_range.hpp>
+#include <rcl_interfaces/msg/floating_point_range.hpp>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace hyfleet_booster {
 using namespace std::chrono_literals;
@@ -15,7 +22,8 @@ using namespace std::chrono_literals;
 // ==============================================================================
 
 BoosterNode::BoosterNode(const rclcpp::NodeOptions & options): rclcpp_lifecycle::LifecycleNode("booster_node", options){
- 
+  declare_params();
+
   param_callback_handle_ = this->add_on_set_parameters_callback(
     [this](const std::vector<rclcpp::Parameter> & params) {
       return this->on_parameters(params);
@@ -109,6 +117,95 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
 }
 
 // ==============================================================================
+// Parameters
+// ==============================================================================
+
+void BoosterNode::declare_params()
+{
+  //Hardware mapping
+  // VFD index.
+  const auto vfd_index_descriptor =  mserve_utils::make_int_range_descriptor("Index into configured VFD mapping[2]", 0, 1);
+  declare_parameter<int>("vfd_index", 0, vfd_index_descriptor);
+
+  // Heater index.
+  const auto heater_index_descriptor =  mserve_utils::make_int_range_descriptor("Index into configured Heater mapping[2]", 0, 1);
+  declare_parameter<int>("heater_index", 0, heater_index_descriptor);
+
+  // Pressure Transducers
+  const auto pt_index_descriptor = mserve_utils::make_int_range_descriptor("Index into CompressorTelemetry::pt_bar[16]", 0, 15);
+  declare_parameter<int>("inlet_pt_index", 0, pt_index_descriptor);
+  declare_parameter<int>("outlet_pt_index", 1, pt_index_descriptor);
+  declare_parameter<int>("hyd_primer_pt_index", 2, pt_index_descriptor);
+  declare_parameter<int>("hyd_a_pt_index", 3, pt_index_descriptor);
+  declare_parameter<int>("hyd_b_pt_index", 4, pt_index_descriptor);
+  declare_parameter<int>("coolant_pt_index", 5, pt_index_descriptor);
+
+  // Temperature Transducers
+  const auto tt_index_descriptor = mserve_utils::make_int_range_descriptor("Index into CompressorTelemetry::tt_celsius[12]", 0, 11);
+  declare_parameter<int>("inlet_tt_index_1", 0, tt_index_descriptor);
+  declare_parameter<int>("inlet_tt_index_2", 1, tt_index_descriptor);
+  declare_parameter<int>("outlet_tt_index_1", 2, tt_index_descriptor);
+  declare_parameter<int>("outlet_tt_index_2", 3, tt_index_descriptor);
+  declare_parameter<int>("outlet_tt_index_3", 4, tt_index_descriptor);
+
+  // Position Sensor
+  const auto ps_index_descriptor = mserve_utils::make_int_range_descriptor("Index into CompressorTelemetry::ps[4]", 0, 3);
+  declare_parameter<int>("ps_lhs_index", 0, ps_index_descriptor);
+  declare_parameter<int>("ps_rhs_index", 1, ps_index_descriptor);
+
+  // Solonoid Valves
+  declare_parameter<std::string>("inlet_sv_id", "inlet_sv");
+  declare_parameter<std::string>("hpu_sv_id", "hpu_sv");
+
+  // Operational parameters
+  // Pressure
+  const auto pressure_bar_descriptor = mserve_utils::make_double_range_descriptor(
+    "Pressure value in bar. Bounded by booster machine system pressure limit.",
+    mserve_utils::system_pressure_min_bar, mserve_utils::system_pressure_max_bar);
+  declare_parameter<double>("min_pressure_bar", 35.0, pressure_bar_descriptor);
+  declare_parameter<double>("max_pressure_bar", 350.0, pressure_bar_descriptor);
+  declare_parameter<double>("safe_pressure", 25.0, pressure_bar_descriptor);
+  declare_parameter<double>("target_deadband", 0.5, pressure_bar_descriptor);
+  declare_parameter<double>("stability_tolerance", 0.05, pressure_bar_descriptor);
+
+  // Temperature
+  const auto pt100_temp_descriptor = mserve_utils::make_double_range_descriptor(
+      "Temperature value in degC. Valid range: -200..850 degC for Pt100.",
+      mserve_utils::pt100_min, mserve_utils::pt100_max);
+  declare_parameter<double>("min_temp_inlet", 0.00, pt100_temp_descriptor);
+  declare_parameter<double>("max_temp_inlet", 50.0, pt100_temp_descriptor);
+  declare_parameter<double>("min_temp_outlet", 0.0, pt100_temp_descriptor);
+  declare_parameter<double>("max_temp_outlet", 190.0, pt100_temp_descriptor);
+
+  // Timing
+  const auto milliseconds_descriptor = mserve_utils::make_int_range_descriptor(
+      "Duration in milliseconds. Valid range: 0..30000 ms.", 
+      mserve_utils::timing_min, mserve_utils::timing_max);
+  declare_parameter<int>("vfd_delay_ms", 2000, milliseconds_descriptor);
+  declare_parameter<int>("vfd_stabilization_ms", 1000, milliseconds_descriptor);
+
+  // VFD Speed
+  const auto speed_descriptor = mserve_utils::make_double_range_descriptor(
+    "Speed value in rpm", 
+    hyfleet_booster::speed_min, hyfleet_booster::speed_max);
+  declare_parameter<double>("stop_threshold", 25.0, speed_descriptor);
+  declare_parameter<double>("ramp_tolerance", 25.0, speed_descriptor);
+
+  // Count
+  const auto sample_count_descriptor =  mserve_utils::make_int_range_descriptor(
+    "Number of stabilization samples. Valid range: 1..100.", 1, 100);
+  declare_parameter<int>("stabilization_samples", 3, sample_count_descriptor);
+}
+
+rcl_interfaces::msg::SetParametersResult BoosterNode::on_parameters(const std::vector<rclcpp::Parameter> & params){
+  (void) params;
+  
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  return result;
+}
+
+// ==============================================================================
 // Behavoir Tree
 // ==============================================================================
 
@@ -196,16 +293,8 @@ void BoosterNode::tick_tree_once(){
 }
 
 // ==============================================================================
-// Core Logic
+// Goal and tick
 // ==============================================================================
-
-rcl_interfaces::msg::SetParametersResult BoosterNode::on_parameters(const std::vector<rclcpp::Parameter> & params){
-  (void) params;
-  
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
-  return result;
-}
 
 void BoosterNode::on_booster_goal_accepted(std::shared_ptr<GoalHandleControlBooster> goal_handle) {
   if (!goal_handle) {

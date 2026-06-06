@@ -83,7 +83,7 @@ All telemetry comes from ONE topic. Simpler than expected.
 - [x] `InletPressureSafe` — hbu_pt_bar[inlet_pt_index] >= safe_pressure
 
 ### Node registration and params
-- [ ] Register all 7 BT nodes with factory in `on_configure`
+- [x] Register all 7 BT nodes with factory in `on_configure`
 - [ ] Declare ROS params: `vfd_target_speed`, `vfd_index`, `inlet_pt_index`,
       `outlet_pt_index`, `safe_pressure`, `pcsv_cpm`, `inlet_sv_id`, `hpu_sv_id`,
       `vfd_delay_ms`, `stabilization_ms`, `telemetry_topic`

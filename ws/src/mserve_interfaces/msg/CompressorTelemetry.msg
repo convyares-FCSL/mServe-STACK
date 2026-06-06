@@ -9,10 +9,9 @@ uint8 LOCKOUT = 4
 uint8 mode
 
 # Devices 
-float64[10] hbu_pt_bar          # Hydrogren Pressure Transducer
-float64[6] hpu_pt_bar           # Hydrollic Pressure Transducer
-float64[12] hbu_tt_celsius      # Hydrogren + Coolant Temperature Transducer
-bool[8] hbu_ps                  # Booster Position Sensor
+float64[16] pt_bar              # Hydrogren Pressure Transducer
+float64[12] tt_celsius          # Hydrogren + Coolant Temperature Transducer
+bool[4] ps                      # Booster Position Sensor
 float64[2] vfd_speed_rpm        # VFD speed
 float64[2] vfd_energy_kj        # VFD Energy
 float64[2] vfd_power_kw         # VFD Power

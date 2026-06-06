@@ -11,6 +11,7 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 #include <behaviortree_cpp/bt_factory.h>
+#include <behaviortree_cpp/blackboard.h>
 #include "mserve_interfaces/action/control_booster.hpp"
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
@@ -35,6 +36,7 @@ protected:
 
 private:
   // Param handling
+  void declare_params();
   rcl_interfaces::msg::SetParametersResult on_parameters(const std::vector<rclcpp::Parameter> & params);
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
@@ -45,6 +47,7 @@ private:
   
   // Behavior tree
   BT::BehaviorTreeFactory factory_;
+  std::shared_ptr<BT::Blackboard> blackboard_;
   std::array<BT::Tree, 4> trees_;  // indexed by command - 1: START, START_IDLE, STOP, SAFE_STOP
   BT::Tree* active_tree_ = nullptr;
   void register_bt_nodes();
@@ -52,7 +55,7 @@ private:
   bool select_tree(uint8_t command);
   void tick_tree_once();
 
-  // Timing
+  // Goal and tick
   void on_booster_goal_accepted(std::shared_ptr<GoalHandleControlBooster> goal_handle);
   void set_tick_timer(bool enable);
   rclcpp::TimerBase::SharedPtr tick_timer_;

@@ -85,7 +85,7 @@ BT::NodeStatus OutletAtPressure::onTick(const std::shared_ptr<mserve_interfaces:
         return BT::NodeStatus::FAILURE;
     }
 
-    const double pressure = last_msg->hbu_pt_bar[index_res.value()];
+    const double pressure = last_msg->pt_bar[index_res.value()];
     const double target = target_res.value();
 
     return pressure >= target ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
@@ -119,7 +119,7 @@ BT::NodeStatus InletPressureSafe::onTick(const std::shared_ptr<mserve_interfaces
         return BT::NodeStatus::FAILURE;
     }
 
-    const double pressure = last_msg->hbu_pt_bar[index_res.value()];
+    const double pressure = last_msg->pt_bar[index_res.value()];
     const double target = target_res.value();
 
     return pressure >= target ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
