@@ -1,5 +1,23 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="BoosterMain">
-    <AlwaysSuccess/>
+    <Sequence name="stop">
+      <SetPCSV service_name="{service_name}"
+               enable="false"
+               cpm="{cpm}" />
+
+      <ControlSV service_name="{service_name}"
+                 sv_index="{hpu_sv_index}"
+                 enable="false" />
+
+      <StopVFD service_name="{service_name}" />
+
+      <VFDStopped topic_name="{telemetry_topic}"
+                  vfd_index="{vfd_index}"
+                  stop_threshold="{stop_threshold}" />
+
+      <ControlSV service_name="{service_name}"
+                 sv_index="{inlet_sv_index}"
+                 enable="false" />
+    </Sequence>
   </BehaviorTree>
 </root>

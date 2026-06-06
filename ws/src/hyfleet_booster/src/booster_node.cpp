@@ -143,6 +143,10 @@ void BoosterNode::register_bt_nodes(){
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<VFDAtSpeed>(name, config, BT::RosNodeParams(bt_node_));
     });
+    factory_.registerBuilder<VFDStopped>("VFDStopped",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<VFDStopped>(name, config, BT::RosNodeParams(bt_node_));
+    });
     factory_.registerBuilder<OutletAtPressure>("OutletAtPressure",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<OutletAtPressure>(name, config, BT::RosNodeParams(bt_node_));

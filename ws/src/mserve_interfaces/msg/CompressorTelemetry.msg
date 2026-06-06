@@ -13,6 +13,7 @@ float64[16] pt_bar              # Hydrogren Pressure Transducer
 float64[12] tt_celsius          # Hydrogren + Coolant Temperature Transducer
 bool[5] sv                      # Solenoid state
 bool[4] ps                      # Booster Position Sensor
+
 uint8 VFD_OFFLINE = 0
 uint8 VFD_IDLE    = 1
 uint8 VFD_RUNNING = 2

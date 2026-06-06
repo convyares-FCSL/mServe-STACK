@@ -156,11 +156,11 @@ void BoosterNode::load_params(){
   const double max_temp_outlet = mserve_utils::get_or_declare_param(p, get_logger(), "max_temp_outlet", 190.0, "Maximum outlet temperature (°C)");
   blackboard_->set("max_temp_outlet", max_temp_outlet);
 
-  // Timing: params are ms, BT Wait node takes seconds
+  // Timing: params are ms, BT Sleep node takes seconds
   const int vfd_delay_ms = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_delay_ms", 2000, "Wait after VFD start before checking speed (ms)");
-  blackboard_->set("vfd_delay_s", vfd_delay_ms / 1000.0);
+  blackboard_->set("vfd_delay_ms", vfd_delay_ms);
   const int vfd_stabilization_ms = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_stabilization_ms", 1000, "Wait after VFD at speed before opening HPU (ms)");
-  blackboard_->set("vfd_stabilization_s", vfd_stabilization_ms / 1000.0);
+  blackboard_->set("vfd_stabilization_ms", vfd_stabilization_ms);
 
   // VFD Speed
   const double stop_threshold = mserve_utils::get_or_declare_param(p, get_logger(), "stop_threshold", 25.0, "Band around target — VFD considered at speed (rpm)");
