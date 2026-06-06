@@ -17,35 +17,35 @@
             </Fallback>
         </Sequence>
 
-        <Sequence name="drivechain_sequence">
-                <Fallback name="shutdown_drivechain_fallback">
-                    <IsInState
-                        name="is_drivechain_inactive"
-                        node_name="mserve_drivechain"
-                        state="finalized"
-                    />
-                    <ChangeStateNode
-                        name="shutdown_drivechain"
-                        node_name="mserve_drivechain"
-                        transition="shutdown"
-                    />
-                </Fallback>
-            </Sequence>
-
-        <Sequence name="base_sequence">
-            <Fallback name="shutdown_base_fallback">
+        <Sequence name="high_booster_sequence">
+            <Fallback name="shutdown_high_booster_fallback">
                 <IsInState
-                    name="is_base_inactive"
-                    node_name="mserve_base"
+                    name="is_high_booster_finalized"
+                    node_name="high_booster"
                     state="finalized"
                 />
                 <ChangeStateNode
-                    name="shutdown_base"
-                    node_name="mserve_base"
+                    name="shutdown_high_booster"
+                    node_name="high_booster"
                     transition="shutdown"
                 />
-                </Fallback>
-            </Sequence>
+            </Fallback>
+        </Sequence>
+
+        <Sequence name="low_booster_sequence">
+            <Fallback name="shutdown_low_booster_fallback">
+                <IsInState
+                    name="is_low_booster_finalized"
+                    node_name="low_booster"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_low_booster"
+                    node_name="low_booster"
+                    transition="shutdown"
+                />
+            </Fallback>
+        </Sequence>
 
         </Sequence>
     </BehaviorTree>

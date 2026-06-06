@@ -2,66 +2,6 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="Main">
     <Sequence name="main">
-      <Sequence name="base_sequence">
-        <Fallback name="config_base_fallback">
-          <Inverter>
-            <IsInState name="is_base_inactive"
-                       node_name="mserve_base"
-                       state="unconfigured"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="configure_base"
-                             node_name="mserve_base"
-                             transition="configure"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-        <Fallback name="activate_base_fallback">
-          <Inverter>
-            <IsInState name="is_base_active"
-                       node_name="mserve_base"
-                       state="inactive"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="activate_base"
-                             node_name="mserve_base"
-                             transition="activate"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-      </Sequence>
-      <Sequence name="drivechain_sequence">
-        <Fallback name="config_drivechain_fallback">
-          <Inverter>
-            <IsInState name="is_drivechain_inactive"
-                       node_name="mserve_drivechain"
-                       state="unconfigured"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="configure_drivechain"
-                             node_name="mserve_drivechain"
-                             transition="configure"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-        <Fallback name="activate_drivechain_fallback">
-          <Inverter>
-            <IsInState name="is_drivechain_active"
-                       node_name="mserve_drivechain"
-                       state="inactive"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="activate_drivechain"
-                             node_name="mserve_drivechain"
-                             transition="activate"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-      </Sequence>
       <Sequence name="low_booster_sequence">
         <Fallback name="low_booster_fallback">
           <Inverter>
