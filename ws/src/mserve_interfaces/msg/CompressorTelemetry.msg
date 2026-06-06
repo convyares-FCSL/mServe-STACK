@@ -11,6 +11,7 @@ uint8 mode
 # Devices 
 float64[16] pt_bar              # Hydrogren Pressure Transducer
 float64[12] tt_celsius          # Hydrogren + Coolant Temperature Transducer
+bool[5] sv                     # Solenoid state
 bool[4] ps                      # Booster Position Sensor
 float64[2] vfd_speed_rpm        # VFD speed
 float64[2] vfd_energy_kj        # VFD Energy

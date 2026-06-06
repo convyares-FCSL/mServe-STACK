@@ -172,7 +172,7 @@ Array indices into `CompressorTelemetry` fields — differ between `low_booster`
 
 `vfd_index`, `inlet_pt_index`, `outlet_pt_index`, `hyd_primer_pt_index`, `hyd_a_pt_index`,
 `hyd_b_pt_index`, `coolant_pt_index`, `inlet_tt_index_1/2`, `outlet_tt_index_1/2/3`,
-`ps_lhs_index`, `ps_rhs_index`, `inlet_sv_id`, `hpu_sv_id`
+`ps_lhs_index`, `ps_rhs_index`, `inlet_sv_index`, `hpu_sv_index`
 
 ### Operational (commissioning-tunable)
 
@@ -195,6 +195,7 @@ Key fields (current):
 uint8 mode                      # PLC operating mode: OFF/STARTUP/AUTO/MANUAL/LOCKOUT
 float64[16] pt_bar              # all pressure transducers
 float64[12] tt_celsius          # all temperature transducers
+bool[5]     sv                  # solenoid valve states
 bool[4]     ps                  # end-of-travel position switches
 float64[2]  vfd_speed_rpm
 float64[2]  vfd_energy_kj
@@ -264,7 +265,7 @@ uint8   cmd
 float64 speed_rpm
 float64 cpm
 bool    enable
-string  device_id
+uint8   sv_index
 ---
 bool   success
 string message

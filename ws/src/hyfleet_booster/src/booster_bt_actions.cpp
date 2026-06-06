@@ -153,32 +153,27 @@ BT::PortsList ControlSV::providedPorts() {
     return providedBasicPorts({
         BT::InputPort<std::string>("service_name"),
         BT::InputPort<bool>("enable"),
-        BT::InputPort<std::string>("device_id")
+        BT::InputPort<uint8_t>("sv_index")
     });
 }
 
 bool ControlSV::setRequest(Request::SharedPtr& request) {
-    // Get the enable state from input port
     auto enable_res = getInput<bool>("enable");
     if (!enable_res) {
         RCLCPP_ERROR(logger(), "Missing input port [enable]: %s", enable_res.error().c_str());
         return false;
     }
-    const auto& enable = enable_res.value();
 
-    // Get the device_id from input port
-    auto device_id_res = getInput<std::string>("device_id");
-    if (!device_id_res) {
-        RCLCPP_ERROR(logger(), "Missing input port [device_id]: %s", device_id_res.error().c_str());
+    auto sv_index_res = getInput<uint8_t>("sv_index");
+    if (!sv_index_res) {
+        RCLCPP_ERROR(logger(), "Missing input port [sv_index]: %s", sv_index_res.error().c_str());
         return false;
     }
-    const auto& device_id= device_id_res.value();
-    // Check if the device_id is valid - TODO
 
     request->cmd = Request::CONTROL_SV;
-    request->enable = enable;
-    request->device_id = device_id;
-    
+    request->enable = enable_res.value();
+    request->sv_index = sv_index_res.value();
+
     return true;
 }
 

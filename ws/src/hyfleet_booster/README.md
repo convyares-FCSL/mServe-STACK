@@ -78,7 +78,7 @@ BT nodes set named fields — no payload encoding in the BT layer.
 | `commands.vfd` (start) | `StartVFD` | `START_VFD=1` | `service_name`, `speed_rpm` |
 | `commands.vfd` (stop) | `StopVFD` | `STOP_VFD=2` | `service_name` |
 | `commands.pcsv` | `SetPCSV` | `SET_PCSV=3` | `service_name`, `enable`, `cpm` |
-| `commands.sv` (any valve) | `ControlSV` | `CONTROL_SV=4` | `service_name`, `device_id`, `enable` |
+| `commands.sv` (any valve) | `ControlSV` | `CONTROL_SV=4` | `service_name`, `sv_index`, `enable` |
 
 ### Condition nodes — `RosTopicSubNode`
 
@@ -109,13 +109,13 @@ Indices are configured per instance via ROS params — the same node type works 
 <Parallel failure_threshold="1">
 
   <Sequence name="startup">
-    <ControlSV service_name="{service_name}" device_id="{inlet_sv_id}" enable="true"/>
+    <ControlSV service_name="{service_name}" sv_index="{inlet_sv_index}" enable="true"/>
     <InletPressureStable topic_name="{telemetry_topic}" inlet_pt_index="{inlet_pt_index}"/>
     <StartVFD service_name="{service_name}" speed_rpm="{speed_rpm}"/>
     <Wait delay="{vfd_delay_s}"/>
     <VFDAtSpeed topic_name="{telemetry_topic}" vfd_index="{vfd_index}" target_speed="{speed_rpm}"/>
     <Wait delay="{stabilization_s}"/>
-    <ControlSV service_name="{service_name}" device_id="{hpu_sv_id}" enable="true"/>
+    <ControlSV service_name="{service_name}" sv_index="{hpu_sv_index}" enable="true"/>
     <SetPCSV service_name="{service_name}" enable="true" cpm="{cpm}"/>
     <OutletAtPressure topic_name="{telemetry_topic}" outlet_pt_index="{outlet_pt_index}"
                       target_pressure="{target_pressure}"/>
@@ -173,8 +173,8 @@ Set per instance in the launch file. These index into `CompressorTelemetry` arra
 | `ps_lhs_index` | int | 0 | End-of-travel position switch LHS — `ps[x]` |
 | `ps_rhs_index` | int | 1 | End-of-travel position switch RHS — `ps[x]` |
 |
-| `inlet_sv_id` | string | "inlet_sv" | Inlet solenoid valve device ID |
-| `hpu_sv_id` | string | "hpu_sv" | HPU solenoid valve device ID |
+| `inlet_sv_index` | int | 0 | Inlet solenoid valve — `sv[x]` |
+| `hpu_sv_index` | int | 1 | HPU solenoid valve — `sv[x]` |
 
 ### Operational
 
@@ -184,22 +184,24 @@ they arrive with the `ControlBooster` goal. Speed/CPM hardware ceilings are `con
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `ramp_tolerance` | double | 25.0 | Band around target — VFD considered at speed (rpm) |
-| `stop_threshold` | double | 25.0 | Below this — VFD considered stopped (rpm) |
 |
 | `min_pressure_bar` | double | 35.0 | Minimum valid goal pressure (bar) |
 | `max_pressure_bar` | double | 350.0 | Maximum valid goal pressure (bar) |
 | `safe_pressure` | double | 25.0 | Minimum inlet pressure to run safely (bar) |
 | `target_deadband` | double | 0.5 | Pressure deadband around target (bar) |
+| `stability_tolerance` | double | 0.05 | Max variation for inlet stability check (bar) |
 |
 | `min_temp_inlet` | double | 0.0 | Minimum inlet temperature (°C) |
 | `max_temp_inlet` | double | 50.0 | Maximum inlet temperature (°C) |
 | `min_temp_outlet` | double | 0.0 | Minimum outlet temperature (°C) |
 | `max_temp_outlet` | double | 190.0 | Maximum outlet temperature (°C) |
 |
-| `stability_tolerance` | double | 0.05 | Max variation for inlet stability check (bar) |
 | `vfd_delay_ms` | int | 2000 | Wait after VFD start before checking speed (ms) |
 | `vfd_stabilization_ms` | int | 1000 | Wait after VFD at speed before opening HPU (ms) |
+|
+| `ramp_tolerance` | double | 25.0 | Band around target — VFD considered at speed (rpm) |
+| `stop_threshold` | double | 25.0 | Below this — VFD considered stopped (rpm) |
+|
 | `stabilization_samples` | int | 3 | Rolling window depth for `InletPressureStable` |
 
 ---

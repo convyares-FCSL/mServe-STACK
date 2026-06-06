@@ -35,8 +35,9 @@ protected:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_shutdown(const rclcpp_lifecycle::State &) override;
 
 private:
-  // Param handling
+  // Param handling (found in booster_params.cpp)
   void declare_params();
+  void load_params();
   rcl_interfaces::msg::SetParametersResult on_parameters(const std::vector<rclcpp::Parameter> & params);
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
@@ -62,6 +63,10 @@ private:
 
   // ROS client node for BT nodes — RosNodeParams requires rclcpp::Node, not LifecycleNode
   std::shared_ptr<rclcpp::Node> bt_node_;
+
+  // Misc
+  double min_pressure_bar_;
+  double max_pressure_bar_;
 
 };
 

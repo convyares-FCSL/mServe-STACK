@@ -34,6 +34,7 @@ find_package(mserve_utils REQUIRED)
 
 add_library(booster_node_lib SHARED
   src/booster_node.cpp
+  src/booster_params.cpp
   src/booster_action.cpp
   src/booster_bt_actions.cpp
   src/booster_bt_conditions.cpp
