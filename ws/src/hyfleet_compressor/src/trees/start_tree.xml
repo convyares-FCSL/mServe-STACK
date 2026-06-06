@@ -1,6 +1,0 @@
-<root BTCPP_format="4">
-  <BehaviorTree ID="CompressorMain">
-    <!-- Stage 3: replace with RosActionNode routing (LOW / HIGH / SYNC) -->
-    <AlwaysSuccess/>
-  </BehaviorTree>
-</root>

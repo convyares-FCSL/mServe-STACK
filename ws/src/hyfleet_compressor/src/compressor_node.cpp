@@ -40,7 +40,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
 
     // BT node : Create blackboard, load params, register nodes and build trees
     bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt");
-    blackboard_ = BT::Blackboard::create();
+    shared_blackboard_ = BT::Blackboard::create();
 
     load_params();
     register_bt_nodes();
@@ -66,11 +66,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
   compressor_action_->toggle_enable(false);
 
   set_tick_timer(false);
-  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
 
-  if (active_goal_) {
-    compressor_action_->abort_goal(active_goal_, "coordinator node deactivated");
-    active_goal_.reset();
+  for (auto & slot : ops_) {
+    if (slot.tree)  { slot.tree->haltTree(); slot.tree.reset(); }
+    if (slot.goal)  { compressor_action_->abort_goal(slot.goal, "<reason>"); slot.goal.reset(); }
   }
 
   RCLCPP_INFO(get_logger(), "hyfleet_compression deactivated");
@@ -78,14 +77,12 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn CompressorNode::on_cleanup(const rclcpp_lifecycle::State &) {
-  if (active_goal_) {
-    compressor_action_->abort_goal(active_goal_, "node cleanup");
-    active_goal_.reset();
-  }
-
   set_tick_timer(false);
-  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
-  trees_ = {};
+
+  for (auto & slot : ops_) {
+      if (slot.tree)  { slot.tree->haltTree(); slot.tree.reset(); }
+      if (slot.goal)  { compressor_action_->abort_goal(slot.goal, "<reason>"); slot.goal.reset(); }
+  }
 
   bt_node_.reset();
 
@@ -99,11 +96,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn CompressorNode::on_shutdown(const rclcpp_lifecycle::State &) {
   set_tick_timer(false);
-  if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
 
-  if (active_goal_ && compressor_action_) {
-    compressor_action_->abort_goal(active_goal_, "coordinator node shutdown");
-    active_goal_.reset();
+  for (auto & slot : ops_) {
+      if (slot.tree)  { slot.tree->haltTree(); slot.tree.reset(); }
+      if (slot.goal)  { compressor_action_->abort_goal(slot.goal, "<reason>"); slot.goal.reset(); }
   }
 
   RCLCPP_INFO(get_logger(), "hyfleet_compression shutdown");
@@ -115,62 +111,91 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
 // ==============================================================================
 
 void CompressorNode::register_bt_nodes() {
-  // Stage 3: register RosActionNode wrappers here (BoostLow, BoostHigh).
-  // See src/include/compressor_bt_nodes.hpp.
+  factory_.registerBuilder<BoostLow>("BoostLow",
+    [this](const std::string & name, const BT::NodeConfig & config) {
+      return std::make_unique<BoostLow>(name, config, BT::RosNodeParams(bt_node_));
+    });
+  factory_.registerBuilder<BoostHigh>("BoostHigh",
+    [this](const std::string & name, const BT::NodeConfig & config) {
+      return std::make_unique<BoostHigh>(name, config, BT::RosNodeParams(bt_node_));
+    });
 }
 
 void CompressorNode::build_bt_trees() {
   const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_compressor") + "/trees/";
-  trees_[0] = factory_.createTreeFromFile(base + "start_tree.xml",     blackboard_);
-  trees_[1] = factory_.createTreeFromFile(base + "stop_tree.xml",      blackboard_);
-  trees_[2] = factory_.createTreeFromFile(base + "safe_stop_tree.xml", blackboard_);
+  factory_.registerBehaviorTreeFromFile(base + "parallel_low.xml");
+  factory_.registerBehaviorTreeFromFile(base + "parallel_high.xml");
+  factory_.registerBehaviorTreeFromFile(base + "sync.xml");
 }
 
-bool CompressorNode::select_tree(uint8_t command) {
-  switch (command) {
-    case ControlCompressor::Goal::START:     active_tree_ = &trees_[0]; return true;
-    case ControlCompressor::Goal::STOP:      active_tree_ = &trees_[1]; return true;
-    case ControlCompressor::Goal::SAFE_STOP: active_tree_ = &trees_[2]; return true;
-    default: return false;
+bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, uint8_t goal_mode, double target_pressure) {
+  // Determine tree ID
+  std::string tree_id;
+  if (target == ControlCompressor::Goal::LOW_BOOSTER) tree_id = "parallel_low";
+  else if (target == ControlCompressor::Goal::HIGH_BOOSTER) tree_id = "parallel_high";
+  else tree_id = "start_sync";
+
+  // Per-slot blackboard inherits shared keys (action names, PT indices, etc.)
+  slot.blackboard = BT::Blackboard::create(shared_blackboard_);
+  slot.target = target;
+
+  // Translate coordinator command to booster command and write goal fields
+  using CB = mserve_interfaces::action::ControlBooster;
+  uint8_t booster_cmd = (command == ControlCompressor::Goal::START)   ? CB::Goal::START
+                      : (command == ControlCompressor::Goal::STOP)    ? CB::Goal::STOP
+                                                                      : CB::Goal::SAFE_STOP;
+  slot.blackboard->set("command",         booster_cmd);
+  slot.blackboard->set("target_pressure", target_pressure);
+  slot.blackboard->set("speed_rpm", default_speed_rpm_);
+  slot.blackboard->set("cpm", (goal_mode == ControlCompressor::Goal::PERFORMANCE) ? performance_cpm_ : eco_cpm_);
+
+  // Instantiate the tree against this slot's blackboard
+  try {
+      slot.tree = factory_.createTree(tree_id, slot.blackboard);
+  } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "start_op: failed to create tree '%s': %s", tree_id.c_str(), e.what());
+      return false;
   }
+  return true;
 }
 
 void CompressorNode::tick_tree_once() {
-  if (!active_goal_) { set_tick_timer(false); return; }
-  if (!active_tree_) { set_tick_timer(false); return; }
+    bool any_active = false;
+    for (auto & slot : ops_) {
+        if (!slot.active()) continue;
+        any_active = true;
 
-  const auto status = active_tree_->tickOnce();
+        const auto status = slot.tree->tickOnce();
 
-  // Publish feedback each tick. BoostLow / BoostHigh write pressure and percent_complete
-  // to the blackboard via onFeedback() once wired in Stage 3. Defaults to 0.0 until then.
-  {
-    auto fb = std::make_shared<ControlCompressor::Feedback>();
-    double pressure = 0.0;
-    double pct      = 0.0;
-    (void)blackboard_->get("pressure",         pressure);
-    (void)blackboard_->get("percent_complete",  pct);
-    fb->pressure         = pressure;
-    fb->percent_complete = pct;
-    active_goal_->publish_feedback(fb);
-  }
+        // Publish feedback from this slot's blackboard
+        auto fb = std::make_shared<ControlCompressor::Feedback>();
+        double pressure = 0.0, pct = 0.0;
+        if (slot.target == ControlCompressor::Goal::LOW_BOOSTER) {
+            (void)slot.blackboard->get("low_pressure",          pressure);
+            (void)slot.blackboard->get("low_percent_complete",  pct);
+        } else {
+            // HIGH and SYNC both report the high booster outlet
+            (void)slot.blackboard->get("high_pressure",         pressure);
+            (void)slot.blackboard->get("high_percent_complete", pct);
+        }
+        fb->pressure         = pressure;
+        fb->percent_complete = pct;
+        slot.goal->publish_feedback(fb);
 
-  if (status == BT::NodeStatus::RUNNING) { return; }
+        if (status == BT::NodeStatus::RUNNING) continue;
 
-  if (status == BT::NodeStatus::SUCCESS) {
-    compressor_action_->succeed_goal(active_goal_);
-    RCLCPP_INFO(get_logger(), "Coordinator goal completed successfully");
-  } else if (status == BT::NodeStatus::FAILURE) {
-    compressor_action_->abort_goal(active_goal_, "coordinator tree failed");
-    RCLCPP_WARN(get_logger(), "Coordinator goal aborted — tree returned FAILURE");
-  } else {
-    compressor_action_->abort_goal(active_goal_, "coordinator tree returned unexpected status");
-    RCLCPP_ERROR(get_logger(), "Coordinator tree returned unexpected status");
-  }
+        // Tree finished — finalise the slot
+        if (status == BT::NodeStatus::SUCCESS) {
+            compressor_action_->succeed_goal(slot.goal);
+        } else {
+            compressor_action_->abort_goal(slot.goal, "coordinator tree failed");
+        }
+        slot.tree->haltTree();
+        slot.tree.reset();
+        slot.goal.reset();
+    }
 
-  active_tree_->haltTree();
-  active_tree_ = nullptr;
-  active_goal_.reset();
-  set_tick_timer(false);
+    if (!any_active) set_tick_timer(false);
 }
 
 // ==============================================================================
@@ -178,55 +203,61 @@ void CompressorNode::tick_tree_once() {
 // ==============================================================================
 
 void CompressorNode::on_compressor_goal_accepted( std::shared_ptr<GoalHandleControlCompressor> goal_handle) {
-  if (!goal_handle) {
-    RCLCPP_WARN(get_logger(), "Received null coordinator goal handle");
-    return;
-  }
+    if (!goal_handle) { return; }
 
-  // Abort existing goal
-  if (active_goal_) {
-    compressor_action_->abort_goal(active_goal_, "coordinator goal replaced by newer goal");
-    active_goal_.reset();
-  }
+    const auto goal = goal_handle->get_goal();
 
-  // Abort existing tree
-  if (active_tree_) {
-    active_tree_->haltTree();
-  }
+    // Validate command
+    if (goal->command != ControlCompressor::Goal::START && goal->command != ControlCompressor::Goal::STOP && goal->command != ControlCompressor::Goal::SAFE_STOP) {
+        compressor_action_->abort_goal(goal_handle, "unknown command");
+        return;
+    }
 
-  const auto goal = goal_handle->get_goal();
+    // Validate target
+    if (goal->target != ControlCompressor::Goal::LOW_BOOSTER && goal->target != ControlCompressor::Goal::HIGH_BOOSTER && goal->target != ControlCompressor::Goal::SYNC_BOOSTERS) {
+        compressor_action_->abort_goal(goal_handle, "unknown target");
+        return;
+    }
 
-  // Select tree
-  if (!select_tree(goal->command)) {
-    RCLCPP_ERROR(get_logger(), "Unknown command: %d", goal->command);
-    compressor_action_->abort_goal(goal_handle, "unknown command");
-    return;
-  }
+    // Validate pressure
+    if (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_) {
+        compressor_action_->abort_goal(goal_handle, "target_pressure out of range");
+        return;
+    }
 
-  // Validate target
-  if (goal->target != ControlCompressor::Goal::LOW_BOOSTER &&
-      goal->target != ControlCompressor::Goal::HIGH_BOOSTER &&
-      goal->target != ControlCompressor::Goal::SYNC_BOOSTERS) {
-    compressor_action_->abort_goal(goal_handle, "unknown target");
-    return;
-  }
+    // SYNC conflicts with everything — abort all active slots
+    if (goal->target == ControlCompressor::Goal::SYNC_BOOSTERS) {
+        for (auto & s : ops_) {
+            if (s.active()) {
+                compressor_action_->abort_goal(s.goal, "replaced by SYNC goal");
+                s.tree->haltTree();
+                s.tree.reset();
+                s.goal.reset();
+            }
+        }
+    }
 
-  // Validate pressure
-  if (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_) {
-    compressor_action_->abort_goal(goal_handle, "target_pressure out of bounds");
-    return;
-  }
+    // Assign slot — LOW→0, HIGH→1, SYNC→0
+    const size_t idx = (goal->target == ControlCompressor::Goal::HIGH_BOOSTER) ? 1 : 0;
+    auto & slot = ops_[idx];
 
-  // Write goal fields to blackboard for BT tree consumption
-  blackboard_->set("command",          static_cast<int>(goal->command));
-  blackboard_->set("target",           static_cast<int>(goal->target));
-  blackboard_->set("mode",             static_cast<int>(goal->mode));
-  blackboard_->set("target_pressure",  goal->target_pressure);
+    // Preempt existing occupant of this slot
+    if (slot.active()) {
+        compressor_action_->abort_goal(slot.goal, "replaced by newer goal");
+        slot.tree->haltTree();
+        slot.tree.reset();
+        slot.goal.reset();
+    }
 
-  active_goal_ = std::move(goal_handle);
-  set_tick_timer(true);
+    if (!start_op(slot, goal->command, goal->target, goal->mode, goal->target_pressure)) {
+        compressor_action_->abort_goal(goal_handle, "failed to start operation");
+        return;
+    }
 
-  RCLCPP_INFO(get_logger(), "Coordinator goal accepted, BT tick timer started");
+    slot.goal = std::move(goal_handle);
+    set_tick_timer(true);
+
+    RCLCPP_INFO(get_logger(), "Coordinator goal accepted — target=%d command=%d", goal->target, goal->command);
 }
 
 void CompressorNode::set_tick_timer(bool enable)

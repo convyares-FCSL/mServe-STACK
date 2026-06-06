@@ -26,6 +26,7 @@ find_package(std_srvs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(mserve_interfaces REQUIRED)
 find_package(mserve_utils REQUIRED)
+find_package(hyfleet_booster REQUIRED)
 
 # ==============================================================================
 # Library — all node logic lives here so it can be tested independently
@@ -60,6 +61,7 @@ ament_target_dependencies(compressor_node_lib
   behaviortree_cpp
   behaviortree_ros2
   ament_index_cpp
+  hyfleet_booster
 )
 
 # ==============================================================================

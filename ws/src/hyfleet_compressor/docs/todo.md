@@ -181,41 +181,39 @@ PARALLEL and SYNC are different problems. PARALLEL: two independent concurrent
 `ControlCompressor` goals (LOW + HIGH) governed by a `targets_overlap` rule.
 SYNC: one goal coordinating both boosters internally.
 
-- [ ] `CompressorNode` replaces single `active_goal_`/`active_tree_` with two independent
-      operation slots keyed by target: `low_op_`, `high_op_` (each holds a goal handle +
-      tree pointer + its own blackboard instance)
-- [ ] Per-operation blackboard — one per active tree; a shared blackboard would let two
-      concurrent trees clobber each other's keys
-- [ ] Single tick timer iterates all active operations each 100 ms tick
-- [ ] `targets_overlap()` rule: LOW + HIGH can coexist; SYNC conflicts with everything
-      (same rule as archive `compressor_action.cpp:362`)
-- [ ] Goal acceptance: apply `targets_overlap` to abort conflicting ops before starting new op
-- [ ] Re-goaling: new LOW goal while LOW is already running = relay updated target to
-      in-flight booster goal (smooth update, no halt); depends on booster preemption above
-- [ ] Mode transition — SYNC arriving while LOW/HIGH running: abort both (reactive abort +
-      safe-state handover), then start SYNC tree. Reverse: LOW/HIGH arriving while SYNC
-      is running → abort SYNC, start requested op.
+- [x] `CompressorNode` replaces single `active_goal_`/`active_tree_` with `ops_[2]` —
+      two `OpSlot` structs, each holding goal handle + per-slot blackboard + tree instance
+- [x] Per-operation blackboard — child of `shared_blackboard_`; inherits global keys,
+      owns per-slot feedback keys; prevents concurrent trees clobbering each other
+- [x] Single tick timer iterates all active operations each 100 ms tick
+- [x] `targets_overlap` inline in `on_compressor_goal_accepted`: SYNC aborts all slots;
+      non-SYNC preempts the same-target slot only
+- [x] Goal acceptance: validate command/target/pressure; assign slot (LOW→0, HIGH→1, SYNC→0);
+      preempt existing occupant; call `start_op`; start tick timer
+- [-] Re-goaling: new LOW goal while LOW running = relay updated target to in-flight booster
+      (smooth update, no halt). Currently aborts and restarts. Deferred — depends on
+      extended booster preemption semantics.
+- [x] Mode transition — SYNC arriving while LOW/HIGH running: abort all active slots first
 
 ### BT nodes — `RosActionNode` wrappers
 
-- [ ] `BoostLow`  — `RosActionNode<ControlBooster>` → `/low_booster/control_booster`;
+- [x] `BoostLow`  — `RosActionNode<ControlBooster>` → `/low_booster/control_booster`;
       `setGoal()` fills command/target_pressure/cpm/speed_rpm from blackboard;
       `onFeedback()` writes `low_pressure` / `low_percent_complete` to blackboard;
       `onResultReceived()` → SUCCESS / FAILURE; `onFailure()` handles server unreachable
-- [ ] `BoostHigh` — same pattern; writes `high_pressure` / `high_percent_complete`
-- [ ] Register both nodes in `register_bt_nodes()`
+- [x] `BoostHigh` — same pattern; writes `high_pressure` / `high_percent_complete`
+- [x] Register both nodes in `register_bt_nodes()`
 
 ### XML trees — PARALLEL paths
 
 Each tree is a single `RosActionNode` call; routing is done at the node level (which
-tree is selected) not inside the XML.
+tree is selected) not inside the XML. Command is written to the slot blackboard by
+`start_op` before tree instantiation, so one tree file handles start/stop/safe_stop
+for each booster target.
 
-- [ ] `start_low_tree.xml`     — `BoostLow(START)`
-- [ ] `start_high_tree.xml`    — `BoostHigh(START)`
-- [ ] `stop_low_tree.xml`      — `BoostLow(STOP)`
-- [ ] `stop_high_tree.xml`     — `BoostHigh(STOP)`
-- [ ] `safe_stop_low_tree.xml` — `BoostLow(SAFE_STOP)`
-- [ ] `safe_stop_high_tree.xml`— `BoostHigh(SAFE_STOP)`
+- [x] `parallel_low.xml`  — `BoostLow(action_name={low_booster_action}, command={command}, ...)`
+- [x] `parallel_high.xml` — `BoostHigh(action_name={high_booster_action}, command={command}, ...)`
+- [ ] `sync.xml`          — stub; see SYNC section below
 
 ### Feedback — PARALLEL
 
@@ -223,15 +221,22 @@ tree is selected) not inside the XML.
 on that operation's goal handle. Blackboard is the bridge — BT nodes never hold goal
 handle references.
 
-- [ ] Tick loop: for each active op, read its blackboard, publish on its own goal handle
-- [ ] LOW goal handle publishes `low_pressure` / `low_percent_complete`
-- [ ] HIGH goal handle publishes `high_pressure` / `high_percent_complete`
+- [x] Tick loop: for each active op, read its blackboard, publish on its own goal handle
+- [x] LOW goal handle publishes `low_pressure` / `low_percent_complete`
+- [x] HIGH goal handle publishes `high_pressure` / `high_percent_complete`
 
 ### Coordinator params
 
-- [ ] Declare `default_speed_rpm` (1500), `eco_cpm`, `performance_cpm`
-- [ ] Read in `load_params()`, write to blackboard; consumed by `BoostLow`/`BoostHigh`
-- [ ] Write `cpm` and `speed_rpm` to blackboard at goal-accept from mode profile
+- [x] Declare `default_speed_rpm` (1500), `eco_cpm`, `performance_cpm`
+- [x] Read in `load_params()`, write to shared blackboard; slot blackboards inherit via parent
+- [x] `start_op` writes `cpm` and `speed_rpm` to slot blackboard from mode profile
+
+### Mode — cleanup item
+
+- [ ] `mode` is currently a per-goal field on `ControlCompressor.action`. This should be
+      a stored state owned by `CompressorNode`, changeable via a `~/set_mode` service.
+      Per-goal mode forces clients to track state; a service allows mode to be set once
+      and persist across fills. Remove `mode` from action once service is in place.
 
 ### Force stop and recovery
 
