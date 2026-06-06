@@ -154,8 +154,7 @@ Set per instance in the launch file. These index into `CompressorTelemetry` arra
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `vfd_index` | int | 0 | `vfd_speed_rpm[i]` — low=0, high=1 |
-| `heater_index` | int | 0 | `heater_on[i]` — low=0, high=1 |
+| `vfd_index` | int | 0 | `vfd_speed_rpm[i]`, `vfd_state[i]` — low=0, high=1 |
 |
 | `inlet_pt_index` | int | 0 | Inlet pressure — `pt_bar[x]` |
 | `outlet_pt_index` | int | 1 | Outlet pressure — `pt_bar[x]` |

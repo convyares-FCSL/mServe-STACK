@@ -174,6 +174,8 @@ Array indices into `CompressorTelemetry` fields — differ between `low_booster`
 `hyd_b_pt_index`, `coolant_pt_index`, `inlet_tt_index_1/2`, `outlet_tt_index_1/2/3`,
 `ps_lhs_index`, `ps_rhs_index`, `inlet_sv_index`, `hpu_sv_index`
 
+No `heater_index` — `heater_on` is a single bool; PLC handles both physical heaters in parallel.
+
 ### Operational (commissioning-tunable)
 
 Tolerances, timing, safety thresholds, pressure limits. Tuned during commissioning.
@@ -197,10 +199,11 @@ float64[16] pt_bar              # all pressure transducers
 float64[12] tt_celsius          # all temperature transducers
 bool[5]     sv                  # solenoid valve states
 bool[4]     ps                  # end-of-travel position switches
+uint8[2]    vfd_state           # VFD_OFFLINE=0 VFD_IDLE=1 VFD_RUNNING=2 VFD_FAULT=3
 float64[2]  vfd_speed_rpm
 float64[2]  vfd_energy_kj
 float64[2]  vfd_power_kw
-bool[2]     heater_on
+bool        heater_on           # single — PLC handles both physical heaters in parallel
 float64     hpu_tt_celsius
 float64     hpu_ls_percent
 ```

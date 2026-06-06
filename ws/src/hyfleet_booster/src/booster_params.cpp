@@ -17,10 +17,6 @@ void BoosterNode::declare_params(){
   const auto vfd_index_descriptor =  mserve_utils::make_int_range_descriptor("Index into configured VFD mapping[2]", 0, 1);
   declare_parameter<int>("vfd_index", 0, vfd_index_descriptor);
 
-  // Heater index.
-  const auto heater_index_descriptor =  mserve_utils::make_int_range_descriptor("Index into configured Heater mapping[2]", 0, 1);
-  declare_parameter<int>("heater_index", 0, heater_index_descriptor);
-
   // Pressure Transducers
   const auto pt_index_descriptor = mserve_utils::make_int_range_descriptor("Index into CompressorTelemetry::pt_bar[16]", 0, 15);
   declare_parameter<int>("inlet_pt_index", 0, pt_index_descriptor);
@@ -99,10 +95,6 @@ void BoosterNode::load_params(){
   // VFD
   const int vfd_index = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_index", 0, "VFD index");
   blackboard_->set("vfd_index", vfd_index);
-
-  // Heater
-  const int heater_index = mserve_utils::get_or_declare_param(p, get_logger(), "heater_index", 0, "Heater index");
-  blackboard_->set("heater_index", heater_index);
 
   // Pressure Transudcer
   const int inlet_pt_index = mserve_utils::get_or_declare_param(p, get_logger(), "inlet_pt_index", 0, "Inlet H2 PT index");
