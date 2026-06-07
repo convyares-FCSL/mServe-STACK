@@ -280,8 +280,8 @@ PressureBelowThreshold::PressureBelowThreshold(const std::string& name, const BT
 BT::PortsList PressureBelowThreshold::providedPorts() {
     return {
         BT::InputPort<int>("pt_index"),
-        BT::InputPort<double>("threshold_bar"),       // explicit threshold; used in stop sequence
-        BT::InputPort<double>("reenable_offset_bar"), // if provided: threshold = target_pressure - offset
+        BT::InputPort<double>("threshold_bar"),          // explicit threshold; used in stop sequence
+        BT::InputPort<double>("reenable_pressure_bar"), // absolute re-engage pressure for HOLD mode
         BT::InputPort<int>("timeout_ms")
     };
 }
@@ -325,17 +325,12 @@ BT::NodeStatus PressureBelowThreshold::onRunning() {
     if (thresh_res) {
         threshold = thresh_res.value();
     } else {
-        auto offset_res = getInput<double>("reenable_offset_bar");
-        if (!offset_res) {
-            RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: neither threshold_bar nor reenable_offset_bar provided");
+        auto reenable_res = getInput<double>("reenable_pressure_bar");
+        if (!reenable_res) {
+            RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: neither threshold_bar nor reenable_pressure_bar provided");
             return BT::NodeStatus::FAILURE;
         }
-        double target{};
-        if (!config().blackboard->get("target_pressure", target)) {
-            RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: target_pressure not on blackboard");
-            return BT::NodeStatus::FAILURE;
-        }
-        threshold = target - offset_res.value();
+        threshold = reenable_res.value();
     }
 
     const double pressure = msg->pt_bar[index_res.value()];
@@ -347,6 +342,101 @@ BT::NodeStatus PressureBelowThreshold::onRunning() {
 }
 
 void PressureBelowThreshold::onHalted() {}
+
+// ==============================================================================
+// GATE — On Target Is
+// ==============================================================================
+
+OnTargetIs::OnTargetIs(const std::string& name, const BT::NodeConfig& config)
+    : BT::ConditionNode(name, config) {}
+
+BT::PortsList OnTargetIs::providedPorts() {
+    return { BT::InputPort<uint8_t>("value") };
+}
+
+BT::NodeStatus OnTargetIs::tick() {
+    auto val_res = getInput<uint8_t>("value");
+    if (!val_res) return BT::NodeStatus::FAILURE;
+    uint8_t actual = 0;
+    (void)config().blackboard->get("on_target", actual);
+    return (actual == val_res.value()) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
+// ==============================================================================
+// GUARD — Inlet Guard
+// ==============================================================================
+
+InletGuard::InletGuard(const std::string& name, const BT::NodeConfiguration& config)
+: BT::StatefulActionNode(name, config) {}
+
+BT::PortsList InletGuard::providedPorts() {
+    return {
+        BT::InputPort<int>("inlet_pt_index"),
+        BT::InputPort<uint8_t>("on_inlet_starve"),
+        BT::InputPort<double>("inlet_starve_bar"),
+        BT::InputPort<double>("inlet_resume_bar"),
+    };
+}
+
+BT::NodeStatus InletGuard::onStart() {
+    if (!config().blackboard->get("telemetry_cache", cache_)) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "InletGuard: telemetry_cache not on blackboard");
+        return BT::NodeStatus::FAILURE;
+    }
+    starving_ = false;
+    return onRunning();
+}
+
+BT::NodeStatus InletGuard::onRunning() {
+    auto idx_res    = getInput<int>("inlet_pt_index");
+    auto mode_res   = getInput<uint8_t>("on_inlet_starve");
+    auto starve_res = getInput<double>("inlet_starve_bar");
+    auto resume_res = getInput<double>("inlet_resume_bar");
+    if (!idx_res || !mode_res || !starve_res || !resume_res) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "InletGuard: missing input port");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    auto [msg, stamp] = cache_->latest();
+    if (!msg) {
+        // No telemetry — ABORT fails safe; PAUSE assumes healthy until data arrives
+        return (mode_res.value() == 0) ? BT::NodeStatus::FAILURE : BT::NodeStatus::SUCCESS;
+    }
+
+    const double  pressure  = msg->pt_bar[idx_res.value()];
+    const uint8_t mode      = mode_res.value();
+    const double  starve_at = starve_res.value();
+    const double  resume_at = resume_res.value();
+
+    if (mode == 0) {  // ABORT — instantaneous gate, no state
+        return (pressure >= starve_at) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+    }
+
+    // PAUSE mode — hysteresis: clear only at resume threshold
+    if (!starving_) {
+        if (pressure < starve_at) {
+            starving_ = true;
+            RCLCPP_ERROR(rclcpp::get_logger(name()),
+                "InletGuard: inlet STARVED %.1f bar < %.1f bar — pausing compression",
+                pressure, starve_at);
+            return BT::NodeStatus::RUNNING;
+        }
+        return BT::NodeStatus::SUCCESS;
+    } else {
+        if (pressure >= resume_at) {
+            starving_ = false;
+            RCLCPP_INFO(rclcpp::get_logger(name()),
+                "InletGuard: inlet recovered %.1f bar >= %.1f bar — resuming compression",
+                pressure, resume_at);
+            return BT::NodeStatus::SUCCESS;
+        }
+        return BT::NodeStatus::RUNNING;
+    }
+}
+
+void InletGuard::onHalted() {
+    starving_ = false;
+}
 
 // ==============================================================================
 // GATE — Inlet Pressure Safe

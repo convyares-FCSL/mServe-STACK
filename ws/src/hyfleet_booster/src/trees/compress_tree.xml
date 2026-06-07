@@ -1,0 +1,77 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="Compress">
+    <!--
+      Unified compression tree driven by two blackboard fields:
+        on_target      — ON_TARGET_SUCCEED(0): return SUCCESS when target reached.
+                         ON_TARGET_HOLD(1):    maintain target forever; PCSV off when at
+                         pressure, re-engage on droop. Never returns SUCCESS.
+        on_inlet_starve — ABORT(0): InletGuard fails the tree if inlet drops.
+                          PAUSE(1): InletGuard blocks (RUNNING) while starved; the
+                          ReactiveSequence halts the Fallback → halts the Parallel →
+                          halts SetPCSV(on) → PCSV-off. On recovery InletGuard returns
+                          SUCCESS and the Parallel restarts → PCSV-on.
+
+      SetPCSV(enable=true) stays RUNNING indefinitely — it owns the PCSV-on state.
+      Halting it (by InletGuard pause or Parallel completion) always fires PCSV-off.
+    -->
+    <Sequence name="startup_and_compress">
+
+      <SubTree ID="Start" _autoremap="true"/>
+
+      <ReactiveSequence name="compress_loop">
+
+        <InletGuard
+          inlet_pt_index="{inlet_pt_index}"
+          on_inlet_starve="{on_inlet_starve}"
+          inlet_starve_bar="{inlet_starve_bar}"
+          inlet_resume_bar="{inlet_resume_bar}"
+        />
+
+        <Fallback>
+
+          <!-- ON_TARGET_SUCCEED: compress once, return SUCCESS to coordinator -->
+          <Sequence name="if_succeed_branch">
+            <OnTargetIs value="0"/>
+            <Parallel success_count="1" failure_count="1">
+              <Sequence>
+                <SetPCSV service_name="{service_name}" enable="true" cpm="{cpm}"/>
+                <LogCompressionStart outlet_pt_index="{outlet_pt_index}" target_pressure="{target_pressure}"/>
+                <HoldPCSV service_name="{service_name}"/>
+              </Sequence>
+              <OutletAtPressure
+                outlet_pt_index="{outlet_pt_index}"
+                target_pressure="{target_pressure}"
+              />
+            </Parallel>
+          </Sequence>
+
+          <!-- ON_TARGET_HOLD: compress → PCSV-off → wait for droop → repeat -->
+          <KeepRunningUntilFailure>
+            <Sequence name="maintain_cycle">
+              <Parallel success_count="1" failure_count="1">
+                <Sequence>
+                  <SetPCSV service_name="{service_name}" enable="true" cpm="{cpm}"/>
+                  <LogCompressionStart outlet_pt_index="{outlet_pt_index}" target_pressure="{target_pressure}"/>
+                  <HoldPCSV service_name="{service_name}"/>
+                </Sequence>
+                <OutletAtPressure
+                  outlet_pt_index="{outlet_pt_index}"
+                  target_pressure="{target_pressure}"
+                />
+              </Parallel>
+              <!-- target reached; Parallel halted SetPCSV → PCSV already off -->
+              <PressureBelowThreshold
+                pt_index="{outlet_pt_index}"
+                reenable_pressure_bar="{reenable_pressure_bar}"
+                timeout_ms="0"
+              />
+            </Sequence>
+          </KeepRunningUntilFailure>
+
+        </Fallback>
+
+      </ReactiveSequence>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

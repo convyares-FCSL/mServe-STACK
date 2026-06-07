@@ -5,6 +5,7 @@
 #include <behaviortree_ros2/bt_service_node.hpp>
 #include <mserve_interfaces/action/control_booster.hpp>
 #include "mserve_interfaces/srv/compressor_cmd.hpp"
+#include "compressor_telemetry_cache.hpp"
 
 namespace hyfleet_compressor {
 
@@ -18,7 +19,7 @@ using ControlBooster = mserve_interfaces::action::ControlBooster;
 
 class BoostCmdBase : public BT::RosActionNode<ControlBooster> {
 public:
-    // Ports: server_name (which action server to call) plus the four goal fields.
+    // Ports: server_name (which action server to call) plus goal fields.
     // server_name is read from the blackboard at tree tick time, so the same node
     // class can call either booster depending on what the coordinator puts there.
     static BT::PortsList providedPorts();
@@ -82,7 +83,7 @@ public:
 // ==============================================================================
 // BT action nodes :  ControlSV
 // ==============================================================================
- 
+
 class ControlSV : public BT::RosServiceNode<mserve_interfaces::srv::CompressorCmd> {
     public:
         ControlSV(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
@@ -98,6 +99,21 @@ class ControlSV : public BT::RosServiceNode<mserve_interfaces::srv::CompressorCm
 
     private:
 
+};
+
+// ==============================================================================
+// InterstageAboveBand — waits until the interstage PT >= interstage_start_threshold_bar.
+// Reads all values from the shared blackboard (set by load_params). No ports needed.
+// ==============================================================================
+
+class InterstageAboveBand : public BT::StatefulActionNode {
+public:
+    InterstageAboveBand(const std::string& name, const BT::NodeConfig& config)
+        : BT::StatefulActionNode(name, config) {}
+    static BT::PortsList providedPorts() { return {}; }
+    BT::NodeStatus onStart()   override { return onRunning(); }
+    BT::NodeStatus onRunning() override;
+    void           onHalted()  override {}
 };
 
 }  // namespace hyfleet_compressor

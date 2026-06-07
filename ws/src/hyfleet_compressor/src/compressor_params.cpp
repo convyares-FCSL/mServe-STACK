@@ -32,7 +32,15 @@ void CompressorNode::declare_params()
     "Pressure value in bar. Bounded by system pressure limit.",
     mserve_utils::system_pressure_min_bar, mserve_utils::system_pressure_max_bar);
   declare_parameter<double>("min_pressure_bar", 35.0,  pressure_bar_descriptor);
-  declare_parameter<double>("max_pressure_bar", 700.0, pressure_bar_descriptor);
+  declare_parameter<double>("max_pressure_bar", 900.0, pressure_bar_descriptor);
+  declare_parameter<double>("interstage_target_bar",           280.0, pressure_bar_descriptor);
+  declare_parameter<double>("interstage_start_threshold_bar",  200.0, pressure_bar_descriptor);
+  declare_parameter<double>("interstage_starvation_bar",       175.0, pressure_bar_descriptor);
+
+  // Timeout
+  const auto sync_timeout_descriptor = mserve_utils::make_int_range_descriptor(
+    "SYNC overall timeout in milliseconds.", 0, 86400000);
+  declare_parameter<int>("sync_overall_timeout_ms", 3600000, sync_timeout_descriptor);
 
   // Speed
   const auto speed_rpm_descriptor = mserve_utils::make_double_range_descriptor(
@@ -72,13 +80,21 @@ void CompressorNode::load_params()
 
   // Solenoid Valves
   const int interstage_sv_index = mserve_utils::get_or_declare_param(p, get_logger(), "interstage_sv_index", 0, "Interstage SV index");
-  shared_blackboard_ ->set("interstage_sv_index", interstage_sv_index);
+  shared_blackboard_->set("interstage_sv_index", static_cast<uint8_t>(interstage_sv_index));
 
-  // Goal validation limits — also stored as members for use in on_compressor_goal_accepted
+  // Pressures
   min_pressure_bar_ = mserve_utils::get_or_declare_param(p, get_logger(), "min_pressure_bar", 35.0,  "Minimum valid goal pressure (bar)");
   shared_blackboard_ ->set("min_pressure_bar", min_pressure_bar_);
   max_pressure_bar_ = mserve_utils::get_or_declare_param(p, get_logger(), "max_pressure_bar", 900.0, "Maximum valid goal pressure (bar)");
   shared_blackboard_ ->set("max_pressure_bar", max_pressure_bar_);
+  const double interstage_target_bar = mserve_utils::get_or_declare_param(p, get_logger(), "interstage_target_bar", 280.0, "Target pressure for interstage in SYNC mode (bar)");
+  shared_blackboard_->set("interstage_target_bar", interstage_target_bar);
+  const double interstage_start_threshold_bar = mserve_utils::get_or_declare_param(p, get_logger(), "interstage_start_threshold_bar", 200.0, "Minimum interstage pressure before starting high booster (bar)");
+  shared_blackboard_->set("interstage_start_threshold_bar", interstage_start_threshold_bar);
+  const double interstage_starvation_bar = mserve_utils::get_or_declare_param(p, get_logger(), "interstage_starvation_bar", 175.0, "Interstage pressure below which high booster pauses in SYNC mode (bar)");
+  shared_blackboard_->set("interstage_starvation_bar", interstage_starvation_bar);
+  const int sync_overall_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "sync_overall_timeout_ms", 3600000, "SYNC operation backstop timeout (ms)");
+  shared_blackboard_->set("sync_overall_timeout_ms", static_cast<unsigned>(sync_overall_timeout_ms));
 
   // VFD Speed
   default_speed_rpm_ = mserve_utils::get_or_declare_param(p, get_logger(), "default_speed_rpm", 1500.0, "VFD target speed (rpm)");

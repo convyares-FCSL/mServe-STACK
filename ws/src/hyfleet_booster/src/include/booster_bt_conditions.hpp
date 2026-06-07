@@ -9,6 +9,9 @@
 
 namespace hyfleet_booster {
 
+// Forward declaration — full type defined in booster_telemetry_cache.hpp (included by .cpp files)
+class BoosterTelemetryCache;
+
 // ==============================================================================
 // Classification:
 //   Gate  (instantaneous yes/no, SUCCESS/FAILURE only) → BT::ConditionNode
@@ -100,7 +103,7 @@ class OutletAtPressure : public BT::StatefulActionNode {
 // ==============================================================================
 // WAIT — Pressure Below Threshold
 // Polls until pt_bar[pt_index] falls below the threshold. Wall-clock timeout → FAILURE.
-// Ports: threshold_bar (explicit) OR reenable_offset_bar (computes target_pressure - offset).
+// Ports: threshold_bar (explicit) OR reenable_pressure_bar (absolute re-engage pressure).
 // ==============================================================================
 
 class PressureBelowThreshold : public BT::StatefulActionNode {
@@ -116,6 +119,40 @@ class PressureBelowThreshold : public BT::StatefulActionNode {
     private:
         std::chrono::steady_clock::time_point start_time_;
         std::chrono::milliseconds             timeout_{};
+};
+
+// ==============================================================================
+// GATE — On Target Is
+// Reads on_target from the blackboard and returns SUCCESS if it equals value,
+// FAILURE otherwise. Used in compress_tree.xml Fallback to route SUCCEED vs HOLD.
+// ==============================================================================
+
+class OnTargetIs : public BT::ConditionNode {
+public:
+    OnTargetIs(const std::string& name, const BT::NodeConfig& config);
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// ==============================================================================
+// GUARD — Inlet Guard
+// ABORT mode (on_inlet_starve=0): instantaneous gate — FAILURE if inlet < starve_bar.
+// PAUSE mode (on_inlet_starve=1): stateful hysteresis — RUNNING while starved
+//   (clears only when inlet >= resume_bar), SUCCESS when healthy.
+//   In a ReactiveSequence ahead of CompressToTarget, RUNNING halts CompressToTarget
+//   (PCSV off via onHalted), SUCCESS lets it run. One mechanism for both pause paths.
+// ==============================================================================
+
+class InletGuard : public BT::StatefulActionNode {
+public:
+    InletGuard(const std::string& name, const BT::NodeConfiguration& config);
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart()   override;
+    BT::NodeStatus onRunning() override;
+    void           onHalted()  override;
+private:
+    std::shared_ptr<BoosterTelemetryCache> cache_;
+    bool starving_ = false;
 };
 
 // ==============================================================================

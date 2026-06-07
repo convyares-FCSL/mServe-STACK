@@ -18,7 +18,11 @@ BT::PortsList BoostCmdBase::providedPorts()
         BT::InputPort<double>("target_pressure"),
         BT::InputPort<double>("cpm"),
         BT::InputPort<double>("speed_rpm"),
-});
+        BT::InputPort<uint8_t>("on_target",        uint8_t{0},  "0=SUCCEED 1=HOLD on target reached"),
+        BT::InputPort<uint8_t>("on_inlet_starve",  uint8_t{0},  "0=ABORT 1=PAUSE on inlet starvation"),
+        BT::InputPort<double>("inlet_starve_bar",  -1.0, "Inlet starve threshold bar (-1=use booster param)"),
+        BT::InputPort<double>("inlet_resume_bar",  -1.0, "Inlet resume threshold bar (-1=use booster param)"),
+    });
 }
 
 bool BoostCmdBase::setGoal(Goal & goal)
@@ -37,6 +41,15 @@ bool BoostCmdBase::setGoal(Goal & goal)
     goal.target_pressure = pressure.value();
     goal.cpm             = cpm.value();
     goal.speed_rpm       = speed.value();
+
+    auto on_target   = getInput<uint8_t>("on_target");
+    auto starve_mode = getInput<uint8_t>("on_inlet_starve");
+    auto starve_bar  = getInput<double>("inlet_starve_bar");
+    auto resume_bar  = getInput<double>("inlet_resume_bar");
+    goal.on_target        = on_target   ? on_target.value()   : uint8_t{0};
+    goal.on_inlet_starve  = starve_mode ? starve_mode.value() : uint8_t{0};
+    goal.inlet_starve_bar = starve_bar  ? starve_bar.value()  : -1.0;
+    goal.inlet_resume_bar = resume_bar  ? resume_bar.value()  : -1.0;
     return true;
 }
 
@@ -114,6 +127,31 @@ BT::NodeStatus ControlSV::onResponseReceived(const Response::SharedPtr& response
 
     RCLCPP_INFO(logger(), "Set SV request success");
     return BT::NodeStatus::SUCCESS;
+}
+
+// ==============================================================================
+// InterstageAboveBand
+// ==============================================================================
+
+BT::NodeStatus InterstageAboveBand::onRunning() {
+    std::shared_ptr<CompressorTelemetryCache> cache;
+    if (!config().blackboard->get("telemetry_cache", cache) || !cache) {
+        RCLCPP_ERROR(rclcpp::get_logger("InterstageAboveBand"), "telemetry_cache not on blackboard");
+        return BT::NodeStatus::FAILURE;
+    }
+    int pt_idx = 7;
+    double threshold = 200.0;
+    (void)config().blackboard->get("interstage_pt_index", pt_idx);
+    (void)config().blackboard->get("interstage_start_threshold_bar", threshold);
+    auto [msg, stamp] = cache->latest();
+    if (!msg) return BT::NodeStatus::RUNNING;
+    const double pressure = msg->pt_bar[pt_idx];
+    if (pressure >= threshold) {
+        RCLCPP_INFO(rclcpp::get_logger("InterstageAboveBand"),
+            "Interstage %.1f bar >= %.1f bar — opening interstage SV", pressure, threshold);
+        return BT::NodeStatus::SUCCESS;
+    }
+    return BT::NodeStatus::RUNNING;
 }
 
 }  // namespace hyfleet_compressor

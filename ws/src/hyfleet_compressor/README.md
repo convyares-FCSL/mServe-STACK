@@ -16,13 +16,10 @@ The tree is the coordinator state machine. No hand-rolled routing logic.
 
 - Accepts `ControlCompressor` action goals: `START`, `STOP`, `SAFE_STOP`
 - Routes to target: `LOW_BOOSTER`, `HIGH_BOOSTER`, or `SYNC_BOOSTERS`
-- Loads three XML trees at configure time — one per command
+- Loads XML trees at configure time — one per command path
 - Ticks the active tree on a 100 ms wall timer while a goal is active
 - Succeeds or aborts the goal when the tree resolves
 - Lifecycle managed: configure / activate / deactivate / cleanup / shutdown
-
-> **Stage 3 — in progress.** Trees currently contain `AlwaysSuccess` placeholders.
-> `RosActionNode` wrappers (`BoostLow`, `BoostHigh`) and SYNC routing are next.
 
 ---
 
@@ -36,14 +33,15 @@ src/
   compressor_node.cpp       Lifecycle callbacks, params, BT wiring, tick timer
   compressor_params.cpp     Parameter declaration, loading, on_parameters callback
   compressor_action.cpp     Action server: goal/cancel/result protocol
-  compressor_bt_nodes.cpp   BT node implementations (Stage 3+: BoostLow, BoostHigh)
+  compressor_bt_nodes.cpp   BT node implementations (BoostLow, BoostHigh, ControlSV,
+                            InterstageAboveBand)
   include/
     compressor_action.hpp   CompressorAction class (internal)
-    compressor_bt_nodes.hpp BT node declarations (Stage 3: RosActionNode wrappers)
+    compressor_bt_nodes.hpp BT node declarations
 trees/
-  start_tree.xml            START command — routes to LOW / HIGH / SYNC booster(s)
-  stop_tree.xml             STOP command
-  safe_stop_tree.xml        SAFE_STOP command — immediate halt, no ramp-down wait
+  parallel_low.xml          LOW_BOOSTER path — BoostLow(command={command}, ...)
+  parallel_high.xml         HIGH_BOOSTER path — BoostHigh(command={command}, ...)
+  sync.xml                  SYNC_BOOSTERS — two-phase interstage coordination
 ```
 
 ---
@@ -56,11 +54,14 @@ Orchestrator
     ▼
 CompressorNode  (hyfleet_compression)
     │  BT tree routes by target field on blackboard
-    ├── LOW   → RosActionNode → /low_booster/control_booster
-    ├── HIGH  → RosActionNode → /high_booster/control_booster
-    └── SYNC  → Parallel
-                  ├── RosActionNode → /low_booster/control_booster  (START_IDLE)
-                  └── RosActionNode → /high_booster/control_booster (START)
+    ├── LOW   → BoostLow  → /low_booster/control_booster
+    ├── HIGH  → BoostHigh → /high_booster/control_booster
+    └── SYNC  → sync.xml
+                  Phase 1: BoostLow(ON_TARGET_HOLD, interstage_target_bar)
+                           InterstageAboveBand (wait for PT >= start_threshold)
+                  Phase 2: ControlSV(interstage_sv, open)
+                           BoostHigh(ON_TARGET_SUCCEED, target_pressure)
+                           InletGuard on high booster pauses on interstage starvation
 ```
 
 The coordinator owns **mode → setpoint translation**: it reads mode (PERFORMANCE / ECO)
@@ -85,6 +86,28 @@ LifecycleNode
                   select tree, start 100 ms tick timer
   tick timer    → tree.tickOnce() → succeed / abort on completion
 ```
+
+---
+
+## SYNC two-phase tree
+
+SYNC uses a single `ControlCompressor` goal and coordinates both boosters internally.
+
+**Phase 1 — Build interstage (SV closed):**
+The low booster compresses the interstage tank with `ON_TARGET_HOLD` at `interstage_target_bar`.
+`InterstageAboveBand` polls `pt_bar[interstage_pt_index]` and blocks until pressure reaches
+`interstage_start_threshold_bar`. The interstage SV stays closed throughout Phase 1 — pressure
+builds on the low side of the SV before the connection is made.
+
+**Phase 2 — Open SV, compress high stage:**
+`ControlSV` opens the interstage SV. The high booster's inlet is now fed by the low booster.
+`BoostHigh` compresses to `target_pressure` with `INLET_STARVE_PAUSE` — if interstage pressure
+droops below `interstage_starvation_bar`, the high booster pauses (PCSV off) and waits for the
+low booster to recover it above `interstage_start_threshold_bar`.
+
+**Exit / abort:** `Parallel(success_count=1)` exits when the high booster hits target. The low
+booster is halted by the Parallel, then both receive explicit `STOP(2)`. The interstage SV is
+closed before stopping boosters in both success and abort paths.
 
 ---
 
@@ -127,11 +150,18 @@ Written at configure time (from params):
 | Key | Default | Description |
 |---|---|---|
 | `inlet_pt_index` | 0 | Inlet H2 pressure — `pt_bar[x]` |
-| `interstage_pt_index` | 1 | Interstage H2 pressure — `pt_bar[x]` |
+| `interstage_pt_index` | 7 | Interstage H2 pressure — `pt_bar[x]` |
 | `outlet_pt_index` | 2 | Final outlet H2 pressure — `pt_bar[x]` |
-| `interstage_sv_index` | 0 | Interstage solenoid valve — `sv[x]` |
+| `interstage_sv_index` | 4 | Interstage solenoid valve — `sv[x]` |
 | `min_pressure_bar` | 35.0 | from param |
 | `max_pressure_bar` | 900.0 | from param |
+| `default_speed_rpm` | 1500.0 | from param |
+| `performance_cpm` | 16.0 | from param |
+| `eco_cpm` | 8.0 | from param |
+| `interstage_target_bar` | 280.0 | Low booster hold target during SYNC Phase 1 |
+| `interstage_start_threshold_bar` | 200.0 | Interstage PT threshold to open SV and start high booster |
+| `interstage_starvation_bar` | 175.0 | Interstage PT threshold below which high booster pauses |
+| `sync_overall_timeout_ms` | 3600000 | Wall-clock timeout for the entire SYNC operation |
 
 Written at goal-accept time (from goal):
 
@@ -141,8 +171,8 @@ Written at goal-accept time (from goal):
 | `target` | goal target (int) |
 | `mode` | goal mode (int) |
 | `target_pressure` | bar |
-
-Stage 3+: `cpm` and `speed_rpm` will be added at goal-accept once profile params are in.
+| `cpm` | from mode profile |
+| `speed_rpm` | from mode profile |
 
 ---
 
@@ -160,9 +190,9 @@ params of the booster nodes, not the coordinator.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `inlet_pt_index` | int | 0 | System inlet H2 pressure — `pt_bar[x]` |
-| `interstage_pt_index` | int | 1 | Interstage pressure (between low and high booster) — `pt_bar[x]` |
+| `interstage_pt_index` | int | 7 | Interstage pressure (low booster outlet / high booster inlet) — `pt_bar[x]` |
 | `outlet_pt_index` | int | 2 | Final system outlet H2 pressure — `pt_bar[x]` |
-| `interstage_sv_index` | int | 0 | Interstage solenoid valve — `sv[x]` |
+| `interstage_sv_index` | int | 4 | Interstage solenoid valve — `sv[x]` |
 
 ### Operational
 
@@ -170,9 +200,13 @@ params of the booster nodes, not the coordinator.
 |---|---|---|---|
 | `min_pressure_bar` | double | 35.0 | Minimum valid goal pressure (bar) |
 | `max_pressure_bar` | double | 900.0 | Maximum valid goal pressure (bar) |
-
-Stage 3+ will add mode profile params: `default_speed_rpm`, `eco_cpm`, `performance_cpm`.
-See [architecture.md](docs/architecture.md) §6 for the mode → setpoint decision.
+| `default_speed_rpm` | double | 1500.0 | VFD speed sent to boosters |
+| `performance_cpm` | double | 16.0 | CPM at PERFORMANCE mode |
+| `eco_cpm` | double | 8.0 | CPM at ECO mode |
+| `interstage_target_bar` | double | 280.0 | Low booster hold target during SYNC Phase 1 (bar) |
+| `interstage_start_threshold_bar` | double | 200.0 | Interstage PT threshold to open SV and start high booster (bar) |
+| `interstage_starvation_bar` | double | 175.0 | Interstage PT threshold below which high booster pauses (bar) |
+| `sync_overall_timeout_ms` | int | 3600000 | Wall-clock timeout for entire SYNC operation (ms) |
 
 ---
 
@@ -180,12 +214,17 @@ See [architecture.md](docs/architecture.md) §6 for the mode → setpoint decisi
 
 ```bash
 source install/setup.bash
-ros2 launch mserve_launch mserve_min.launch.py
+ros2 launch hyfleet_sim hyfleet_sim.launch.py
 
-# Send a test goal (placeholder tree — succeeds immediately)
+# LOW single booster
 ros2 action send_goal /hyfleet_compression/control_compressor \
   mserve_interfaces/action/ControlCompressor \
   "{command: 1, target: 1, mode: 1, target_pressure: 350.0}"
+
+# SYNC both boosters
+ros2 action send_goal /hyfleet_compression/control_compressor \
+  mserve_interfaces/action/ControlCompressor \
+  "{command: 1, target: 3, mode: 1, target_pressure: 900.0}"
 ```
 
 Bringup order: `base → drivechain → low_booster → high_booster → hyfleet_compression`
@@ -197,7 +236,7 @@ Bringup order: `base → drivechain → low_booster → high_booster → hyfleet
 - `behaviortree_cpp` — `ros-jazzy-behaviortree-cpp` (apt)
 - `behaviortree_ros2` — source build (BehaviorTree/BehaviorTree.ROS2)
 - `rclcpp_action`, `rclcpp_lifecycle`
-- `mserve_interfaces` — `ControlCompressor.action`, `ControlBooster.action`
+- `mserve_interfaces` — `ControlCompressor.action`, `ControlBooster.action`, `CompressorCmd.srv`
 - `mserve_utils` — `get_or_declare_param` helpers
 
 See also: [architecture.md](docs/architecture.md), [todo.md](docs/todo.md)

@@ -35,6 +35,7 @@ def generate_launch_description():
         executable='sim_node',
         name='compressor_sim',
         output='screen',
+        parameters=[hyfleet_params],
     )
 
     # ------------------------------------------------------------------

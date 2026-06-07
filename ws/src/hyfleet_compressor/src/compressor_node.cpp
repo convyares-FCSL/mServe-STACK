@@ -143,6 +143,11 @@ void CompressorNode::register_bt_nodes() {
     [this](const std::string & name, const BT::NodeConfig & config) {
       return std::make_unique<BoostHigh>(name, config, BT::RosNodeParams(bt_node_));
     });
+  factory_->registerBuilder<ControlSV>("ControlSV",
+  [this](const std::string & name, const BT::NodeConfig & config) {
+    return std::make_unique<ControlSV>(name, config, BT::RosNodeParams(bt_node_));
+  });
+  factory_->registerNodeType<InterstageAboveBand>("InterstageAboveBand");
 }
 
 void CompressorNode::build_bt_trees() {
@@ -157,20 +162,21 @@ bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, ui
   std::string tree_id;
   if (target == ControlCompressor::Goal::LOW_BOOSTER) tree_id = "parallel_low";
   else if (target == ControlCompressor::Goal::HIGH_BOOSTER) tree_id = "parallel_high";
-  else tree_id = "start_sync";
+  else tree_id = "sync";
 
-  // Per-slot blackboard inherits shared keys (action names, PT indices, etc.)
   slot.blackboard = BT::Blackboard::create(shared_blackboard_);
+  slot.blackboard->enableAutoRemapping(true);
   slot.target = target;
   slot.blackboard->set("low_booster_action",  std::string("/low_booster/control_booster"));
   slot.blackboard->set("high_booster_action", std::string("/high_booster/control_booster"));
 
   // Translate coordinator command to booster command and write goal fields
   using CB = mserve_interfaces::action::ControlBooster;
-  uint8_t booster_cmd = (command == ControlCompressor::Goal::START)   ? CB::Goal::COMPRESS_ONCE
+  uint8_t booster_cmd = (command == ControlCompressor::Goal::START)   ? CB::Goal::COMPRESS
                       : (command == ControlCompressor::Goal::STOP)    ? CB::Goal::STOP
                                                                       : CB::Goal::FORCE_STOP;
   slot.blackboard->set("command",         booster_cmd);
+  slot.blackboard->set("on_target",       uint8_t{CB::Goal::ON_TARGET_SUCCEED});
   slot.blackboard->set("target_pressure", target_pressure);
   slot.blackboard->set("speed_rpm", default_speed_rpm_);
   slot.blackboard->set("cpm", (goal_mode == ControlCompressor::Goal::PERFORMANCE) ? performance_cpm_ : eco_cpm_);
@@ -244,7 +250,7 @@ void CompressorNode::on_compressor_goal_accepted( std::shared_ptr<GoalHandleCont
     const auto goal = goal_handle->get_goal();
 
     // Validate command
-    if (goal->command != ControlCompressor::Goal::START && goal->command != ControlCompressor::Goal::STOP && goal->command != ControlCompressor::Goal::SAFE_STOP) {
+    if (goal->command != ControlCompressor::Goal::START && goal->command != ControlCompressor::Goal::STOP && goal->command != ControlCompressor::Goal::FORCE_STOP) {
         compressor_action_->abort_goal(goal_handle, "unknown command");
         return;
     }

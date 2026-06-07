@@ -1,12 +1,21 @@
-uint8 COMPRESS_ONCE = 1
-uint8 COMPRESS_HOLD = 2
-uint8 STOP = 3
-uint8 FORCE_STOP = 4
+uint8 COMPRESS   = 1
+uint8 STOP       = 2
+uint8 FORCE_STOP = 3
 
-uint8 command
+uint8 ON_TARGET_SUCCEED = 0
+uint8 ON_TARGET_HOLD    = 1
+
+uint8 INLET_STARVE_ABORT = 0
+uint8 INLET_STARVE_PAUSE = 1
+
+uint8   command
 float64 target_pressure
-float64 cpm  16.0
-float64 speed_rpm 1500.0
+float64 cpm        16.0
+float64 speed_rpm  1500.0
+uint8   on_target          0
+uint8   on_inlet_starve    0
+float64 inlet_starve_bar  -1.0
+float64 inlet_resume_bar  -1.0
 ---
 bool accepted
 string message

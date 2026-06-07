@@ -112,15 +112,24 @@ Feedback:
 
 ```
 Goal:
-  uint8 START = 1
-  uint8 START_IDLE = 2
-  uint8 STOP = 3
-  uint8 SAFE_STOP = 4
+  uint8 COMPRESS   = 1
+  uint8 STOP       = 2
+  uint8 FORCE_STOP = 3
 
-  uint8 command
+  uint8 ON_TARGET_SUCCEED = 0   ← compress once, return SUCCESS at target
+  uint8 ON_TARGET_HOLD    = 1   ← maintain band; loop until preempted then STOP
+
+  uint8 INLET_STARVE_ABORT = 0  ← abort goal if inlet drops below starve threshold
+  uint8 INLET_STARVE_PAUSE = 1  ← pause PCSV while starved; resume on recovery
+
+  uint8   command
   float64 target_pressure
-  float64 cpm             ← coordinator-decided; live trims via adjust-CPM service
-  float64 speed_rpm       ← coordinator-decided; default 1500 rpm (coordinator profile param)
+  float64 cpm              ← coordinator-decided; validated against CPM_MAX constexpr
+  float64 speed_rpm        ← coordinator-decided; default 1500 rpm (coordinator profile param)
+  uint8   on_target        ← 0 = succeed once, 1 = hold band
+  uint8   on_inlet_starve  ← 0 = abort, 1 = pause
+  float64 inlet_starve_bar ← starvation threshold (-1 = not used)
+  float64 inlet_resume_bar ← recovery threshold (-1 = not used)
 
 Result:
   bool accepted
@@ -131,8 +140,9 @@ Feedback:
   float64 percent_complete
 ```
 
-`START_IDLE`: boost to target then hold with poppet valve engaged, VFD ready for rapid restart.
-Used in SYNC mode to avoid cold-starting the low booster.
+`ON_TARGET_HOLD`: boost to target then hold — PCSV off when at pressure, re-engage when outlet
+drops below `reenable_pressure_bar` (absolute bar, fixed machine param). VFD stays running.
+Used for interstage band-control in SYNC mode.
 
 `target_pressure` is goal-only, never a param. Validated against per-instance limits on goal-accept.
 `cpm` and `speed_rpm` are coordinator-decided setpoints, validated against `constexpr` hardware
@@ -247,16 +257,27 @@ Written at goal-accept time (from goal):
 Goal fields written to blackboard → tree routes on `target`:
 
 ```
-target = LOW   → RosActionNode → /low_booster/control_booster
-target = HIGH  → RosActionNode → /high_booster/control_booster
-target = SYNC  → Parallel
-                   ├── RosActionNode → /low_booster/control_booster   (START_IDLE)
-                   └── RosActionNode → /high_booster/control_booster  (START)
+target = LOW   → BoostLow  → /low_booster/control_booster
+target = HIGH  → BoostHigh → /high_booster/control_booster
+target = SYNC  → sync.xml (two-phase):
+  Phase 1 (SV closed):
+    BoostLow(COMPRESS, ON_TARGET_HOLD, interstage_target_bar)   ← builds interstage
+    InterstageAboveBand (polls pt_bar[interstage_pt_index] >= interstage_start_threshold_bar)
+  Phase 2 (SV open):
+    ControlSV(interstage_sv_index, enable=true)
+    BoostHigh(COMPRESS, ON_TARGET_SUCCEED, INLET_STARVE_PAUSE, target_pressure)
+  Exit: Parallel(success_count=1) succeeds when BoostHigh hits target
+        ControlSV(close) → BoostLow(STOP) → BoostHigh(STOP)
+  Abort: same cleanup in ForceFailure wrapper
 ```
 
 The coordinator owns mode → setpoint translation. Profiles (CPM and speed per mode) are
-coordinator parameters — commissioning-tunable, reject-while-active. Live CPM trim in SYNC
-comes from interstage pressure (ROS-rate control loop running in the coordinator tree).
+coordinator parameters — commissioning-tunable, reject-while-active.
+
+`InterstageAboveBand` is a `StatefulActionNode` in the coordinator tree. It reads the
+`telemetry_cache` from the blackboard and returns SUCCESS once `pt_bar[interstage_pt_index]`
+reaches `interstage_start_threshold_bar`. It does not read from the booster node — only from
+the coordinator's own telemetry subscription.
 
 ---
 
@@ -295,9 +316,14 @@ Real state machine: RosServiceNode hardware commands, telemetry cache shared via
 StatefulActionNode wait nodes (VFDAtSpeed, VFDStopped, InletPressureStable, OutletAtPressure),
 ConditionNode gate (InletPressureSafe), Parallel safety monitor, action feedback per tick.
 
-### Stage 3 — CompressorNode coordinator
-Action server + coordinator BT tree. RosActionNode calling booster servers.
-Goal routing LOW / HIGH / SYNC Parallel.
+### Stage 3 — CompressorNode coordinator ✓
+PARALLEL mode: action server + coordinator BT tree, RosActionNode wrappers (BoostLow/BoostHigh),
+goal routing LOW / HIGH, ops_[2] multi-slot architecture, all 5 integration tests passing.
+
+SYNC mode: InterstageAboveBand node, ControlSV node, two-phase sync.xml tree,
+`reenable_pressure_bar` (absolute) param on booster, interstage SV-driven physics coupling in sim.
+All 6 integration tests passing (test_low, test_high, test_parallel_both, test_setpoint_update,
+test_stop, test_sync).
 
 ### Stage 4 — Full integration
-SYNC CPM control, interstage solenoid, safety monitor, diagnostics.
+Safety monitor, diagnostics, oil_healthy subscription, compression ratio monitoring.

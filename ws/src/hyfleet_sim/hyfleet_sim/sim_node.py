@@ -16,10 +16,10 @@ Physics (trivial, command-driven)
   outlet_p >= target_pressure   =>  hold at target_pressure
   pcsv_enabled=False            =>  hold current pressure (no decay)
   inlet_p                       =>  constant inlet_pressure_bar (standalone)
-                                    or low_booster outlet (SYNC mode)
-  SYNC interstage draw          =>  when high compressing, low outlet falls at
-                                    interstage_draw_bar_per_s; allows compress_hold
-                                    maintain loop to be exercised
+                                    or low_booster outlet when interstage SV is open
+  interstage draw               =>  when interstage SV open and high compressing,
+                                    low outlet falls at interstage_draw_bar_per_s;
+                                    allows compress_hold maintain loop to be exercised
   VFD                           =>  instant on/off; vfd_speed_rpm reflects setpoint
 """
 
@@ -68,7 +68,6 @@ class CompressorSimNode(Node):
     physics.bar_per_cpm              Rise rate (bar per cycle). Default 1.0.
     physics.physics_rate_hz          Physics tick rate. Default 100.0.
     physics.telemetry_rate_hz        Telemetry publish rate. Default 10.0.
-    physics.sync_mode                High-booster inlet = low-booster outlet. Default false.
     physics.interstage_draw_bar_per_s  Rate at which high booster draws from interstage
                                        when compressing (bar/s). Only active in sync_mode.
                                        Default 8.0.
@@ -88,13 +87,12 @@ class CompressorSimNode(Node):
         self.declare_parameter('physics.bar_per_cpm',                1.0)
         self.declare_parameter('physics.physics_rate_hz',            100.0)
         self.declare_parameter('physics.telemetry_rate_hz',          10.0)
-        self.declare_parameter('physics.sync_mode',                  False)
         self.declare_parameter('physics.interstage_draw_bar_per_s',  8.0)
 
         defaults = {
             'low_booster': dict(
-                inlet_pressure_bar=265.0,
-                initial_outlet_bar=265.0,
+                inlet_pressure_bar=100.0,
+                initial_outlet_bar=100.0,
                 target_pressure_bar=500.0,
                 inlet_pt_index=0,
                 outlet_pt_index=7,
@@ -103,8 +101,8 @@ class CompressorSimNode(Node):
                 vfd_index=0,
             ),
             'high_booster': dict(
-                inlet_pressure_bar=265.0,
-                initial_outlet_bar=265.0,
+                inlet_pressure_bar=100.0,
+                initial_outlet_bar=100.0,
                 target_pressure_bar=900.0,
                 inlet_pt_index=1,
                 outlet_pt_index=2,
@@ -123,7 +121,7 @@ class CompressorSimNode(Node):
             self.declare_parameter(f'{name}.outlet_tt_index',     d['outlet_tt_index'])
             self.declare_parameter(f'{name}.vfd_index',           d['vfd_index'])
 
-        self.declare_parameter('compressor.interstage_sv_index', 2)
+        self.declare_parameter('compressor.interstage_sv_index', 4)
 
         # ------------------------------------------------------------------
         # Read parameters
@@ -131,7 +129,6 @@ class CompressorSimNode(Node):
         self._bar_per_cpm             = self.get_parameter('physics.bar_per_cpm').value
         self._physics_rate_hz         = self.get_parameter('physics.physics_rate_hz').value
         self._telemetry_rate_hz       = self.get_parameter('physics.telemetry_rate_hz').value
-        self._sync_mode               = self.get_parameter('physics.sync_mode').value
         self._interstage_draw         = self.get_parameter('physics.interstage_draw_bar_per_s').value
         self._interstage_sv_index     = self.get_parameter('compressor.interstage_sv_index').value
 
@@ -206,7 +203,7 @@ class CompressorSimNode(Node):
         self.get_logger().info(
             f'CompressorSimNode started — physics {self._physics_rate_hz} Hz, '
             f'telemetry {self._telemetry_rate_hz} Hz, '
-            f'bar_per_cpm={self._bar_per_cpm}, sync_mode={self._sync_mode}, '
+            f'bar_per_cpm={self._bar_per_cpm}, '
             f'interstage_draw={self._interstage_draw} bar/s'
         )
 
@@ -323,8 +320,8 @@ class CompressorSimNode(Node):
     def _physics_tick(self) -> None:
         dt = 1.0 / self._physics_rate_hz
 
-        if self._sync_mode:
-            # High booster inlet tracks low booster outlet
+        # When the interstage SV is open, high booster inlet tracks low booster outlet
+        if self._interstage_sv:
             self._state['high_booster'].inlet_p = self._state['low_booster'].outlet_p
 
         for name in self.BOOSTER_NAMES:
@@ -335,16 +332,15 @@ class CompressorSimNode(Node):
                     s.target_pressure,
                 )
 
-        # SYNC interstage draw: when high booster is compressing it draws from
-        # the interstage (low booster outlet), causing pressure to decay.
-        # This allows the compress_hold maintain loop to be exercised in tests.
-        if self._sync_mode:
+        # When interstage SV is open and high booster is compressing, it draws from
+        # the interstage (low booster outlet), allowing the maintain loop to be exercised.
+        if self._interstage_sv:
             high = self._state['high_booster']
             low  = self._state['low_booster']
             if high.pcsv_enabled and high.vfd_running:
                 low.outlet_p = max(
                     low.outlet_p - self._interstage_draw * dt,
-                    low.inlet_p,    # can't drop below supply
+                    low.inlet_p,
                 )
 
     # ------------------------------------------------------------------

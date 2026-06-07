@@ -3,9 +3,13 @@
     <BoostLow
       action_name="{low_booster_action}"
       command="{command}"
+      on_target="{on_target}"
       target_pressure="{target_pressure}"
       cpm="{cpm}"
       speed_rpm="{speed_rpm}"
+      on_inlet_starve="0"
+      inlet_starve_bar="-1.0"
+      inlet_resume_bar="-1.0"
     />
   </BehaviorTree>
 </root>

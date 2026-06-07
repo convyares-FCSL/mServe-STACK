@@ -1,6 +1,6 @@
 uint8 START = 1
 uint8 STOP = 2
-uint8 SAFE_STOP = 3
+uint8 FORCE_STOP = 3
 
 uint8 LOW_BOOSTER = 1
 uint8 HIGH_BOOSTER = 2

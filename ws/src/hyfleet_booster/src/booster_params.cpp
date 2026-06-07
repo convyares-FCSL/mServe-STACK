@@ -54,7 +54,9 @@ void BoosterNode::declare_params(){
   declare_parameter<double>("safe_pressure", 25.0, pressure_bar_descriptor);
   declare_parameter<double>("target_deadband", 0.5, pressure_bar_descriptor);
   declare_parameter<double>("stability_tolerance", 0.05, pressure_bar_descriptor);
-  declare_parameter<double>("reenable_offset_bar", 50, pressure_bar_descriptor);
+  declare_parameter<double>("reenable_pressure_bar", 230.0, pressure_bar_descriptor);
+  declare_parameter<double>("inlet_starve_bar",     35.0, pressure_bar_descriptor);
+  declare_parameter<double>("inlet_resume_bar",     50.0, pressure_bar_descriptor);
 
   // Temperature
   const auto pt100_temp_descriptor = mserve_utils::make_double_range_descriptor(
@@ -155,8 +157,12 @@ void BoosterNode::load_params(){
   blackboard_->set("target_deadband", target_deadband);
   const double stability_tolerance = mserve_utils::get_or_declare_param(p, get_logger(), "stability_tolerance", 0.05, "Max variation for inlet stability check (bar)");
   blackboard_->set("stability_tolerance", stability_tolerance);
-  const double reenable_offset_bar = mserve_utils::get_or_declare_param(p, get_logger(), "reenable_offset_bar", 50.0, "START_IDLE re-engage threshold = target − offset (bar)");
-  blackboard_->set("reenable_offset_bar", reenable_offset_bar);
+  const double reenable_pressure_bar = mserve_utils::get_or_declare_param(p, get_logger(), "reenable_pressure_bar", 230.0, "Absolute pressure below which HOLD mode re-engages PCSV (bar)");
+  blackboard_->set("reenable_pressure_bar", reenable_pressure_bar);
+  const double inlet_starve_bar = mserve_utils::get_or_declare_param(p, get_logger(), "inlet_starve_bar", 35.0, "Inlet pressure below which compression pauses or aborts (bar)");
+  blackboard_->set("inlet_starve_bar", inlet_starve_bar);
+  const double inlet_resume_bar = mserve_utils::get_or_declare_param(p, get_logger(), "inlet_resume_bar", 50.0, "Inlet pressure above which paused compression resumes (bar)");
+  blackboard_->set("inlet_resume_bar", inlet_resume_bar);
 
   // Temperature
   const double min_temp_inlet = mserve_utils::get_or_declare_param(p, get_logger(), "min_temp_inlet", 0.00, "Minimum inlet temperature (°C)");

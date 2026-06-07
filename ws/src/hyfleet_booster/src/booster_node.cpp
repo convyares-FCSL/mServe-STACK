@@ -162,38 +162,43 @@ void BoosterNode::register_bt_nodes(){
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<SetPCSV>(name, config, BT::RosNodeParams(bt_node_));
     });
+    factory_->registerBuilder<HoldPCSV>("HoldPCSV",
+      [this](const std::string& name, const BT::NodeConfig& config) {
+        return std::make_unique<HoldPCSV>(name, config, bt_node_);
+    });
     factory_->registerBuilder<ControlSV>("ControlSV",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<ControlSV>(name, config, BT::RosNodeParams(bt_node_));
     });
 
-  
-    // Register Conditions — plain ConditionNode, read telemetry from shared cache on blackboard
+    // Register Conditions — read telemetry / blackboard; no ROS params needed
     factory_->registerNodeType<InletPressureStable>("InletPressureStable");
     factory_->registerNodeType<VFDAtSpeed>("VFDAtSpeed");
     factory_->registerNodeType<VFDStopped>("VFDStopped");
     factory_->registerNodeType<OutletAtPressure>("OutletAtPressure");
     factory_->registerNodeType<PressureBelowThreshold>("PressureBelowThreshold");
     factory_->registerNodeType<InletPressureSafe>("InletPressureSafe");
+    factory_->registerNodeType<OnTargetIs>("OnTargetIs");
+    factory_->registerNodeType<InletGuard>("InletGuard");
 }
 
 void BoosterNode::build_bt_trees(){
     const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_booster") + "/trees/";
-    // SubTree definitions registered first — compress trees reference both
+    // SubTree definitions register
     factory_->registerBehaviorTreeFromFile(base + "start_tree.xml");
     factory_->registerBehaviorTreeFromFile(base + "stop_tree.xml");
-    trees_[0] = factory_->createTreeFromFile(base + "compress_once_tree.xml", blackboard_);
-    trees_[1] = factory_->createTreeFromFile(base + "compress_hold_tree.xml", blackboard_);
-    trees_[2] = factory_->createTree("Stop", blackboard_);
-    trees_[3] = factory_->createTreeFromFile(base + "force_stop_tree.xml", blackboard_);
+    
+    // Primary Tree definition register
+    trees_[0] = factory_->createTreeFromFile(base + "compress_tree.xml", blackboard_);
+    trees_[1] = factory_->createTree("Stop", blackboard_);
+    trees_[2] = factory_->createTreeFromFile(base + "stop_force_tree.xml", blackboard_);
 }
 
 bool BoosterNode::select_tree(uint8_t command) {
   switch (command) {
-      case ControlBooster::Goal::COMPRESS_ONCE: active_tree_ = &trees_[0]; return true;
-      case ControlBooster::Goal::COMPRESS_HOLD: active_tree_ = &trees_[1]; return true;
-      case ControlBooster::Goal::STOP:          active_tree_ = &trees_[2]; return true;
-      case ControlBooster::Goal::FORCE_STOP:    active_tree_ = &trees_[3]; return true;
+      case ControlBooster::Goal::COMPRESS:    active_tree_ = &trees_[0]; return true;
+      case ControlBooster::Goal::STOP:        active_tree_ = &trees_[1]; return true;
+      case ControlBooster::Goal::FORCE_STOP:  active_tree_ = &trees_[2]; return true;
       default: return false;
   }
 }
@@ -214,8 +219,7 @@ void BoosterNode::tick_tree_once(){
           !blackboard_->get("target_pressure", target)) { return; }
       const double pressure = msg->pt_bar[outlet_idx];
       const uint8_t cmd = active_goal_->get_goal()->command;
-      const bool is_start = (cmd == ControlBooster::Goal::COMPRESS_ONCE ||
-                             cmd == ControlBooster::Goal::COMPRESS_HOLD);
+      const bool is_start = (cmd == ControlBooster::Goal::COMPRESS);
       auto fb = std::make_shared<ControlBooster::Feedback>();
       fb->pressure         = pressure;
       fb->percent_complete = is_start ? std::clamp(pressure / target * 100.0, 0.0, 100.0) : 0.0;
@@ -252,58 +256,108 @@ void BoosterNode::on_booster_goal_accepted( std::shared_ptr<GoalHandleControlBoo
     return; 
   }
 
-  if (active_goal_) {
-    const uint8_t active_cmd = active_goal_->get_goal()->command;
-    const uint8_t new_cmd    = goal_handle->get_goal()->command;
-
-    if (active_cmd == new_cmd) {
-      // Same command — update target in place, no tree restart
-      booster_action_->abort_goal(active_goal_, "replaced by newer goal");
-      active_goal_.reset();
-      blackboard_->set("target_pressure", goal_handle->get_goal()->target_pressure);
-      blackboard_->set("cpm",             goal_handle->get_goal()->cpm);
-      blackboard_->set("speed_rpm",       goal_handle->get_goal()->speed_rpm);
-      active_goal_ = std::move(goal_handle);
-      // Return early — tree keeps running, timer already active
-      RCLCPP_INFO(get_logger(), "Booster goal updated in place (same command)");
-      return;
-    }
-
-    // Different command — full halt and restart
-    booster_action_->abort_goal(active_goal_, "replaced by newer goal");
-    active_goal_.reset();
-    if (active_tree_) { active_tree_->haltTree(); }
-  }
-
   const auto goal = goal_handle->get_goal();
 
-  // Select tree
-  if (!select_tree(goal->command)) {
+  // --- Validate all fields before any side effects ---
+
+  // Command
+  const bool valid_cmd = (goal->command == ControlBooster::Goal::COMPRESS   ||
+                          goal->command == ControlBooster::Goal::STOP        ||
+                          goal->command == ControlBooster::Goal::FORCE_STOP);
+  if (!valid_cmd) {
     RCLCPP_ERROR(get_logger(), "Unknown command: %d", goal->command);
     booster_action_->abort_goal(goal_handle, "unknown command");
     return;
   }
 
-  // Validate goal fields
-  if (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_) {
-    booster_action_->abort_goal(goal_handle, "target_pressure out of bounds");
+  // Pressure / cpm / speed — only for COMPRESS
+  const bool is_compress = (goal->command == ControlBooster::Goal::COMPRESS);
+  if (is_compress) {
+    if (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_) {
+      booster_action_->abort_goal(goal_handle, "target_pressure out of bounds");
+      return;
+    }
+    if (goal->cpm < cpm_min || goal->cpm > cpm_max) {
+      booster_action_->abort_goal(goal_handle, "cpm out of bounds");
+      return;
+    }
+    if (goal->speed_rpm < speed_min || goal->speed_rpm > speed_max) {
+      booster_action_->abort_goal(goal_handle, "speed_rpm out of bounds");
+      return;
+    }
+  }
+
+  // on_target — only validated for COMPRESS (ignored for STOP/FORCE_STOP)
+  if (is_compress) {
+    if (goal->on_target != ControlBooster::Goal::ON_TARGET_SUCCEED &&
+        goal->on_target != ControlBooster::Goal::ON_TARGET_HOLD) {
+      booster_action_->abort_goal(goal_handle, "on_target unknown value");
+      return;
+    }
+  }
+
+  // Inlet starvation fields
+  if (goal->on_inlet_starve != ControlBooster::Goal::INLET_STARVE_ABORT && goal->on_inlet_starve != ControlBooster::Goal::INLET_STARVE_PAUSE) {
+    booster_action_->abort_goal(goal_handle, "on_inlet_starve unknown value");
+    return;
+  }
+  if (goal->inlet_starve_bar != -1.0 && goal->inlet_starve_bar < 0.0) {
+    booster_action_->abort_goal(goal_handle, "inlet_starve_bar invalid (-1.0 = use param)");
+    return;
+  }
+  if (goal->inlet_resume_bar != -1.0 && goal->inlet_resume_bar < 0.0) {
+    booster_action_->abort_goal(goal_handle, "inlet_resume_bar invalid (-1.0 = use param)");
+    return;
+  }
+  if (goal->inlet_starve_bar >= 0.0 && goal->inlet_resume_bar >= 0.0 &&
+      goal->inlet_resume_bar <= goal->inlet_starve_bar) {
+    booster_action_->abort_goal(goal_handle, "inlet_resume_bar must be > inlet_starve_bar");
     return;
   }
 
-  if (goal->cpm < cpm_min || goal->cpm > cpm_max) {
-    booster_action_->abort_goal(goal_handle, "cpm out of bounds");
+  // Resolve effective thresholds — -1.0 sentinel means use booster param
+  double default_starve = 35.0, default_resume = 50.0;
+  (void)blackboard_->get("inlet_starve_bar", default_starve);
+  (void)blackboard_->get("inlet_resume_bar", default_resume);
+  const double eff_starve = (goal->inlet_starve_bar >= 0.0) ? goal->inlet_starve_bar : default_starve;
+  const double eff_resume = (goal->inlet_resume_bar >= 0.0) ? goal->inlet_resume_bar : default_resume;
+
+  // --- Preempt any active goal ---
+  if (active_goal_) {
+    if (active_goal_->get_goal()->command == goal->command) {
+      // Same command — update blackboard in place, tree keeps running
+      booster_action_->abort_goal(active_goal_, "replaced by newer goal");
+      active_goal_.reset();
+      blackboard_->set("target_pressure",  goal->target_pressure);
+      blackboard_->set("cpm",              goal->cpm);
+      blackboard_->set("speed_rpm",        goal->speed_rpm);
+      blackboard_->set("on_target",        goal->on_target);
+      blackboard_->set("on_inlet_starve",  goal->on_inlet_starve);
+      blackboard_->set("inlet_starve_bar", eff_starve);
+      blackboard_->set("inlet_resume_bar", eff_resume);
+      active_goal_ = std::move(goal_handle);
+      RCLCPP_INFO(get_logger(), "Booster goal updated in place (same command)");
+      return;
+    }
+    // Different command — halt existing tree before selecting new one
+    booster_action_->abort_goal(active_goal_, "replaced by newer goal");
+    active_goal_.reset();
+    if (active_tree_) { active_tree_->haltTree(); }
+  }
+
+  // --- Select tree (sets active_tree_) and write blackboard ---
+  if (!select_tree(goal->command)) {
+    booster_action_->abort_goal(goal_handle, "unknown command");
     return;
   }
 
-  if (goal->speed_rpm < speed_min || goal->speed_rpm > speed_max) {
-    booster_action_->abort_goal(goal_handle, "speed_rpm out of bounds");
-    return;
-  }
-
-  // Write validated goal fields to blackboard
-  blackboard_->set("target_pressure", goal->target_pressure);
-  blackboard_->set("cpm", goal->cpm);
-  blackboard_->set("speed_rpm", goal->speed_rpm);
+  blackboard_->set("target_pressure",  goal->target_pressure);
+  blackboard_->set("cpm",              goal->cpm);
+  blackboard_->set("speed_rpm",        goal->speed_rpm);
+  blackboard_->set("on_target",        goal->on_target);
+  blackboard_->set("on_inlet_starve",  goal->on_inlet_starve);
+  blackboard_->set("inlet_starve_bar", eff_starve);
+  blackboard_->set("inlet_resume_bar", eff_resume);
 
   // Start Timer
   active_goal_ = std::move(goal_handle);

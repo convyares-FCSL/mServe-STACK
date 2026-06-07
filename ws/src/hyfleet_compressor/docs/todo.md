@@ -103,21 +103,24 @@ All telemetry comes from ONE topic. Simpler than expected.
 - [x] Tick timer uses `active_tree_` pointer
 
 ### XML trees — one per command
-- [x] `start_tree.xml` — SubTree ID="Start": brings booster to WARM (VFD running, HPU
-      engaged, PCSV off). No InletPressureSafe — compress trees provide that context.
-- [x] `compress_once_tree.xml` — Parallel(Sequence(SubTree(Start) → LogCompressionStart →
-      SetPCSV(on) → OutletAtPressure) ∥ InletPressureSafe) → SubTree(Stop).
-      One-shot: startup → compress to target → ordered shutdown → OFF.
-- [x] `compress_hold_tree.xml` — Parallel(Sequence(SubTree(Start) → SetPCSV(on) →
-      OutletAtPressure → SetPCSV(off) → Repeat(-1)(PressureBelowThreshold → SetPCSV(on) →
-      OutletAtPressure → SetPCSV(off))) ∥ InletPressureSafe). Never returns SUCCESS —
-      loops indefinitely; must be preempted externally then STOP sent.
-      `PressureBelowThreshold` reads `reenable_offset_bar` from blackboard directly
-      and computes threshold = `target_pressure − reenable_offset_bar` internally.
-- [x] `stop_tree.xml` — SubTree ID="Stop": SetPCSV(off) → PressureBelowThreshold(hyd_a) →
+- [x] `start_tree.xml` — SubTree ID="Start": opens inlet SV, waits InletPressureStable,
+      starts VFD, opens HPU SV. Leaves booster in WARM state. SubTree(Stop) is registered
+      first so Start can reference it for cleanup on failure.
+- [x] `compress_tree.xml` — unified COMPRESS tree driven by `on_target` and `on_inlet_starve`
+      blackboard fields. `SubTree(Start)` → `ReactiveSequence(InletGuard ∥ Fallback)`.
+      Fallback routes on `OnTargetIs`:
+        `ON_TARGET_SUCCEED(0)`: `Parallel(Sequence(SetPCSV(on) → LogCompressionStart → HoldPCSV)
+        ∥ OutletAtPressure)` — exits SUCCESS when target reached.
+        `ON_TARGET_HOLD(1)`: `KeepRunningUntilFailure(Sequence(same_Parallel →
+        PressureBelowThreshold(reenable_pressure_bar, timeout=0)))` — never returns SUCCESS;
+        must be preempted by STOP.
+      `SetPCSV` is a pure RosServiceNode — fires PCSV-on, returns SUCCESS when PLC confirms.
+      `HoldPCSV` is the state owner — stays RUNNING indefinitely; fires PCSV-off async via
+      `onHalted()` on every exit path (target reached, inlet pause, goal abort).
+- [x] `stop_tree.xml` — SetPCSV(off) → PressureBelowThreshold(hyd_a) →
       PressureBelowThreshold(hyd_b) → ControlSV(HPU,close) → PressureBelowThreshold(hyd_primer)
       → StopVFD → ControlSV(inlet,close) → VFDStopped
-- [x] `force_stop_tree.xml` — Parallel(SetPCSV + HPU SV + StopVFD + inlet SV): slam all off
+- [x] `safe_stop_tree.xml` — Parallel(SetPCSV + HPU SV + StopVFD + inlet SV): slam all off
       simultaneously; no hydraulic checks, no VFD ramp confirmation.
 
 ### Feedback
@@ -144,19 +147,18 @@ All telemetry comes from ONE topic. Simpler than expected.
 - [x] `stop_tree.xml` registered with factory before `start_tree.xml` is instantiated
       (SubTree reference requires prior registration)
 
-**SYNC dependencies — note now, implement at Stage 3 SYNC:**
-- [x] `reenable_offset_bar` (default 50.0 bar) — declared in `booster_params.cpp`,
+**SYNC dependencies — implemented:**
+- [x] `reenable_pressure_bar` (default 230.0 bar) — declared in `booster_params.cpp`,
       written to blackboard in `load_params()`; config-time machine param, not a goal field.
-      Threshold computation (`target_pressure − reenable_offset_bar`) is done inside
-      `PressureBelowThreshold::onRunning()` when `reenable_offset_bar` port is provided
-      instead of `threshold_bar`. No derived key on the blackboard.
-- [x] `start_idle_tree.xml` — maintain loop implemented:
-      Phase 1 (startup, same as START): OFF → COMPRESSING → `OutletAtPressure`
-      Transition: `SetPCSV(off)` → WARM
-      Phase 2 (`Repeat num_cycles="-1"`): `PressureBelowThreshold(outlet, reenable_threshold_bar,
-      timeout_ms=0)` → `SetPCSV(on)` → `OutletAtPressure(target)` → `SetPCSV(off)` → repeat.
-      `timeout_ms=0` = no timeout (wait indefinitely for droop — wall-clock limit removed
-      via `timeout_ != 0ms` guard in `PressureBelowThreshold::onRunning`)
+      Absolute re-engage threshold — `PressureBelowThreshold::onRunning()` uses it directly
+      when `reenable_pressure_bar` port is provided instead of `threshold_bar`.
+- [x] `ON_TARGET_HOLD` maintain loop in `compress_tree.xml` (replaces `start_idle_tree.xml`):
+      After target reached, Parallel halts HoldPCSV → PCSV off → WARM.
+      `PressureBelowThreshold(outlet, reenable_pressure_bar, timeout_ms=0)` waits for droop.
+      Loop repeats via `KeepRunningUntilFailure`. `timeout_ms=0` = no wall-clock limit.
+- [x] `InletGuard` node: `INLET_STARVE_PAUSE` mode blocks (RUNNING) while starved, resuming
+      when inlet recovers above `inlet_resume_bar`. `inlet_starve_bar` and `inlet_resume_bar`
+      are goal fields, not params — coordinator sets them per booster role.
 
 ---
 
@@ -226,9 +228,9 @@ tree is selected) not inside the XML. Command is written to the slot blackboard 
 for each booster target.
 
 - [x] `parallel_low.xml`  — `BoostLow(action_name={low_booster_action}, command={command}, ...)`;
-      command = COMPRESS_ONCE(1) / STOP(3) / FORCE_STOP(4) written to slot blackboard by `start_op`
+      command = COMPRESS(1) / STOP(2) / FORCE_STOP(3) written to slot blackboard by `start_op`
 - [x] `parallel_high.xml` — same pattern for high booster
-- [ ] `sync.xml`          — stub; see SYNC section below
+- [x] `sync.xml`          — two-phase interstage coordination; see SYNC section below
 
 ### Feedback — PARALLEL
 
@@ -289,35 +291,45 @@ handle references.
 
 ---
 
-### SYNC mode — reactive interstage coordination
-
-Unblocked after PARALLEL paths work and booster preemption semantics are confirmed.
-SYNC is asymmetric: low is slaved to high, not a symmetric Parallel of equal goals.
+### SYNC mode — reactive interstage coordination (done)
 
 #### SYNC interstage BT nodes
 
-No custom `InterstageAboveBand`/`InterstateBelowBand` nodes needed. Low booster runs
-`COMPRESS_HOLD` at 280 bar target with `reenable_offset_bar=50` — self-manages the
-230–280 bar band autonomously via its own `compress_hold_tree.xml` maintain loop.
-Coordinator only sets goals; interstage pressure is never read by the coordinator tree.
+- [x] `InterstageAboveBand` — `StatefulActionNode` in coordinator tree; reads
+      `telemetry_cache` from blackboard; polls `pt_bar[interstage_pt_index] >=
+      interstage_start_threshold_bar`; returns RUNNING until threshold reached, then SUCCESS.
+      SV stays closed until this fires — ensures pressure is ready before coupling.
+- [x] `ControlSV` (coordinator) — `RosServiceNode<CompressorCmd>` →
+      `/hyfleet_compression/compressor_cmd`; ports: `service_name`, `sv_index`, `enable`;
+      cmd=CONTROL_SV. Opens/closes interstage SV as an explicit tree action.
 
-- [x] `CompressorControlSV` — `RosServiceNode<CompressorCmd>` → `/hyfleet_compression/compressor_cmd`;
-      ports: `service_name`, `sv_index`, `enable`; cmd=CONTROL_SV. Registered in
-      `register_bt_nodes()`. Controls interstage solenoid without coupling the tree
-      to low-booster telemetry.
+#### SYNC XML tree — `sync.xml` (done)
 
-#### SYNC XML tree
+Two-phase Fallback with abort cleanup:
 
-`sync.xml` — simple Parallel of two booster goals; no reactive interstage monitoring:
-- [ ] `Parallel(success_count=1)`: `BoostLow(COMPRESS_HOLD, target=280)` ∥
-      `Sequence(BoostHigh(COMPRESS_ONCE, target=900) → BoostLow(STOP))`
-      High completes → stops low → Parallel succeeds. Low self-manages 230–280 bar band.
-- [ ] `stop_sync_tree.xml` — stop high first (dependency order), then low
+```
+Fallback
+  Sequence(sync_run)                             ← success path
+    Timeout(sync_overall_timeout_ms)
+      Parallel(success_count=1, failure_count=1)
+        BoostLow(COMPRESS, ON_TARGET_HOLD, interstage_target_bar)  ← Phase 1: hold band
+        Sequence(high_stage)
+          InterstageAboveBand                    ← wait for PT >= start_threshold
+          ControlSV(interstage_sv_index, true)   ← open SV (Phase 2 begins)
+          BoostHigh(COMPRESS, ON_TARGET_SUCCEED, INLET_STARVE_PAUSE, target_pressure)
+    ControlSV(interstage_sv_index, false)        ← close SV after success
+    BoostLow(STOP)
+    BoostHigh(STOP)
+  ForceFailure
+    Sequence(abort_cleanup)
+      ControlSV(interstage_sv_index, false)      ← close SV on abort
+      BoostLow(STOP)
+      BoostHigh(STOP)
+```
 
-#### SYNC feedback
-
-- [ ] Single goal handle; feedback = `min(low_pressure, high_pressure)` during Phase 1;
-      `high_pressure` once high is online; `percent_complete` vs `target_pressure`
+SV is closed and both boosters are stopped in both success and abort paths.
+Interstage SV-driven physics in the sim (not `sync_mode` param) means the sim
+responds correctly to coordinator ControlSV calls.
 
 #### SYNC coordinator telemetry
 
@@ -326,9 +338,11 @@ Coordinator only sets goals; interstage pressure is never read by the coordinato
 - [x] `CompressorNode` owns `telemetry_sub_` → writes `telemetry_cache_` on each message
 - [x] `telemetry_cache_` placed on `shared_blackboard_` at configure; all BT nodes share it
 - [x] `CompressorCmd.srv` — `INVALID=0`, `CONTROL_SV=1`, `CONTROL_HEATER=2`; fields:
-      `cmd`, `enable`, `index` (SV index into sv[5]), `setpoint` (heater); same style as `BoosterCmd`
-- [x] `CompressorControlSV` — see §SYNC interstage BT nodes above
-- [ ] CPM adjustment on low booster — `RosServiceNode` if dynamic CPM tuning needed (not required for SYNC)
+      `cmd`, `enable`, `index`, `setpoint`; same style as `BoosterCmd`
+- [x] Interstage SYNC params: `interstage_target_bar` (280.0), `interstage_start_threshold_bar`
+      (200.0), `interstage_starvation_bar` (175.0), `sync_overall_timeout_ms` (3600000)
+- [x] All 6 integration tests passing: `test_low`, `test_high`, `test_parallel_both`,
+      `test_setpoint_update`, `test_stop`, `test_sync`
 
 ---
 
@@ -399,16 +413,15 @@ against it **unchanged**. Implement using a local AI agent driven by that prompt
 - [x] `BoosterCmd.srv` field rename: unified `speed_rpm`/`cpm` → `setpoint`;
       `sv_index` → `index`. All booster C++ code + sim updated to match.
 - [x] `CompressorCmd` service added to sim at `/hyfleet_compression/compressor_cmd`;
-      `CONTROL_SV` updates `_interstage_sv` at `compressor.interstage_sv_index` (default 2);
+      `CONTROL_SV` updates `_interstage_sv` at `compressor.interstage_sv_index` (default 4);
       `CONTROL_HEATER` logged and ACKed (stub).
 - [x] Second booster (`/high_booster/booster_cmd`) — both boosters run independently from
       their own command services and own `BoosterState`
-- [x] SYNC interstage coupling: `physics.sync_mode` param — when true,
-      `high_booster.inlet_p = low_booster.outlet_p` each physics tick
+- [x] SYNC interstage coupling: driven by live `_interstage_sv` state (not a static param).
+      When interstage SV is open: `high_booster.inlet_p = low_booster.outlet_p` each tick.
 - [x] SYNC interstage draw: `physics.interstage_draw_bar_per_s` (default 8.0 bar/s) — when
-      `sync_mode=True` and high booster PCSV+VFD active, `low_booster.outlet_p` decays at
-      that rate (floored at `low_booster.inlet_p`). Allows `compress_hold` maintain loop to
-      trigger during SYNC tests without hardware.
+      interstage SV open and high booster PCSV+VFD active, `low_booster.outlet_p` decays at
+      that rate (floored at `low_booster.inlet_p`). Drives low booster hold loop without hardware.
 
 ### Launch
 - [x] `hyfleet_sim/launch/hyfleet_sim.launch.py` — brings up

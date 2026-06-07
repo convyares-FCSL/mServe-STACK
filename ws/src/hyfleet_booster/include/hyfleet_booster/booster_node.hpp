@@ -51,7 +51,7 @@ private:
   // Behavior tree
   std::unique_ptr<BT::BehaviorTreeFactory> factory_;
   std::shared_ptr<BT::Blackboard> blackboard_;
-  std::array<BT::Tree, 4> trees_;  // command value - 1: COMPRESS_ONCE, COMPRESS_HOLD, STOP, FORCE_STOP
+  std::array<BT::Tree, 3> trees_;  // [0]=compress, [1]=Stop, [2]=SafeStop
   BT::Tree* active_tree_ = nullptr;
   void register_bt_nodes();
   void build_bt_trees();

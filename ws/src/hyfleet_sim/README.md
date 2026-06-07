@@ -12,8 +12,10 @@ Compression test simulator for the HyFleet compression module. Replaces the ADS 
 ## What it does
 
 - Advertises `BoosterCmd` services at `/low_booster/booster_cmd` and `/high_booster/booster_cmd`
+- Advertises `CompressorCmd` service at `/hyfleet_compression/compressor_cmd` (interstage SV + heater stubs)
 - Publishes `CompressorTelemetry` at 10 Hz into the same array indices the booster nodes read
 - Runs trivial physics: while PCSV enabled and VFD running, outlet pressure rises at `bar_per_cpm × cpm` per cycle; holds at `target_pressure`; holds when PCSV off
+- SYNC interstage coupling: when the interstage SV is open (via `CompressorCmd`), the high booster's inlet tracks the low booster's outlet each physics tick; the low booster outlet decays at `interstage_draw_bar_per_s` when the high booster is active
 
 ## Build
 
@@ -56,11 +58,12 @@ All scripts are in `ws/src/hyfleet_sim/scripts/`. Each exits 0 on pass, 1 on fai
 
 | Script | What it tests | Pass condition |
 |---|---|---|
-| `test_low.py` | LOW booster: START → compress to 380 bar | Goal `SUCCEEDED`, outlet reaches target |
-| `test_high.py` | HIGH booster: START → compress to 700 bar | Goal `SUCCEEDED`, outlet reaches target |
+| `test_low.py` | LOW booster: COMPRESS → reach 380 bar | Goal `SUCCEEDED`, outlet reaches target |
+| `test_high.py` | HIGH booster: COMPRESS → reach 700 bar | Goal `SUCCEEDED`, outlet reaches target |
 | `test_parallel_both.py` | Both LOW (380 bar) and HIGH (700 bar) simultaneously | Both goals `SUCCEEDED` independently |
 | `test_setpoint_update.py` | LOW running at 350 bar, re-goaled to 480 bar mid-run | First goal `ABORTED` ("replaced by newer goal"), second goal `SUCCEEDED` |
 | `test_stop.py` | HIGH started at 700 bar, STOP sent after 3 s | START goal `ABORTED`, STOP goal `SUCCEEDED` |
+| `test_sync.py` | SYNC: low builds interstage to 280 bar, SV opens, high compresses to 900 bar | SYNC goal `SUCCEEDED` |
 
 Boosters and coordinator run completely unchanged. The lifecycle manager configures and activates them in order: `low_booster` → `high_booster` → `hyfleet_compression`.
 
@@ -74,7 +77,8 @@ Intentionally minimal — the sim exists to make pressure respond to commands, n
 | `STOP_VFD` | `vfd_running = False`; speed → 0 |
 | `SET_PCSV(enable=true, cpm)` | `pcsv_enabled = True`; outlet rises at `bar_per_cpm × cpm × dt` per physics tick |
 | `SET_PCSV(enable=false)` | `pcsv_enabled = False`; outlet holds |
-| `CONTROL_SV(sv_index, enable)` | Valve state reflected in `sv[sv_index]` in telemetry |
+| `CONTROL_SV(sv_index, enable)` | Valve state reflected in `sv[sv_index]` in telemetry; interstage SV (at `compressor.interstage_sv_index`) also enables interstage coupling |
+| Interstage SV open | `high.inlet_p = low.outlet_p` each tick; `low.outlet_p` decays at `interstage_draw_bar_per_s` when high PCSV+VFD active |
 | Outlet reaches `target_pressure_bar` | Holds — no further rise |
 
 ## Parameters
@@ -84,7 +88,8 @@ Intentionally minimal — the sim exists to make pressure respond to commands, n
 | `physics.bar_per_cpm` | `1.0` | Rise rate (bar per cycle). Increase for faster test runs. |
 | `physics.physics_rate_hz` | `100.0` | Physics tick rate |
 | `physics.telemetry_rate_hz` | `10.0` | Telemetry publish rate |
-| `physics.sync_mode` | `false` | When true, high-booster inlet tracks low-booster outlet (SYNC mode) |
+| `physics.interstage_draw_bar_per_s` | `8.0` | Rate at which active high booster drains the low booster outlet (bar/s). Drives the low booster hold loop without hardware. |
+| `compressor.interstage_sv_index` | `4` | `sv[]` index of the interstage solenoid valve |
 | `low_booster.inlet_pressure_bar` | `265.0` | Simulated inlet supply |
 | `low_booster.initial_outlet_bar` | `265.0` | Outlet pressure at startup |
 | `low_booster.target_pressure_bar` | `500.0` | Outlet cap |
@@ -102,4 +107,4 @@ Full `tt_celsius` index params also available — see `sim_node.py` parameter de
 
 ## SYNC mode
 
-Set `physics.sync_mode: true` to couple the boosters: the high booster's inlet pressure is set to the low booster's outlet pressure each physics tick. Used for testing the SYNC coordinator path.
+SYNC coupling is driven by the live state of the interstage SV — there is no separate `sync_mode` parameter. When the coordinator sends `CONTROL_SV(sv_index=4, enable=true)`, the sim's physics tick couples the stages: the high booster's inlet tracks the low booster's outlet each tick, and the low booster outlet decays at `interstage_draw_bar_per_s` when the high booster is compressing. Closing the SV removes the coupling. The sim's behaviour therefore exactly follows the coordinator's `sync.xml` tree decisions.

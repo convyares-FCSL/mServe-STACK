@@ -1,6 +1,11 @@
 # HyFleet compression stack parameters — sim test configuration.
 # Node names match the launch file.
 
+compressor_sim:
+  ros__parameters:
+    compressor:
+      interstage_sv_index: 4
+
 low_booster:
   ros__parameters:
     # Index mapping — confirmed against sim_node.py and compression_module_decisions.md
@@ -46,7 +51,9 @@ low_booster:
     # Hydraulic pressure guard — sim always 0 bar so threshold passes immediately
     hyd_pressure_threshold_bar: 10.0
     hyd_timeout_ms: 3000
-    reenable_offset_bar: 10.0
+    reenable_pressure_bar: 230.0
+    inlet_starve_bar: 35.0
+    inlet_resume_bar: 50.0
 
 high_booster:
   ros__parameters:
@@ -86,6 +93,8 @@ high_booster:
     hyd_pressure_threshold_bar: 10.0
     hyd_timeout_ms: 3000
     reenable_offset_bar: 10.0
+    inlet_starve_bar: 35.0
+    inlet_resume_bar: 50.0
 
 hyfleet_compression:
   ros__parameters:
@@ -99,3 +108,7 @@ hyfleet_compression:
     default_speed_rpm: 1500.0
     performance_cpm: 16.0
     eco_cpm: 8.0
+    interstage_target_bar: 280.0
+    interstage_start_threshold_bar: 200.0
+    interstage_starvation_bar: 175.0
+    sync_overall_timeout_ms: 3600000
