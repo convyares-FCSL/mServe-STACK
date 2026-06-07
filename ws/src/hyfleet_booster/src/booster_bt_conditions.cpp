@@ -331,7 +331,10 @@ BT::NodeStatus PressureBelowThreshold::onRunning() {
             return BT::NodeStatus::FAILURE;
         }
         double target{};
-        config().blackboard->get("target_pressure", target);
+        if (!config().blackboard->get("target_pressure", target)) {
+            RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: target_pressure not on blackboard");
+            return BT::NodeStatus::FAILURE;
+        }
         threshold = target - offset_res.value();
     }
 

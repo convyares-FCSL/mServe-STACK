@@ -29,7 +29,7 @@ bool StartVFD::setRequest(Request::SharedPtr& request) {
     //TODO get config and check aginst speed range
 
     request->cmd = Request::START_VFD;
-    request->speed_rpm = speed;
+    request->setpoint = speed;
     return true;
 }
 
@@ -107,7 +107,7 @@ bool SetPCSV::setRequest(Request::SharedPtr& request) {
 
     request->cmd = Request::SET_PCSV;
     request->enable = enable;
-    request->cpm = cpm;
+    request->setpoint = cpm;
     
     return true;
 }
@@ -152,7 +152,7 @@ bool ControlSV::setRequest(Request::SharedPtr& request) {
 
     request->cmd = Request::CONTROL_SV;
     request->enable = enable_res.value();
-    request->sv_index = sv_index_res.value();
+    request->index = sv_index_res.value();
 
     return true;
 }

@@ -10,15 +10,15 @@
         <Sequence name="startup_and_compress">
           <SubTree ID="Start" _autoremap="true"/>
 
-          <LogCompressionStart
-            outlet_pt_index="{outlet_pt_index}"
-            target_pressure="{target_pressure}"
-          />
-
           <SetPCSV
             service_name="{service_name}"
             enable="true"
             cpm="{cpm}"
+          />
+
+          <LogCompressionStart
+            outlet_pt_index="{outlet_pt_index}"
+            target_pressure="{target_pressure}"
           />
 
           <OutletAtPressure

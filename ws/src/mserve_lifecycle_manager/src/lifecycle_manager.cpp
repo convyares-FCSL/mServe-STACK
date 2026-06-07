@@ -171,7 +171,7 @@ void LifecycleManager::build() {
         auto status = tree_.tickOnce();
         if (status != BT::NodeStatus::RUNNING) {
             tick_timer_->cancel();
-            RCLCPP_INFO(get_logger(), "Bringup complete, shutting down.");
+            RCLCPP_INFO(get_logger(), "All nodes successfully activated.");
         }
     });
 

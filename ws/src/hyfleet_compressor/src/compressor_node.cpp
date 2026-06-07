@@ -4,6 +4,7 @@
 #include <hyfleet_compressor/compressor_limits.hpp>
 #include "include/compressor_action.hpp"
 #include "include/compressor_bt_nodes.hpp"
+#include "include/compressor_telemetry_cache.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace hyfleet_compressor {
@@ -40,16 +41,26 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
   shared_blackboard_.reset();
 
   try {
+    // Setup action server
     action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     compressor_action_ = std::make_unique<CompressorAction>(*this, "~/control_compressor");
     compressor_action_->configure(action_callback_group_);
     compressor_action_->set_goal_callback( [this](auto goal_handle) { this->on_compressor_goal_accepted(goal_handle); });
 
-    // BT node : Create blackboard, load params, register nodes and build trees
+    // Set up blackboard
     rclcpp::NodeOptions bt_node_options;
     bt_node_options.use_global_arguments(false);
     bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt", bt_node_options);
     shared_blackboard_ = BT::Blackboard::create();
+
+    // Setup telemetry ingresion
+    telemetry_cache_ = std::make_shared<CompressorTelemetryCache>();
+    shared_blackboard_->set("telemetry_cache", telemetry_cache_);
+    telemetry_sub_ = create_subscription<mserve_interfaces::msg::CompressorTelemetry>(
+    "compressor_telemetry", 10,
+    [this](std::shared_ptr<const mserve_interfaces::msg::CompressorTelemetry> msg) {
+        telemetry_cache_->update(msg, now());
+    });
 
     load_params();
     register_bt_nodes();
@@ -93,6 +104,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
       if (slot.goal)  { compressor_action_->abort_goal(slot.goal, "<reason>"); slot.goal.reset(); }
   }
 
+  telemetry_sub_.reset();
+  telemetry_cache_.reset();
   bt_node_.reset();
   shared_blackboard_.reset();
   factory_.reset();

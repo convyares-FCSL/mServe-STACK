@@ -14,12 +14,14 @@
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/blackboard.h>
 #include "mserve_interfaces/action/control_compressor.hpp"
+#include "mserve_interfaces/msg/compressor_telemetry.hpp"
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 namespace hyfleet_compressor {
 using ControlCompressor = mserve_interfaces::action::ControlCompressor;
 using GoalHandleControlCompressor = rclcpp_action::ServerGoalHandle<ControlCompressor>;
 
+class CompressorTelemetryCache;
 class CompressorAction;
 
 class CompressorNode : public rclcpp_lifecycle::LifecycleNode {
@@ -78,6 +80,10 @@ private:
   double performance_cpm_;
   double eco_cpm_;
   double default_speed_rpm_;
+
+  // Telemetry — node owns the subscription; cache is shared with BT nodes via blackboard
+  std::shared_ptr<CompressorTelemetryCache> telemetry_cache_;
+  rclcpp::Subscription<mserve_interfaces::msg::CompressorTelemetry>::SharedPtr telemetry_sub_;
 };
 
 } // namespace hyfleet_compressor

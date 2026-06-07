@@ -6,23 +6,21 @@ Simulated ADS bridge + PLC + physical plant for HyFleet compression tests.
 Boundary
 --------
     [ booster / coordinator nodes ]    (unchanged)
-          |  BoosterCmd service calls         ^  CompressorTelemetry (~10 Hz)
-          v                                   |
+          |  BoosterCmd / CompressorCmd service calls   ^  CompressorTelemetry (~10 Hz)
+          v                                             |
     [ CompressorSimNode ]  ==  ADS bridge + PLC + plant (simulated)
 
-For each booster the node:
-  - Advertises the BoosterCmd service at  /<node_name>/booster_cmd
-  - Runs a physics tick at ~100 Hz
-  - Publishes CompressorTelemetry at ~10 Hz into the confirmed index slots
-
-Physics (trivial, command-driven — §5 of Sim_prompt.md)
---------------------------------------------------------
+Physics (trivial, command-driven)
+----------------------------------
   pcsv_enabled AND vfd_running  =>  outlet_p += bar_per_cpm * cpm * dt  (per tick)
   outlet_p >= target_pressure   =>  hold at target_pressure
   pcsv_enabled=False            =>  hold current pressure (no decay)
   inlet_p                       =>  constant inlet_pressure_bar (standalone)
-                                    or low_booster outlet (SYNC — Phase 2)
-  VFD                           =>  instant on/off; vfd_speed_rpm reflects commanded speed
+                                    or low_booster outlet (SYNC mode)
+  SYNC interstage draw          =>  when high compressing, low outlet falls at
+                                    interstage_draw_bar_per_s; allows compress_hold
+                                    maintain loop to be exercised
+  VFD                           =>  instant on/off; vfd_speed_rpm reflects setpoint
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 from mserve_interfaces.msg import CompressorTelemetry
-from mserve_interfaces.srv import BoosterCmd
+from mserve_interfaces.srv import BoosterCmd, CompressorCmd
 from std_srvs.srv import Trigger
 
 
@@ -44,21 +42,17 @@ class BoosterState:
     """All runtime state for one simulated booster."""
 
     def __init__(self) -> None:
-        # Command state
         self.vfd_running: bool = False
-        self.vfd_speed_rpm: float = 0.0        # commanded speed when running
+        self.vfd_speed_rpm: float = 0.0
         self.pcsv_enabled: bool = False
         self.cpm: float = 0.0
 
-        # Physical state
-        self.outlet_p: float = 265.0           # bar  (starts at inlet level)
-        self.inlet_p: float = 265.0            # bar  (constant unless SYNC)
+        self.outlet_p: float = 265.0
+        self.inlet_p: float = 265.0
 
-        # Valve state  (sv array, 5 entries total)
-        self.sv: list[bool] = [False] * 5      # full array; indexed by sv_index param
+        self.sv: list[bool] = [False] * 5
 
-        # Target used to cap outlet rise
-        self.target_pressure: float = 900.0    # bar  (updated by SET_PCSV context — see note)
+        self.target_pressure: float = 900.0
 
 
 # ---------------------------------------------------------------------------
@@ -69,34 +63,20 @@ class CompressorSimNode(Node):
     """
     Single ROS 2 node that simulates the ADS bridge, PLC, and plant.
 
-    Parameters (all overridable at launch)
-    ---------------------------------------
-    physics.bar_per_cpm          float   Rate constant (bar per cycle). Default 1.0.
-    physics.physics_rate_hz      float   Physics timer frequency.        Default 100.0.
-    physics.telemetry_rate_hz    float   Telemetry publish frequency.    Default 10.0.
-    physics.sync_mode            bool    High-booster inlet = low-booster outlet. Default false.
+    Parameters
+    ----------
+    physics.bar_per_cpm              Rise rate (bar per cycle). Default 1.0.
+    physics.physics_rate_hz          Physics tick rate. Default 100.0.
+    physics.telemetry_rate_hz        Telemetry publish rate. Default 10.0.
+    physics.sync_mode                High-booster inlet = low-booster outlet. Default false.
+    physics.interstage_draw_bar_per_s  Rate at which high booster draws from interstage
+                                       when compressing (bar/s). Only active in sync_mode.
+                                       Default 8.0.
 
-    low_booster.inlet_pressure_bar   float   Simulated inlet supply (bar). Default 265.0.
-    low_booster.initial_outlet_bar   float   Outlet pressure at t=0 (bar). Default 265.0.
-    low_booster.target_pressure_bar  float   Max outlet (bar).             Default 500.0.
-    low_booster.inlet_pt_index       int     Index into pt_bar[16].        Default 0.
-    low_booster.outlet_pt_index      int     Index into pt_bar[16].        Default 7.
-    low_booster.inlet_tt_index       int     Index into tt_celsius[12].    Default 0.
-    low_booster.outlet_tt_index      int     Index into tt_celsius[12].    Default 2.
-    low_booster.vfd_index            int     Index into vfd arrays[2].     Default 0.
-
-    high_booster.inlet_pressure_bar  float   Simulated inlet supply (bar). Default 265.0.
-    high_booster.initial_outlet_bar  float   Outlet pressure at t=0 (bar). Default 265.0.
-    high_booster.target_pressure_bar float   Max outlet (bar).             Default 900.0.
-    high_booster.inlet_pt_index      int     Index into pt_bar[16].        Default 1.
-    high_booster.outlet_pt_index     int     Index into pt_bar[16].        Default 2.
-    high_booster.inlet_tt_index      int     Index into tt_celsius[12].    Default 4.
-    high_booster.outlet_tt_index     int     Index into tt_celsius[12].    Default 6.
-    high_booster.vfd_index           int     Index into vfd arrays[2].     Default 1.
+    low_booster / high_booster.*     Per-booster index maps and initial conditions.
+    compressor.interstage_sv_index   Index of the interstage SV in sv[5]. Default 2.
     """
 
-    # Names of the two booster instances — must match the names used in the launch file
-    # and the booster node's own `/<name>/booster_cmd` service construction.
     BOOSTER_NAMES = ('low_booster', 'high_booster')
 
     def __init__(self) -> None:
@@ -105,12 +85,12 @@ class CompressorSimNode(Node):
         # ------------------------------------------------------------------
         # Declare parameters
         # ------------------------------------------------------------------
-        self.declare_parameter('physics.bar_per_cpm',       1.0)
-        self.declare_parameter('physics.physics_rate_hz',   100.0)
-        self.declare_parameter('physics.telemetry_rate_hz', 10.0)
-        self.declare_parameter('physics.sync_mode',         False)
+        self.declare_parameter('physics.bar_per_cpm',                1.0)
+        self.declare_parameter('physics.physics_rate_hz',            100.0)
+        self.declare_parameter('physics.telemetry_rate_hz',          10.0)
+        self.declare_parameter('physics.sync_mode',                  False)
+        self.declare_parameter('physics.interstage_draw_bar_per_s',  8.0)
 
-        # Per-booster parameters  (defaults match the confirmed index mapping §0)
         defaults = {
             'low_booster': dict(
                 inlet_pressure_bar=265.0,
@@ -143,15 +123,18 @@ class CompressorSimNode(Node):
             self.declare_parameter(f'{name}.outlet_tt_index',     d['outlet_tt_index'])
             self.declare_parameter(f'{name}.vfd_index',           d['vfd_index'])
 
+        self.declare_parameter('compressor.interstage_sv_index', 2)
+
         # ------------------------------------------------------------------
         # Read parameters
         # ------------------------------------------------------------------
-        self._bar_per_cpm      = self.get_parameter('physics.bar_per_cpm').value
-        self._physics_rate_hz  = self.get_parameter('physics.physics_rate_hz').value
-        self._telemetry_rate_hz = self.get_parameter('physics.telemetry_rate_hz').value
-        self._sync_mode        = self.get_parameter('physics.sync_mode').value
+        self._bar_per_cpm             = self.get_parameter('physics.bar_per_cpm').value
+        self._physics_rate_hz         = self.get_parameter('physics.physics_rate_hz').value
+        self._telemetry_rate_hz       = self.get_parameter('physics.telemetry_rate_hz').value
+        self._sync_mode               = self.get_parameter('physics.sync_mode').value
+        self._interstage_draw         = self.get_parameter('physics.interstage_draw_bar_per_s').value
+        self._interstage_sv_index     = self.get_parameter('compressor.interstage_sv_index').value
 
-        # Index mapping (stored per-booster, keyed by booster name)
         self._idx: dict[str, dict] = {}
         for name in self.BOOSTER_NAMES:
             self._idx[name] = {
@@ -162,23 +145,25 @@ class CompressorSimNode(Node):
                 'vfd':       self.get_parameter(f'{name}.vfd_index').value,
             }
 
-        # Booster physical state + initial values for reset
         self._initial: dict[str, dict] = {}
         self._state: dict[str, BoosterState] = {}
         for name in self.BOOSTER_NAMES:
             s = BoosterState()
-            s.inlet_p  = self.get_parameter(f'{name}.inlet_pressure_bar').value
-            s.outlet_p = self.get_parameter(f'{name}.initial_outlet_bar').value
+            s.inlet_p         = self.get_parameter(f'{name}.inlet_pressure_bar').value
+            s.outlet_p        = self.get_parameter(f'{name}.initial_outlet_bar').value
             s.target_pressure = self.get_parameter(f'{name}.target_pressure_bar').value
             self._state[name] = s
             self._initial[name] = {
-                'inlet_p':        s.inlet_p,
-                'outlet_p':       s.outlet_p,
+                'inlet_p':         s.inlet_p,
+                'outlet_p':        s.outlet_p,
                 'target_pressure': s.target_pressure,
             }
 
+        # Interstage SV state — owned by the coordinator, tracked separately
+        self._interstage_sv: bool = False
+
         # ------------------------------------------------------------------
-        # Services  — one per booster at /<booster_name>/booster_cmd
+        # Services  — BoosterCmd per booster, CompressorCmd for coordinator
         # ------------------------------------------------------------------
         self._services: list = []
         for name in self.BOOSTER_NAMES:
@@ -189,6 +174,13 @@ class CompressorSimNode(Node):
             )
             self._services.append(srv)
             self.get_logger().info(f'Advertising /{name}/booster_cmd')
+
+        self._compressor_srv = self.create_service(
+            CompressorCmd,
+            '/hyfleet_compression/compressor_cmd',
+            self._compressor_cmd_cb,
+        )
+        self.get_logger().info('Advertising /hyfleet_compression/compressor_cmd')
 
         # ------------------------------------------------------------------
         # Publisher  — CompressorTelemetry
@@ -207,37 +199,31 @@ class CompressorSimNode(Node):
         # ------------------------------------------------------------------
         # Timers
         # ------------------------------------------------------------------
-        physics_period = 1.0 / self._physics_rate_hz
-        telemetry_period = 1.0 / self._telemetry_rate_hz
-
-        self._physics_timer = self.create_timer(physics_period, self._physics_tick)
-        self._telemetry_timer = self.create_timer(telemetry_period, self._publish_telemetry)
+        self._physics_timer   = self.create_timer(1.0 / self._physics_rate_hz,   self._physics_tick)
+        self._telemetry_timer = self.create_timer(1.0 / self._telemetry_rate_hz, self._publish_telemetry)
         self.create_service(Trigger, '~/reset', self._reset_cb)
 
         self.get_logger().info(
             f'CompressorSimNode started — physics {self._physics_rate_hz} Hz, '
             f'telemetry {self._telemetry_rate_hz} Hz, '
-            f'bar_per_cpm={self._bar_per_cpm}, sync_mode={self._sync_mode}'
+            f'bar_per_cpm={self._bar_per_cpm}, sync_mode={self._sync_mode}, '
+            f'interstage_draw={self._interstage_draw} bar/s'
         )
 
     # ------------------------------------------------------------------
-    # Service callback factory
+    # BoosterCmd service callback factory
     # ------------------------------------------------------------------
 
     def _make_booster_cmd_cb(self, booster_name: str):
-        """Return a BoosterCmd service callback bound to *booster_name*."""
-
         def cb(request: BoosterCmd.Request, response: BoosterCmd.Response):
             s = self._state[booster_name]
             cmd = request.cmd
 
             if cmd == BoosterCmd.Request.START_VFD:
                 s.vfd_running = True
-                s.vfd_speed_rpm = request.speed_rpm
+                s.vfd_speed_rpm = request.setpoint
                 response.success = True
-                response.message = (
-                    f'{booster_name}: VFD started at {request.speed_rpm:.1f} rpm'
-                )
+                response.message = f'{booster_name}: VFD started at {request.setpoint:.1f} rpm'
                 self.get_logger().info(response.message)
 
             elif cmd == BoosterCmd.Request.STOP_VFD:
@@ -250,20 +236,18 @@ class CompressorSimNode(Node):
             elif cmd == BoosterCmd.Request.SET_PCSV:
                 s.pcsv_enabled = request.enable
                 if request.enable:
-                    s.cpm = request.cpm
+                    s.cpm = request.setpoint
                 response.success = True
                 state_str = f'enabled at {s.cpm:.1f} cpm' if request.enable else 'disabled'
                 response.message = f'{booster_name}: PCSV {state_str}'
                 self.get_logger().info(response.message)
 
             elif cmd == BoosterCmd.Request.CONTROL_SV:
-                idx = int(request.sv_index)
+                idx = int(request.index)
                 if 0 <= idx < len(s.sv):
                     s.sv[idx] = request.enable
                     response.success = True
-                    response.message = (
-                        f'{booster_name}: SV[{idx}] set to {request.enable}'
-                    )
+                    response.message = f'{booster_name}: SV[{idx}] set to {request.enable}'
                 else:
                     response.success = False
                     response.message = (
@@ -281,7 +265,37 @@ class CompressorSimNode(Node):
         return cb
 
     # ------------------------------------------------------------------
-    # Reset service  — restores all booster state to initial param values
+    # CompressorCmd service callback
+    # ------------------------------------------------------------------
+
+    def _compressor_cmd_cb(self, request: CompressorCmd.Request, response: CompressorCmd.Response):
+        cmd = request.cmd
+
+        if cmd == CompressorCmd.Request.CONTROL_SV:
+            idx = int(request.index)
+            if idx == self._interstage_sv_index:
+                self._interstage_sv = request.enable
+                response.success = True
+                response.message = f'compressor: interstage SV[{idx}] set to {request.enable}'
+            else:
+                response.success = False
+                response.message = f'compressor: SV index {idx} not managed by coordinator'
+            self.get_logger().info(response.message)
+
+        elif cmd == CompressorCmd.Request.CONTROL_HEATER:
+            response.success = True
+            response.message = f'compressor: heater enable={request.enable} setpoint={request.setpoint}'
+            self.get_logger().info(response.message)
+
+        else:
+            response.success = False
+            response.message = f'compressor: unknown cmd {cmd}'
+            self.get_logger().warn(response.message)
+
+        return response
+
+    # ------------------------------------------------------------------
+    # Reset service
     # ------------------------------------------------------------------
 
     def _reset_cb(self, _: Trigger.Request, response: Trigger.Response) -> Trigger.Response:
@@ -296,6 +310,7 @@ class CompressorSimNode(Node):
             s.pcsv_enabled    = False
             s.cpm             = 0.0
             s.sv              = [False] * 5
+        self._interstage_sv = False
         self.get_logger().info('Sim reset to initial conditions')
         response.success = True
         response.message = 'reset OK'
@@ -308,19 +323,29 @@ class CompressorSimNode(Node):
     def _physics_tick(self) -> None:
         dt = 1.0 / self._physics_rate_hz
 
-        # SYNC coupling: high-booster inlet tracks low-booster outlet
         if self._sync_mode:
+            # High booster inlet tracks low booster outlet
             self._state['high_booster'].inlet_p = self._state['low_booster'].outlet_p
 
         for name in self.BOOSTER_NAMES:
             s = self._state[name]
-
             if s.pcsv_enabled and s.vfd_running:
-                rise = self._bar_per_cpm * s.cpm * dt
-                s.outlet_p += rise
-                if s.outlet_p >= s.target_pressure:
-                    s.outlet_p = s.target_pressure
-            # PCSV off or VFD off: hold current pressure (no decay — per spec §5)
+                s.outlet_p = min(
+                    s.outlet_p + self._bar_per_cpm * s.cpm * dt,
+                    s.target_pressure,
+                )
+
+        # SYNC interstage draw: when high booster is compressing it draws from
+        # the interstage (low booster outlet), causing pressure to decay.
+        # This allows the compress_hold maintain loop to be exercised in tests.
+        if self._sync_mode:
+            high = self._state['high_booster']
+            low  = self._state['low_booster']
+            if high.pcsv_enabled and high.vfd_running:
+                low.outlet_p = max(
+                    low.outlet_p - self._interstage_draw * dt,
+                    low.inlet_p,    # can't drop below supply
+                )
 
     # ------------------------------------------------------------------
     # Telemetry publish  (~10 Hz)
@@ -331,7 +356,6 @@ class CompressorSimNode(Node):
         msg.timestamp = self.get_clock().now().to_msg()
         msg.mode = CompressorTelemetry.AUTO
 
-        # Zero-initialise arrays (Python lists must be the right size)
         msg.pt_bar        = [0.0] * 16
         msg.tt_celsius    = [0.0] * 12
         msg.sv            = [False] * 5
@@ -345,15 +369,12 @@ class CompressorSimNode(Node):
             s   = self._state[name]
             idx = self._idx[name]
 
-            # Pressure transducers
             msg.pt_bar[idx['inlet_pt']]  = s.inlet_p
             msg.pt_bar[idx['outlet_pt']] = s.outlet_p
 
-            # Temperature transducers (stub: ambient 20 °C)
             msg.tt_celsius[idx['inlet_tt']]  = 20.0
             msg.tt_celsius[idx['outlet_tt']] = 20.0
 
-            # VFD
             vfd_i = idx['vfd']
             if s.vfd_running:
                 msg.vfd_state[vfd_i]     = CompressorTelemetry.VFD_RUNNING
@@ -362,13 +383,11 @@ class CompressorSimNode(Node):
                 msg.vfd_state[vfd_i]     = CompressorTelemetry.VFD_IDLE
                 msg.vfd_speed_rpm[vfd_i] = 0.0
 
-        # Solenoid valves — merge from all boosters into the shared array.
-        # Each booster owns its sv entries; we write each booster's sv[i] at its
-        # own sv_index positions.  The full sv array is published as the union.
-        for name in self.BOOSTER_NAMES:
-            s = self._state[name]
             for i, state in enumerate(s.sv):
                 msg.sv[i] = state
+
+        # Coordinator-owned SV (interstage)
+        msg.sv[self._interstage_sv_index] = self._interstage_sv
 
         self._telemetry_pub.publish(msg)
 

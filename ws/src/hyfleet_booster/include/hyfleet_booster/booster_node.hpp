@@ -21,7 +21,6 @@ using ControlBooster = mserve_interfaces::action::ControlBooster;
 using GoalHandleControlBooster = rclcpp_action::ServerGoalHandle<ControlBooster>;
 
 class BoosterTelemetryCache;
-
 class BoosterAction;
 
 class BoosterNode : public rclcpp_lifecycle::LifecycleNode {

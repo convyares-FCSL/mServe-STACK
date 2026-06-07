@@ -2,7 +2,9 @@
 
 #include <string>
 #include <behaviortree_ros2/bt_action_node.hpp>
+#include <behaviortree_ros2/bt_service_node.hpp>
 #include <mserve_interfaces/action/control_booster.hpp>
+#include "mserve_interfaces/srv/compressor_cmd.hpp"
 
 namespace hyfleet_compressor {
 
@@ -74,6 +76,28 @@ public:
         const BT::NodeConfig & config,
         const BT::RosNodeParams & params)
     : BoostCmdBase(name, config, params, "high_pressure", "high_percent_complete") {}
+};
+
+
+// ==============================================================================
+// BT action nodes :  ControlSV
+// ==============================================================================
+ 
+class ControlSV : public BT::RosServiceNode<mserve_interfaces::srv::CompressorCmd> {
+    public:
+        ControlSV(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params);
+
+        // Define the input ports for the node
+        static BT::PortsList providedPorts() ;
+
+        // Construct the service request based on the input ports and send it.
+        bool setRequest(Request::SharedPtr& request) override ;
+
+        // Process the service response and return the appropriate BT status.
+        BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override ;
+
+    private:
+
 };
 
 }  // namespace hyfleet_compressor

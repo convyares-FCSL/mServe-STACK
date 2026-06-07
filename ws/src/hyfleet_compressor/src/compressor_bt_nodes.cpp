@@ -71,4 +71,49 @@ BT::NodeStatus BoostCmdBase::onFailure(BT::ActionNodeErrorCode error)
     return BT::NodeStatus::FAILURE;
 }
 
+// ==============================================================================
+// BT action nodes :  ControlSV
+// ==============================================================================
+    
+ControlSV::ControlSV(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params) : BT::RosServiceNode<mserve_interfaces::srv::CompressorCmd>(name, config, params) {
+}
+
+BT::PortsList ControlSV::providedPorts() {
+    return providedBasicPorts({
+        BT::InputPort<std::string>("service_name"),
+        BT::InputPort<bool>("enable"),
+        BT::InputPort<uint8_t>("sv_index")
+    });
+}
+
+bool ControlSV::setRequest(Request::SharedPtr& request) {
+    auto enable_res = getInput<bool>("enable");
+    if (!enable_res) {
+        RCLCPP_ERROR(logger(), "Missing input port [enable]: %s", enable_res.error().c_str());
+        return false;
+    }
+
+    auto sv_index_res = getInput<uint8_t>("sv_index");
+    if (!sv_index_res) {
+        RCLCPP_ERROR(logger(), "Missing input port [sv_index]: %s", sv_index_res.error().c_str());
+        return false;
+    }
+
+    request->cmd = Request::CONTROL_SV;
+    request->enable = enable_res.value();
+    request->index = sv_index_res.value();
+
+    return true;
+}
+
+BT::NodeStatus ControlSV::onResponseReceived(const Response::SharedPtr& response) {
+    if (!response->success) {
+        RCLCPP_ERROR(logger(), "Set SV request failed, msg : %s", response->message.c_str()); 
+        return BT::NodeStatus::FAILURE;
+    }
+
+    RCLCPP_INFO(logger(), "Set SV request success");
+    return BT::NodeStatus::SUCCESS;
+}
+
 }  // namespace hyfleet_compressor

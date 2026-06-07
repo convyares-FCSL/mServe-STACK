@@ -46,16 +46,19 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
   telemetry_cache_.reset();
 
   try {
+    // Setup action server
     action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     booster_action_ = std::make_unique<BoosterAction>(*this, "~/control_booster");
     booster_action_->configure(action_callback_group_);
     booster_action_->set_goal_callback([this](auto goal_handle) { this->on_booster_goal_accepted(goal_handle); });
 
+    // Set up blackboard
     rclcpp::NodeOptions bt_node_options;
     bt_node_options.use_global_arguments(false);
     bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt", bt_node_options);
     blackboard_ = BT::Blackboard::create();
 
+    // Setup telemetry ingresion
     telemetry_cache_ = std::make_shared<BoosterTelemetryCache>();
     blackboard_->set("telemetry_cache", telemetry_cache_);
     blackboard_->set("ros_node_name", std::string(get_name()));

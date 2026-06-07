@@ -296,24 +296,23 @@ SYNC is asymmetric: low is slaved to high, not a symmetric Parallel of equal goa
 
 #### SYNC interstage BT nodes
 
-- [ ] `InterstageAboveBand` — `ConditionNode`; interstage >= upper threshold (280 bar) →
-      SUCCESS (signal to idle low); reads `interstage_pt_index` from blackboard
-- [ ] `InterstateBelowBand` — `ConditionNode`; interstage <= lower threshold (220 bar) →
-      SUCCESS (signal to re-enable low)
-- [ ] Both read interstage from the compressor's telemetry subscription; coordinator needs
-      its own subscription to `compressor_telemetry` for interstage PT only
+No custom `InterstageAboveBand`/`InterstateBelowBand` nodes needed. Low booster runs
+`COMPRESS_HOLD` at 280 bar target with `reenable_offset_bar=50` — self-manages the
+230–280 bar band autonomously via its own `compress_hold_tree.xml` maintain loop.
+Coordinator only sets goals; interstage pressure is never read by the coordinator tree.
+
+- [x] `CompressorControlSV` — `RosServiceNode<CompressorCmd>` → `/hyfleet_compression/compressor_cmd`;
+      ports: `service_name`, `sv_index`, `enable`; cmd=CONTROL_SV. Registered in
+      `register_bt_nodes()`. Controls interstage solenoid without coupling the tree
+      to low-booster telemetry.
 
 #### SYNC XML tree
 
-`start_sync_tree.xml` — asymmetric, three-phase:
-- [ ] Phase 1: `BoostLow(START_IDLE)` — low runs until interstage >= target
-- [ ] Phase 2: `BoostHigh(START)` — bring high booster online
-- [ ] Phase 3: `ReactiveSequence` — re-evaluates interstage condition every tick while
-      high is running; `InterstageAboveBand` → idle low; `InterstateBelowBand` → re-enable
-      low via `BoostLow(START_IDLE)`. Uses `ReactiveSequence` not `Sequence` so the
-      condition gates are re-checked each tick even while a child RosActionNode is RUNNING.
-- [ ] `stop_sync_tree.xml`      — stop high first (dependency order), then low
-- [ ] `safe_stop_sync_tree.xml` — halt both immediately
+`sync.xml` — simple Parallel of two booster goals; no reactive interstage monitoring:
+- [ ] `Parallel(success_count=1)`: `BoostLow(COMPRESS_HOLD, target=280)` ∥
+      `Sequence(BoostHigh(COMPRESS_ONCE, target=900) → BoostLow(STOP))`
+      High completes → stops low → Parallel succeeds. Low self-manages 230–280 bar band.
+- [ ] `stop_sync_tree.xml` — stop high first (dependency order), then low
 
 #### SYNC feedback
 
@@ -322,10 +321,14 @@ SYNC is asymmetric: low is slaved to high, not a symmetric Parallel of equal goa
 
 #### SYNC coordinator telemetry
 
-- [ ] Coordinator subscribes to `compressor_telemetry` for interstage PT only;
-      lightweight — no cache needed, just the latest interstage value on the blackboard
-- [ ] Interstage solenoid command — `RosServiceNode` to `BoosterCmd` for SV control
-- [ ] CPM adjustment on low booster — `RosServiceNode` if dynamic CPM tuning needed
+- [x] `CompressorTelemetryCache` — mirrors `BoosterTelemetryCache`; mutex-guarded
+      `shared_ptr<const CompressorTelemetry>` + timestamp; in `hyfleet_compressor` namespace
+- [x] `CompressorNode` owns `telemetry_sub_` → writes `telemetry_cache_` on each message
+- [x] `telemetry_cache_` placed on `shared_blackboard_` at configure; all BT nodes share it
+- [x] `CompressorCmd.srv` — `INVALID=0`, `CONTROL_SV=1`, `CONTROL_HEATER=2`; fields:
+      `cmd`, `enable`, `index` (SV index into sv[5]), `setpoint` (heater); same style as `BoosterCmd`
+- [x] `CompressorControlSV` — see §SYNC interstage BT nodes above
+- [ ] CPM adjustment on low booster — `RosServiceNode` if dynamic CPM tuning needed (not required for SYNC)
 
 ---
 
@@ -393,10 +396,19 @@ against it **unchanged**. Implement using a local AI agent driven by that prompt
       nodes run unchanged against the sim — verified by all 5 passing test scripts
 
 ### Phase 2 — both boosters + SYNC
+- [x] `BoosterCmd.srv` field rename: unified `speed_rpm`/`cpm` → `setpoint`;
+      `sv_index` → `index`. All booster C++ code + sim updated to match.
+- [x] `CompressorCmd` service added to sim at `/hyfleet_compression/compressor_cmd`;
+      `CONTROL_SV` updates `_interstage_sv` at `compressor.interstage_sv_index` (default 2);
+      `CONTROL_HEATER` logged and ACKed (stub).
 - [x] Second booster (`/high_booster/booster_cmd`) — both boosters run independently from
       their own command services and own `BoosterState`
 - [x] SYNC interstage coupling: `physics.sync_mode` param — when true,
       `high_booster.inlet_p = low_booster.outlet_p` each physics tick
+- [x] SYNC interstage draw: `physics.interstage_draw_bar_per_s` (default 8.0 bar/s) — when
+      `sync_mode=True` and high booster PCSV+VFD active, `low_booster.outlet_p` decays at
+      that rate (floored at `low_booster.inlet_p`). Allows `compress_hold` maintain loop to
+      trigger during SYNC tests without hardware.
 
 ### Launch
 - [x] `hyfleet_sim/launch/hyfleet_sim.launch.py` — brings up
