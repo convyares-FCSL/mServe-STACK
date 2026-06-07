@@ -6,13 +6,9 @@ uint8 LOW_BOOSTER = 1
 uint8 HIGH_BOOSTER = 2
 uint8 SYNC_BOOSTERS = 3
 
-uint8 PERFORMANCE  = 1
-uint8 ECO  = 2
-
 uint8 command
 uint8 target
 float64 target_pressure
-uint8 mode 1
 ---
 bool accepted
 string message

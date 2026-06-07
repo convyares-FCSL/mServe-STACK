@@ -15,11 +15,13 @@
 #include <behaviortree_cpp/blackboard.h>
 #include "mserve_interfaces/action/control_compressor.hpp"
 #include "mserve_interfaces/msg/compressor_telemetry.hpp"
+#include "mserve_interfaces/srv/set_mode.hpp"
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 namespace hyfleet_compressor {
 using ControlCompressor = mserve_interfaces::action::ControlCompressor;
 using GoalHandleControlCompressor = rclcpp_action::ServerGoalHandle<ControlCompressor>;
+using SetMode = mserve_interfaces::srv::SetMode;
 
 class CompressorTelemetryCache;
 class CompressorAction;
@@ -42,7 +44,6 @@ protected:
     std::shared_ptr<GoalHandleControlCompressor> goal;
     std::shared_ptr<BT::Blackboard>              blackboard;
     std::optional<BT::Tree>                      tree;
-    uint8_t                                      mode = 0;
     uint8_t                                      target = 0;
     bool active() const { return goal != nullptr; }
   };
@@ -57,13 +58,17 @@ private:
   std::unique_ptr<CompressorAction> compressor_action_;
   rclcpp::CallbackGroup::SharedPtr action_callback_group_;
 
+  // Mode service — set once, persists across reconfigure cycles
+  rclcpp::Service<SetMode>::SharedPtr set_mode_srv_;
+  uint8_t current_mode_ = SetMode::Request::PERFORMANCE;
+
   // Behavior tree
   std::unique_ptr<BT::BehaviorTreeFactory> factory_;
   std::shared_ptr<BT::Blackboard> shared_blackboard_;
   std::array<OpSlot, 2> ops_{};
   void register_bt_nodes();
   void build_bt_trees();
-  bool start_op(OpSlot & slot, uint8_t command, uint8_t target, uint8_t goal_mode, double target_pressure);
+  bool start_op(OpSlot & slot, uint8_t command, uint8_t target, double target_pressure);
   void tick_tree_once();
 
   // Goal and tick

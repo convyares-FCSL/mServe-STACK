@@ -36,7 +36,6 @@ class TestSync(Node):
         goal.command         = CC.Goal.START
         goal.target          = CC.Goal.SYNC_BOOSTERS
         goal.target_pressure = TARGET_BAR
-        goal.mode            = CC.Goal.PERFORMANCE
 
         send_f = self._client.send_goal_async(goal, feedback_callback=self._feedback)
         rclpy.spin_until_future_complete(self, send_f, timeout_sec=10.0)

@@ -40,13 +40,11 @@ class TestParallelBoth(Node):
         low_goal.command         = CC.Goal.START
         low_goal.target          = CC.Goal.LOW_BOOSTER
         low_goal.target_pressure = LOW_TARGET
-        low_goal.mode            = CC.Goal.PERFORMANCE
 
         high_goal = CC.Goal()
         high_goal.command         = CC.Goal.START
         high_goal.target          = CC.Goal.HIGH_BOOSTER
         high_goal.target_pressure = HIGH_TARGET
-        high_goal.mode            = CC.Goal.PERFORMANCE
 
         # Send both goals without waiting for either to finish
         low_send_f  = self._client.send_goal_async(low_goal,  feedback_callback=self._low_fb)

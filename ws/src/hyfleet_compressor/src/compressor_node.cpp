@@ -47,6 +47,23 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
     compressor_action_->configure(action_callback_group_);
     compressor_action_->set_goal_callback( [this](auto goal_handle) { this->on_compressor_goal_accepted(goal_handle); });
 
+    set_mode_srv_ = create_service<SetMode>(
+      "~/set_mode",
+      [this](const std::shared_ptr<SetMode::Request> req, std::shared_ptr<SetMode::Response> resp) {
+        if (req->mode != SetMode::Request::PERFORMANCE && req->mode != SetMode::Request::ECO) {
+          resp->success = false;
+          resp->message = "unknown mode — use PERFORMANCE(1) or ECO(2)";
+          return;
+        }
+        current_mode_ = req->mode;
+        resp->success = true;
+        resp->message = (current_mode_ == SetMode::Request::PERFORMANCE) ? "PERFORMANCE" : "ECO";
+        RCLCPP_INFO(get_logger(), "Compressor mode set to %s", resp->message.c_str());
+      },
+      rmw_qos_profile_services_default,
+      action_callback_group_
+    );
+
     // Set up blackboard
     rclcpp::NodeOptions bt_node_options;
     bt_node_options.use_global_arguments(false);
@@ -104,6 +121,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
       if (slot.goal)  { compressor_action_->abort_goal(slot.goal, "<reason>"); slot.goal.reset(); }
   }
 
+  set_mode_srv_.reset();
   telemetry_sub_.reset();
   telemetry_cache_.reset();
   bt_node_.reset();
@@ -155,14 +173,16 @@ void CompressorNode::build_bt_trees() {
   factory_->registerBehaviorTreeFromFile(base + "parallel_low.xml");
   factory_->registerBehaviorTreeFromFile(base + "parallel_high.xml");
   factory_->registerBehaviorTreeFromFile(base + "sync.xml");
+  factory_->registerBehaviorTreeFromFile(base + "stop_sync.xml");
 }
 
-bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, uint8_t goal_mode, double target_pressure) {
+bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, double target_pressure) {
   // Determine tree ID
   std::string tree_id;
-  if (target == ControlCompressor::Goal::LOW_BOOSTER) tree_id = "parallel_low";
+  if (target == ControlCompressor::Goal::LOW_BOOSTER)       tree_id = "parallel_low";
   else if (target == ControlCompressor::Goal::HIGH_BOOSTER) tree_id = "parallel_high";
-  else tree_id = "sync";
+  else if (command != ControlCompressor::Goal::START)        tree_id = "stop_sync";
+  else                                                        tree_id = "sync";
 
   slot.blackboard = BT::Blackboard::create(shared_blackboard_);
   slot.blackboard->enableAutoRemapping(true);
@@ -179,7 +199,7 @@ bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, ui
   slot.blackboard->set("on_target",       uint8_t{CB::Goal::ON_TARGET_SUCCEED});
   slot.blackboard->set("target_pressure", target_pressure);
   slot.blackboard->set("speed_rpm", default_speed_rpm_);
-  slot.blackboard->set("cpm", (goal_mode == ControlCompressor::Goal::PERFORMANCE) ? performance_cpm_ : eco_cpm_);
+  slot.blackboard->set("cpm", (current_mode_ == SetMode::Request::PERFORMANCE) ? performance_cpm_ : eco_cpm_);
 
   // Instantiate the tree against this slot's blackboard
   try {
@@ -261,8 +281,9 @@ void CompressorNode::on_compressor_goal_accepted( std::shared_ptr<GoalHandleCont
         return;
     }
 
-    // Validate pressure
-    if (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_) {
+    // Validate pressure (only meaningful for START — STOP/FORCE_STOP carry no target)
+    if (goal->command == ControlCompressor::Goal::START &&
+        (goal->target_pressure < min_pressure_bar_ || goal->target_pressure > max_pressure_bar_)) {
         compressor_action_->abort_goal(goal_handle, "target_pressure out of range");
         return;
     }
@@ -291,7 +312,7 @@ void CompressorNode::on_compressor_goal_accepted( std::shared_ptr<GoalHandleCont
         slot.goal.reset();
     }
 
-    if (!start_op(slot, goal->command, goal->target, goal->mode, goal->target_pressure)) {
+    if (!start_op(slot, goal->command, goal->target, goal->target_pressure)) {
         compressor_action_->abort_goal(goal_handle, "failed to start operation");
         return;
     }

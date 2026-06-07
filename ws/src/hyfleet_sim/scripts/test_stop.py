@@ -43,7 +43,6 @@ class TestStop(Node):
         g_start.command         = CC.Goal.START
         g_start.target          = CC.Goal.HIGH_BOOSTER
         g_start.target_pressure = START_TARGET
-        g_start.mode            = CC.Goal.PERFORMANCE
 
         send1 = self._client.send_goal_async(g_start, feedback_callback=self._feedback)
         rclpy.spin_until_future_complete(self, send1, timeout_sec=10.0)
@@ -59,12 +58,11 @@ class TestStop(Node):
         while time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.1)
 
-        # Goal 2 — stop (target_pressure must be in valid range even though STOP ignores it)
+        # Goal 2 — stop
         g_stop = CC.Goal()
         g_stop.command         = CC.Goal.STOP
         g_stop.target          = CC.Goal.HIGH_BOOSTER
-        g_stop.target_pressure = 100.0
-        g_stop.mode            = CC.Goal.PERFORMANCE
+        g_stop.target_pressure = 0.0
 
         send2 = self._client.send_goal_async(g_stop)
         rclpy.spin_until_future_complete(self, send2, timeout_sec=10.0)

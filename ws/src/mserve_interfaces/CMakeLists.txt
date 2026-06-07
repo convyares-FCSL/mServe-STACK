@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DispenserCmd.srv"
   "srv/GasRouterCmd.srv"
   "srv/SetDisplayMode.srv"
+  "srv/SetMode.srv"
 )
 
 install(DIRECTORY config

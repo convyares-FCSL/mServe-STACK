@@ -46,7 +46,6 @@ class TestSetpointUpdate(Node):
         g1.command         = CC.Goal.START
         g1.target          = CC.Goal.LOW_BOOSTER
         g1.target_pressure = INITIAL_TARGET
-        g1.mode            = CC.Goal.PERFORMANCE
 
         send1 = self._client.send_goal_async(g1, feedback_callback=self._feedback)
         rclpy.spin_until_future_complete(self, send1, timeout_sec=10.0)
@@ -68,7 +67,6 @@ class TestSetpointUpdate(Node):
         g2.command         = CC.Goal.START
         g2.target          = CC.Goal.LOW_BOOSTER
         g2.target_pressure = UPDATED_TARGET
-        g2.mode            = CC.Goal.PERFORMANCE
 
         send2 = self._client.send_goal_async(g2, feedback_callback=self._feedback)
         rclpy.spin_until_future_complete(self, send2, timeout_sec=10.0)

@@ -264,17 +264,25 @@ handle references.
       blackboard / behaviour reflects the new value (e.g. `min_pressure_bar`/`max_pressure_bar`
       goal-validation bound, or a booster speed/pressure limit)
 
-### Mode — cleanup item
+### Mode — cleanup item (done)
 
-- [ ] `mode` is currently a per-goal field on `ControlCompressor.action`. This should be
-      a stored state owned by `CompressorNode`, changeable via a `~/set_mode` service.
-      Per-goal mode forces clients to track state; a service allows mode to be set once
-      and persist across fills. Remove `mode` from action once service is in place.
+- [x] `mode` removed from `ControlCompressor.action`. `CompressorNode` stores `current_mode_`
+      (default PERFORMANCE, persists across reconfigure). `~/set_mode` service
+      (`mserve_interfaces/srv/SetMode`) updates it. `start_op` uses `current_mode_` for
+      CPM selection — no per-goal mode tracking required from callers.
 
-### Force stop and recovery
+### SYNC stop path (done)
 
-- [ ] Force stop: cancel in-flight booster goals via ROS action cancel protocol
-- [ ] Recovery Fallback: graceful stop → force stop path in XML tree
+- [x] `stop_sync.xml` — entered when command ≠ START arrives for SYNC_BOOSTERS target.
+      `ControlSV(interstage_sv, close)` → `BoostLow(command)` → `BoostHigh(command)`.
+      `{command}` read from blackboard so STOP(2) and FORCE_STOP(3) both work.
+      Interstage SV always closed before stopping boosters regardless of which phase was active.
+- [x] Pressure validation guarded to START-only — STOP/FORCE_STOP goals carry `target_pressure=0`.
+
+### Force stop and recovery (deferred to live repo)
+
+- [-] Recovery Fallback: graceful stop → force stop path in XML tree — deferred to Stage 4
+      in live repo. See `todo_live_repo.md`.
 
 ### PARALLEL mode — verified end-to-end (2026-06-06 night session)
 
