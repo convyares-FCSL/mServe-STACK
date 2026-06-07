@@ -1,6 +1,6 @@
 <root BTCPP_format="4">
-  <BehaviorTree ID="parallel_low">
-    <BoostLow
+  <BehaviorTree ID="parallel_high">
+    <BoostHigh
       action_name="{high_booster_action}"
       command="{command}"
       target_pressure="{target_pressure}"

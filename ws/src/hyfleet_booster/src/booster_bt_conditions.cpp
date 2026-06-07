@@ -367,7 +367,52 @@ BT::NodeStatus InletPressureSafe::tick() {
     const double pressure = msg->pt_bar[index_res.value()];
     const double target   = target_res.value();
 
-    return pressure >= target ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+    // RUNNING while safe (parallel monitor), FAILURE to abort startup
+    return pressure >= target ? BT::NodeStatus::RUNNING : BT::NodeStatus::FAILURE;
+}
+
+// ==============================================================================
+// REPORT — Log Compression Start
+// ==============================================================================
+
+LogCompressionStart::LogCompressionStart(const std::string& name, const BT::NodeConfiguration& config)
+: BT::SyncActionNode(name, config) {}
+
+BT::PortsList LogCompressionStart::providedPorts() {
+    return {
+        BT::InputPort<int>("outlet_pt_index"),
+        BT::InputPort<double>("target_pressure")
+    };
+}
+
+BT::NodeStatus LogCompressionStart::tick() {
+    std::shared_ptr<BoosterTelemetryCache> cache;
+    if (!config().blackboard->get("telemetry_cache", cache) || !cache) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "LogCompressionStart: telemetry_cache not on blackboard");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    auto index_res  = getInput<int>("outlet_pt_index");
+    auto target_res = getInput<double>("target_pressure");
+    if (!index_res || !target_res) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "LogCompressionStart: missing input ports");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    // Route through the booster node's own logger name so these lines group
+    // with the rest of [low_booster]/[high_booster] output (e.g. for Loki).
+    std::string ros_node_name;
+    const bool have_node_name = config().blackboard->get("ros_node_name", ros_node_name);
+    auto logger = have_node_name ? rclcpp::get_logger(ros_node_name) : rclcpp::get_logger(name());
+
+    auto [msg, stamp] = cache->latest();
+    if (msg) {
+        RCLCPP_INFO(logger, "Compressing from %.1f bar to target %.1f bar",
+                    msg->pt_bar[index_res.value()], target_res.value());
+    } else {
+        RCLCPP_INFO(logger, "Compressing to target %.1f bar", target_res.value());
+    }
+    return BT::NodeStatus::SUCCESS;
 }
 
 } // namespace hyfleet_booster

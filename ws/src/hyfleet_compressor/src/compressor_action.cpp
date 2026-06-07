@@ -1,5 +1,6 @@
 #include "include/compressor_action.hpp"
 
+#include <rclcpp_action/types.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -96,7 +97,8 @@ void CompressorAction::handle_accepted(const std::shared_ptr<GoalHandleControlCo
         callback = goal_callback_;
     }
 
-    RCLCPP_INFO(node_.get_logger(), "Accepted coordinator command: cmd=%u target=%u pressure=%.1f", 
+    RCLCPP_INFO(node_.get_logger(), "Accepted coordinator command: goal_id=%s cmd=%u target=%u pressure=%.1f",
+        rclcpp_action::to_string(goal_handle->get_goal_id()).c_str(),
         static_cast<unsigned>(goal->command), static_cast<unsigned>(goal->target), goal->target_pressure);
 
     if (callback) { callback(goal_handle); }

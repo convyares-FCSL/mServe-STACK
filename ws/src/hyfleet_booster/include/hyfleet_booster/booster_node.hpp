@@ -50,7 +50,7 @@ private:
   std::shared_ptr<GoalHandleControlBooster> active_goal_;
   
   // Behavior tree
-  BT::BehaviorTreeFactory factory_;
+  std::unique_ptr<BT::BehaviorTreeFactory> factory_;
   std::shared_ptr<BT::Blackboard> blackboard_;
   std::array<BT::Tree, 4> trees_;  // indexed by command - 1: START, START_IDLE, STOP, SAFE_STOP
   BT::Tree* active_tree_ = nullptr;

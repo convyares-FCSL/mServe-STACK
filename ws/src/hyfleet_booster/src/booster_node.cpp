@@ -34,20 +34,31 @@ BoosterNode::~BoosterNode() = default;
 // ==============================================================================
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn BoosterNode::on_configure(const rclcpp_lifecycle::State &){
+  // Reset any residual state from a previous (failed) configure attempt
+  trees_ = {};
+  factory_.reset();
+  factory_ = std::make_unique<BT::BehaviorTreeFactory>();
+  if (booster_action_) { booster_action_->unconfigure(); booster_action_.reset(); }
+  if (action_callback_group_) { action_callback_group_.reset(); }
+  bt_node_.reset();
+  blackboard_.reset();
+  telemetry_sub_.reset();
+  telemetry_cache_.reset();
+
   try {
-    // Action server :Create, configure, goal callback
     action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     booster_action_ = std::make_unique<BoosterAction>(*this, "~/control_booster");
     booster_action_->configure(action_callback_group_);
     booster_action_->set_goal_callback([this](auto goal_handle) { this->on_booster_goal_accepted(goal_handle); });
 
-    // BT node : Create blackboard, load params, register nodes and build trees
-    bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt");
+    rclcpp::NodeOptions bt_node_options;
+    bt_node_options.use_global_arguments(false);
+    bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt", bt_node_options);
     blackboard_ = BT::Blackboard::create();
 
-    // Telemetry: node owns the subscription; cache is shared with BT nodes via blackboard
     telemetry_cache_ = std::make_shared<BoosterTelemetryCache>();
     blackboard_->set("telemetry_cache", telemetry_cache_);
+    blackboard_->set("ros_node_name", std::string(get_name()));
     telemetry_sub_ = create_subscription<mserve_interfaces::msg::CompressorTelemetry>(
       "compressor_telemetry", 10,
       [this](std::shared_ptr<const mserve_interfaces::msg::CompressorTelemetry> msg) {
@@ -98,6 +109,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
   set_tick_timer(false);
   if (active_tree_) { active_tree_->haltTree(); active_tree_ = nullptr; }
   trees_ = {};
+  factory_.reset();
 
   telemetry_sub_.reset();
   telemetry_cache_.reset();
@@ -129,42 +141,46 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Booste
 // ==============================================================================
 
 void BoosterNode::register_bt_nodes(){
+    factory_->registerSimpleAction("AlwaysRunning", [](BT::TreeNode&) {
+      return BT::NodeStatus::RUNNING;
+    });
+    factory_->registerNodeType<LogCompressionStart>("LogCompressionStart");
+
     // Register Actions
-    factory_.registerBuilder<StartVFD>("StartVFD",
+    factory_->registerBuilder<StartVFD>("StartVFD",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<StartVFD>(name, config, BT::RosNodeParams(bt_node_));
     });
-    factory_.registerBuilder<StopVFD>("StopVFD",
+    factory_->registerBuilder<StopVFD>("StopVFD",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<StopVFD>(name, config, BT::RosNodeParams(bt_node_));
     });
-    factory_.registerBuilder<SetPCSV>("SetPCSV",
+    factory_->registerBuilder<SetPCSV>("SetPCSV",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<SetPCSV>(name, config, BT::RosNodeParams(bt_node_));
     });
-    factory_.registerBuilder<ControlSV>("ControlSV",
+    factory_->registerBuilder<ControlSV>("ControlSV",
       [this](const std::string& name, const BT::NodeConfig& config) {
         return std::make_unique<ControlSV>(name, config, BT::RosNodeParams(bt_node_));
     });
 
   
     // Register Conditions — plain ConditionNode, read telemetry from shared cache on blackboard
-    factory_.registerNodeType<InletPressureStable>("InletPressureStable");
-    factory_.registerNodeType<VFDAtSpeed>("VFDAtSpeed");
-    factory_.registerNodeType<VFDStopped>("VFDStopped");
-    factory_.registerNodeType<OutletAtPressure>("OutletAtPressure");
-    factory_.registerNodeType<PressureBelowThreshold>("PressureBelowThreshold");
-    factory_.registerNodeType<InletPressureSafe>("InletPressureSafe");
+    factory_->registerNodeType<InletPressureStable>("InletPressureStable");
+    factory_->registerNodeType<VFDAtSpeed>("VFDAtSpeed");
+    factory_->registerNodeType<VFDStopped>("VFDStopped");
+    factory_->registerNodeType<OutletAtPressure>("OutletAtPressure");
+    factory_->registerNodeType<PressureBelowThreshold>("PressureBelowThreshold");
+    factory_->registerNodeType<InletPressureSafe>("InletPressureSafe");
 }
 
 void BoosterNode::build_bt_trees(){
     const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_booster") + "/trees/";
-    // Register Stop first — referenced as SubTree inside start_tree.xml
-    factory_.registerBehaviorTreeFromFile(base + "stop_tree.xml");
-    trees_[0] = factory_.createTreeFromFile(base + "start_tree.xml", blackboard_);
-    trees_[1] = factory_.createTreeFromFile(base + "start_idle_tree.xml", blackboard_);
-    trees_[2] = factory_.createTree("Stop", blackboard_);
-    trees_[3] = factory_.createTreeFromFile(base + "stop_force_tree.xml", blackboard_);
+    factory_->registerBehaviorTreeFromFile(base + "stop_tree.xml");
+    trees_[0] = factory_->createTreeFromFile(base + "start_tree.xml", blackboard_);
+    trees_[1] = factory_->createTreeFromFile(base + "start_idle_tree.xml", blackboard_);
+    trees_[2] = factory_->createTree("Stop", blackboard_);
+    trees_[3] = factory_->createTreeFromFile(base + "stop_force_tree.xml", blackboard_);
 }
 
 bool BoosterNode::select_tree(uint8_t command) {

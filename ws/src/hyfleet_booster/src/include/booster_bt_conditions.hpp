@@ -134,4 +134,19 @@ class InletPressureSafe : public BT::ConditionNode {
         BT::NodeStatus tick() override;
 };
 
+// ==============================================================================
+// REPORT — Log Compression Start
+// One-shot side effect: logs current outlet pressure vs target when a START
+// goal begins. Always returns SUCCESS — purely a log line for operators/Loki.
+// ==============================================================================
+
+class LogCompressionStart : public BT::SyncActionNode {
+    public:
+        LogCompressionStart(const std::string& name, const BT::NodeConfiguration& config);
+
+        static BT::PortsList providedPorts();
+
+        BT::NodeStatus tick() override;
+};
+
 } // namespace hyfleet_booster

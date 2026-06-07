@@ -38,14 +38,14 @@ void CompressorNode::declare_params()
   const auto speed_rpm_descriptor = mserve_utils::make_double_range_descriptor(
     "Speed in rpm. Bounded by booster speed limit.",
     hyfleet_booster::speed_min, hyfleet_booster::speed_max);
-  declare_parameter<double>("default_speed_rpm ", 1500.0, speed_rpm_descriptor);
+  declare_parameter<double>("default_speed_rpm", 1500.0, speed_rpm_descriptor);
 
   // CPM
   const auto cpm_descriptor = mserve_utils::make_double_range_descriptor(
     "Cycles per minute. Bounded by booster cpm limit.",
-    hyfleet_booster::speed_min, hyfleet_booster::speed_max);
- declare_parameter<double>("performance_cpm ", 16.0, cpm_descriptor);
- declare_parameter<double>("eco_cpm ", 8.0, cpm_descriptor);
+    hyfleet_booster::cpm_min, hyfleet_booster::cpm_max);
+  declare_parameter<double>("performance_cpm", 16.0, cpm_descriptor);
+  declare_parameter<double>("eco_cpm", 8.0, cpm_descriptor);
 }
 
 // Loads all parameter and updates blackboard
@@ -81,14 +81,14 @@ void CompressorNode::load_params()
   shared_blackboard_ ->set("max_pressure_bar", max_pressure_bar_);
 
   // VFD Speed
-  const double default_speed_rpm  = mserve_utils::get_or_declare_param(p, get_logger(), "default_speed_rpm ", 25.0, "VFD target speed (rpm)");
-  shared_blackboard_->set("default_speed_rpm", default_speed_rpm);
+  default_speed_rpm_ = mserve_utils::get_or_declare_param(p, get_logger(), "default_speed_rpm", 1500.0, "VFD target speed (rpm)");
+  shared_blackboard_->set("default_speed_rpm", default_speed_rpm_);
 
   // Cycles per minute 
-  const double performance_cpm   = mserve_utils::get_or_declare_param(p, get_logger(), "performance_cpm  ", 16.0, "PCSV rate in PERFORMANCE mode");
-  shared_blackboard_->set("performance_cpm", performance_cpm);
-  const double eco_cpm    = mserve_utils::get_or_declare_param(p, get_logger(), "eco_cpm   ", 8.0, "PCSV rate in ECO mode");
-  shared_blackboard_->set("eco_cpm ", eco_cpm );
+  performance_cpm_ = mserve_utils::get_or_declare_param(p, get_logger(), "performance_cpm", 16.0, "PCSV rate in PERFORMANCE mode");
+  shared_blackboard_->set("performance_cpm", performance_cpm_);
+  eco_cpm_ = mserve_utils::get_or_declare_param(p, get_logger(), "eco_cpm", 8.0, "PCSV rate in ECO mode");
+  shared_blackboard_->set("eco_cpm", eco_cpm_);
 
 }
 

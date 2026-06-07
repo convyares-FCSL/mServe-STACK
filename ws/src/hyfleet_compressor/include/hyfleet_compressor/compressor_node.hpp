@@ -56,7 +56,7 @@ private:
   rclcpp::CallbackGroup::SharedPtr action_callback_group_;
 
   // Behavior tree
-  BT::BehaviorTreeFactory factory_;
+  std::unique_ptr<BT::BehaviorTreeFactory> factory_;
   std::shared_ptr<BT::Blackboard> shared_blackboard_;
   std::array<OpSlot, 2> ops_{};
   void register_bt_nodes();

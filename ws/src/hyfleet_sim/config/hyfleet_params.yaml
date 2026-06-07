@@ -1,0 +1,101 @@
+# HyFleet compression stack parameters — sim test configuration.
+# Node names match the launch file.
+
+low_booster:
+  ros__parameters:
+    # Index mapping — confirmed against sim_node.py and compression_module_decisions.md
+    vfd_index: 0
+    inlet_pt_index: 0
+    outlet_pt_index: 7
+    inlet_sv_index: 0
+    hpu_sv_index: 1
+    # Hydraulic / coolant PTs — unmapped in sim (always 0 bar, below threshold)
+    hyd_primer_pt_index: 3
+    hyd_a_pt_index: 4
+    hyd_b_pt_index: 5
+    coolant_pt_index: 6
+    # Temperature and position sensors are present in production telemetry.
+    # The simulator does not currently model them, so keep the default mapping
+    # explicit to avoid default-config warnings during lifecycle configure.
+    inlet_tt_index_1: 0
+    inlet_tt_index_2: 1
+    outlet_tt_index_1: 2
+    outlet_tt_index_2: 3
+    outlet_tt_index_3: 4
+    ps_lhs_index: 0
+    ps_rhs_index: 1
+    # Pressure limits
+    min_pressure_bar: 35.0
+    max_pressure_bar: 500.0
+    safe_pressure: 20.0
+    target_deadband: 0.5
+    stability_tolerance: 0.1
+    min_temp_inlet: 0.0
+    max_temp_inlet: 50.0
+    min_temp_outlet: 0.0
+    max_temp_outlet: 190.0
+    # VFD — short delays for faster test cycles
+    vfd_delay_ms: 200
+    vfd_stabilization_ms: 100
+    ramp_timeout_ms: 10000
+    stop_timeout_ms: 5000
+    stop_threshold: 25.0
+    ramp_tolerance: 50.0
+    stabilization_samples: 2
+    stability_timeout_ms: 5000
+    # Hydraulic pressure guard — sim always 0 bar so threshold passes immediately
+    hyd_pressure_threshold_bar: 10.0
+    hyd_timeout_ms: 3000
+    reenable_offset_bar: 10.0
+
+high_booster:
+  ros__parameters:
+    vfd_index: 1
+    inlet_pt_index: 1
+    outlet_pt_index: 2
+    inlet_sv_index: 2
+    hpu_sv_index: 3
+    hyd_primer_pt_index: 8
+    hyd_a_pt_index: 9
+    hyd_b_pt_index: 10
+    coolant_pt_index: 11
+    inlet_tt_index_1: 0
+    inlet_tt_index_2: 1
+    outlet_tt_index_1: 2
+    outlet_tt_index_2: 3
+    outlet_tt_index_3: 4
+    ps_lhs_index: 0
+    ps_rhs_index: 1
+    min_pressure_bar: 35.0
+    max_pressure_bar: 900.0
+    safe_pressure: 20.0
+    target_deadband: 0.5
+    stability_tolerance: 0.1
+    min_temp_inlet: 0.0
+    max_temp_inlet: 50.0
+    min_temp_outlet: 0.0
+    max_temp_outlet: 190.0
+    vfd_delay_ms: 200
+    vfd_stabilization_ms: 100
+    ramp_timeout_ms: 10000
+    stop_timeout_ms: 5000
+    stop_threshold: 25.0
+    ramp_tolerance: 50.0
+    stabilization_samples: 2
+    stability_timeout_ms: 5000
+    hyd_pressure_threshold_bar: 10.0
+    hyd_timeout_ms: 3000
+    reenable_offset_bar: 10.0
+
+hyfleet_compression:
+  ros__parameters:
+    # PT indices: inlet = low inlet, interstage = low outlet (SYNC coupling point), outlet = high outlet
+    inlet_pt_index: 0
+    interstage_pt_index: 7
+    outlet_pt_index: 2
+    interstage_sv_index: 4
+    min_pressure_bar: 35.0
+    max_pressure_bar: 900.0
+    default_speed_rpm: 1500.0
+    performance_cpm: 16.0
+    eco_cpm: 8.0

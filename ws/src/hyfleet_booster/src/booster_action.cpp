@@ -1,5 +1,6 @@
 #include "include/booster_action.hpp"
 
+#include <rclcpp_action/types.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -97,7 +98,8 @@ void BoosterAction::handle_accepted(const std::shared_ptr<GoalHandleControlBoost
         callback = goal_callback_;
     }
 
-    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: cmd=%u pressure=%.1f", 
+    RCLCPP_INFO(node_.get_logger(), "Accepted booster command: goal_id=%s cmd=%u pressure=%.1f",
+        rclcpp_action::to_string(goal_handle->get_goal_id()).c_str(),
         static_cast<unsigned>(goal->command), goal->target_pressure);
 
     if (callback) { callback(goal_handle); }

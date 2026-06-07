@@ -31,15 +31,31 @@ CompressorNode::~CompressorNode() = default;
 // ==============================================================================
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn CompressorNode::on_configure(const rclcpp_lifecycle::State &) {
+  ops_ = {};
+  factory_.reset();
+  factory_ = std::make_unique<BT::BehaviorTreeFactory>();
+  if (compressor_action_) { compressor_action_->unconfigure(); compressor_action_.reset(); }
+  if (action_callback_group_) { action_callback_group_.reset(); }
+  bt_node_.reset();
+  shared_blackboard_.reset();
+
   try {
     // Action server :Create, configure, goal callback
-    action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    // MutuallyExclusive and shared with the tick timer (see set_tick_timer):
+    // BoostLow/BoostHigh are RosActionNode<ControlBooster> — their halt() calls
+    // cancelGoal(), which touches the same cached per-action SingleThreadedExecutor
+    // that tick()'s spin_some() uses, but without the library's internal mutex.
+    // Running goal-accepted and tree-tick on the same thread/group avoids the
+    // resulting "spin_some() called while already spinning" race.
+    action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     compressor_action_ = std::make_unique<CompressorAction>(*this, "~/control_compressor");
     compressor_action_->configure(action_callback_group_);
     compressor_action_->set_goal_callback( [this](auto goal_handle) { this->on_compressor_goal_accepted(goal_handle); });
 
     // BT node : Create blackboard, load params, register nodes and build trees
-    bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt");
+    rclcpp::NodeOptions bt_node_options;
+    bt_node_options.use_global_arguments(false);
+    bt_node_ = std::make_shared<rclcpp::Node>(std::string(get_name()) + "_bt", bt_node_options);
     shared_blackboard_ = BT::Blackboard::create();
 
     load_params();
@@ -85,6 +101,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
   }
 
   bt_node_.reset();
+  shared_blackboard_.reset();
+  factory_.reset();
 
   if (compressor_action_) {
     compressor_action_->unconfigure();
@@ -111,11 +129,11 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
 // ==============================================================================
 
 void CompressorNode::register_bt_nodes() {
-  factory_.registerBuilder<BoostLow>("BoostLow",
+  factory_->registerBuilder<BoostLow>("BoostLow",
     [this](const std::string & name, const BT::NodeConfig & config) {
       return std::make_unique<BoostLow>(name, config, BT::RosNodeParams(bt_node_));
     });
-  factory_.registerBuilder<BoostHigh>("BoostHigh",
+  factory_->registerBuilder<BoostHigh>("BoostHigh",
     [this](const std::string & name, const BT::NodeConfig & config) {
       return std::make_unique<BoostHigh>(name, config, BT::RosNodeParams(bt_node_));
     });
@@ -123,9 +141,9 @@ void CompressorNode::register_bt_nodes() {
 
 void CompressorNode::build_bt_trees() {
   const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_compressor") + "/trees/";
-  factory_.registerBehaviorTreeFromFile(base + "parallel_low.xml");
-  factory_.registerBehaviorTreeFromFile(base + "parallel_high.xml");
-  factory_.registerBehaviorTreeFromFile(base + "sync.xml");
+  factory_->registerBehaviorTreeFromFile(base + "parallel_low.xml");
+  factory_->registerBehaviorTreeFromFile(base + "parallel_high.xml");
+  factory_->registerBehaviorTreeFromFile(base + "sync.xml");
 }
 
 bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, uint8_t goal_mode, double target_pressure) {
@@ -138,6 +156,8 @@ bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, ui
   // Per-slot blackboard inherits shared keys (action names, PT indices, etc.)
   slot.blackboard = BT::Blackboard::create(shared_blackboard_);
   slot.target = target;
+  slot.blackboard->set("low_booster_action",  std::string("/low_booster/control_booster"));
+  slot.blackboard->set("high_booster_action", std::string("/high_booster/control_booster"));
 
   // Translate coordinator command to booster command and write goal fields
   using CB = mserve_interfaces::action::ControlBooster;
@@ -151,7 +171,7 @@ bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, ui
 
   // Instantiate the tree against this slot's blackboard
   try {
-      slot.tree = factory_.createTree(tree_id, slot.blackboard);
+      slot.tree = factory_->createTree(tree_id, slot.blackboard);
   } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "start_op: failed to create tree '%s': %s", tree_id.c_str(), e.what());
       return false;
@@ -165,7 +185,17 @@ void CompressorNode::tick_tree_once() {
         if (!slot.active()) continue;
         any_active = true;
 
-        const auto status = slot.tree->tickOnce();
+        BT::NodeStatus status;
+        try {
+            status = slot.tree->tickOnce();
+        } catch (const std::exception & e) {
+            RCLCPP_ERROR(get_logger(), "Coordinator tree tick failed: %s", e.what());
+            compressor_action_->abort_goal(slot.goal, "coordinator tree tick failed");
+            slot.tree->haltTree();
+            slot.tree.reset();
+            slot.goal.reset();
+            continue;
+        }
 
         // Publish feedback from this slot's blackboard
         auto fb = std::make_shared<ControlCompressor::Feedback>();
@@ -264,7 +294,9 @@ void CompressorNode::set_tick_timer(bool enable)
 {
   if (tick_timer_) { tick_timer_->cancel(); tick_timer_.reset(); }
   if (enable) {
-    tick_timer_ = create_wall_timer(100ms, [this]() { this->tick_tree_once(); });
+    // Same callback group as the action server — see on_configure for why
+    // tick and goal-accepted must never run concurrently.
+    tick_timer_ = create_wall_timer(100ms, [this]() { this->tick_tree_once(); }, action_callback_group_);
   }
 }
 

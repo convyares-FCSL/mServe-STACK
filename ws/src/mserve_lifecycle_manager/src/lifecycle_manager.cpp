@@ -6,6 +6,15 @@
 
 namespace lifecyclemanager {
 
+namespace {
+BT::RosNodeParams lifecycleRosParams(const std::shared_ptr<rclcpp::Node>& node) {
+    BT::RosNodeParams params(node);
+    params.wait_for_server_timeout = std::chrono::seconds(2);
+    params.server_timeout = std::chrono::seconds(2);
+    return params;
+}
+}
+
 // ==============================================================================
 // BT checker nodes for lifecycle state management
 // ==============================================================================
@@ -127,12 +136,12 @@ void LifecycleManager::build() {
     factory.registerBuilder<IsInState>(
         "IsInState",
         [this](const std::string& name, const BT::NodeConfig& config) {
-            return std::make_unique<IsInState>(name, config, BT::RosNodeParams(this->shared_from_this()));
+            return std::make_unique<IsInState>(name, config, lifecycleRosParams(this->shared_from_this()));
     });
     factory.registerBuilder<ChangeStateNode>(
         "ChangeStateNode",
         [this](const std::string& name, const BT::NodeConfig& config) {
-            return std::make_unique<ChangeStateNode>(name, config, BT::RosNodeParams(this->shared_from_this()));
+            return std::make_unique<ChangeStateNode>(name, config, lifecycleRosParams(this->shared_from_this()));
     });
 
     // Export the tree model to an XML file for visualization in Groot2
@@ -147,8 +156,13 @@ void LifecycleManager::build() {
     std::string shutdown_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/shutdown.xml";
     shutdown_tree_ = factory.createTreeFromFile(shutdown_path);
 
-    // Create a ZMQ publisher to visualize the tree in Groot2
-    groot2_publisher_ = std::make_unique<BT::Groot2Publisher>(tree_);
+    // Create a ZMQ publisher to visualize the tree in Groot2, if its default port is free.
+    try {
+        groot2_publisher_ = std::make_unique<BT::Groot2Publisher>(tree_);
+    } catch (const std::exception& error) {
+        RCLCPP_WARN(this->get_logger(), "Groot2 publisher disabled: %s", error.what());
+        groot2_publisher_.reset();
+    }
 
     // Execute the tree
     RCLCPP_INFO(this->get_logger(), "Starting behavior tree execution...");

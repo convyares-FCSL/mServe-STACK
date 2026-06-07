@@ -142,9 +142,9 @@ void BoosterNode::load_params(){
 
   // Solenoid Valves
   const int inlet_sv_index = mserve_utils::get_or_declare_param(p, get_logger(), "inlet_sv_index", 0, "Inlet SV index");
-  blackboard_->set("inlet_sv_index", inlet_sv_index);
+  blackboard_->set("inlet_sv_index", static_cast<uint8_t>(inlet_sv_index));
   const int hpu_sv_index = mserve_utils::get_or_declare_param(p, get_logger(), "hpu_sv_index", 1, "HPU SV index");
-  blackboard_->set("hpu_sv_index", hpu_sv_index);
+  blackboard_->set("hpu_sv_index", static_cast<uint8_t>(hpu_sv_index));
 
   // --- Operational → member (goal validation) + blackboard (BT nodes) ---
   min_pressure_bar_ = mserve_utils::get_or_declare_param(p, get_logger(), "min_pressure_bar", 35.0, "min pressure");
@@ -170,9 +170,9 @@ void BoosterNode::load_params(){
 
   // Timing: params are ms, BT Sleep node takes seconds
   const int vfd_delay_ms = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_delay_ms", 2000, "Wait after VFD start before checking speed (ms)");
-  blackboard_->set("vfd_delay_ms", vfd_delay_ms);
+  blackboard_->set("vfd_delay_ms", static_cast<unsigned int>(vfd_delay_ms));
   const int vfd_stabilization_ms = mserve_utils::get_or_declare_param(p, get_logger(), "vfd_stabilization_ms", 1000, "Wait after VFD at speed before opening HPU (ms)");
-  blackboard_->set("vfd_stabilization_ms", vfd_stabilization_ms);
+  blackboard_->set("vfd_stabilization_ms", static_cast<unsigned int>(vfd_stabilization_ms));
   const int stability_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "stability_timeout_ms", 10000, "Max time for inlet pressure to stabilise before startup (ms)");
   blackboard_->set("stability_timeout_ms", stability_timeout_ms);
   const int ramp_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "ramp_timeout_ms", 30000, "Max time for VFD to reach target speed (ms)");

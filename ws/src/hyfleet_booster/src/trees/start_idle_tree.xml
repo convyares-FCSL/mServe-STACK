@@ -42,6 +42,11 @@
           cpm="{cpm}" 
         />
 
+        <LogCompressionStart
+          outlet_pt_index="{outlet_pt_index}"
+          target_pressure="{target_pressure}"
+        />
+
         <OutletAtPressure
           outlet_pt_index="{outlet_pt_index}"
           target_pressure="{target_pressure}"

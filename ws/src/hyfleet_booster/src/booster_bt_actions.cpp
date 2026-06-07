@@ -7,11 +7,6 @@ namespace hyfleet_booster {
 // ==============================================================================
     
 StartVFD::StartVFD(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params) : BT::RosServiceNode<mserve_interfaces::srv::BoosterCmd>(name, config, params) {
-    auto it = config.input_ports.find("service_name");
-    if (it == config.input_ports.end()) {
-        throw std::runtime_error("StartVFD: required port 'service_name' not found");
-    }
-    setServiceName(it->second);
 }
 
 BT::PortsList StartVFD::providedPorts() {
@@ -53,11 +48,6 @@ BT::NodeStatus StartVFD::onResponseReceived(const Response::SharedPtr& response)
 // ==============================================================================
     
 StopVFD::StopVFD(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params) : BT::RosServiceNode<mserve_interfaces::srv::BoosterCmd>(name, config, params) {
-    auto it = config.input_ports.find("service_name");
-    if (it == config.input_ports.end()) {
-        throw std::runtime_error("StopVFD: required port 'service_name' not found");
-    }
-    setServiceName(it->second);
 }
 
 BT::PortsList StopVFD::providedPorts() {
@@ -86,11 +76,6 @@ BT::NodeStatus StopVFD::onResponseReceived(const Response::SharedPtr& response) 
 // ==============================================================================
     
 SetPCSV::SetPCSV(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params) : BT::RosServiceNode<mserve_interfaces::srv::BoosterCmd>(name, config, params) {
-    auto it = config.input_ports.find("service_name");
-    if (it == config.input_ports.end()) {
-        throw std::runtime_error("SetPCSV: required port 'service_name' not found");
-    }
-    setServiceName(it->second);
 }
 
 BT::PortsList SetPCSV::providedPorts() {
@@ -142,11 +127,6 @@ BT::NodeStatus SetPCSV::onResponseReceived(const Response::SharedPtr& response) 
 // ==============================================================================
     
 ControlSV::ControlSV(const std::string& name, const BT::NodeConfiguration& config, const BT::RosNodeParams& params) : BT::RosServiceNode<mserve_interfaces::srv::BoosterCmd>(name, config, params) {
-    auto it = config.input_ports.find("service_name");
-    if (it == config.input_ports.end()) {
-        throw std::runtime_error("ControlSV: required port 'service_name' not found");
-    }
-    setServiceName(it->second);
 }
 
 BT::PortsList ControlSV::providedPorts() {

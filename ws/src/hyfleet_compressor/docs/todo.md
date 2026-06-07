@@ -116,6 +116,10 @@ All telemetry comes from ONE topic. Simpler than expected.
 
 ### Feedback
 - [x] Publish outlet pressure + percent_complete to action feedback each tick (from telemetry cache)
+- [x] `LogCompressionStart` — `SyncActionNode`; logs `Compressing from X bar to target Y bar`
+      via `rclcpp::get_logger(ros_node_name)` so Loki groups lines under `[low_booster]`/
+      `[high_booster]` rather than `[LogCompressionStart]`; reads `telemetry_cache` off the
+      blackboard plus `outlet_pt_index`/`target_pressure` ports (`booster_bt_conditions.cpp`)
 
 ### XML tree corrections and SYNC prerequisites
 
@@ -231,6 +235,22 @@ handle references.
 - [x] Read in `load_params()`, write to shared blackboard; slot blackboards inherit via parent
 - [x] `start_op` writes `cpm` and `speed_rpm` to slot blackboard from mode profile
 
+**Locked decision — parameter change contract (applies to `CompressorNode` and
+`BoosterNode` alike, see `compressor_params.cpp` / `booster_params.cpp` `on_parameters`):**
+- [x] `on_parameters` rejects any change unless `get_current_state().id() ==
+      PRIMARY_STATE_UNCONFIGURED` — i.e. reject while `inactive` or `active`, only allow
+      from `unconfigured`. Cross-field checks (e.g. `min_pressure_bar < max_pressure_bar`)
+      run after the state gate. Reconfiguring (cleanup → set param → configure → activate)
+      picks up the new value because `load_params()` re-reads and rewrites the blackboard
+      every `on_configure` — no separate "apply" step needed.
+- [ ] Test coverage for the above contract (positive + negative) — neither `CompressorNode`
+      nor `BoosterNode` currently has one:
+      negative: `set_parameters` while `inactive`/`active` → `successful=false`,
+      reason `"Parameters can only be changed in UNCONFIGURED state"`, value unchanged;
+      positive: `cleanup` → `set_parameters` (new value) → `configure` → `activate` →
+      blackboard / behaviour reflects the new value (e.g. `min_pressure_bar`/`max_pressure_bar`
+      goal-validation bound, or a booster speed/pressure limit)
+
 ### Mode — cleanup item
 
 - [ ] `mode` is currently a per-goal field on `ControlCompressor.action`. This should be
@@ -242,6 +262,19 @@ handle references.
 
 - [ ] Force stop: cancel in-flight booster goals via ROS action cancel protocol
 - [ ] Recovery Fallback: graceful stop → force stop path in XML tree
+
+### PARALLEL mode — verified end-to-end (2026-06-06 night session)
+
+- [x] Fixed `spin_some() called while already spinning` crash (`exit -6`) hit by
+      `test_stop`/`test_setpoint_update`: `BoostLow`/`BoostHigh` (`RosActionNode<ControlBooster>`)
+      `halt()` → `cancelGoal()` touches the same per-action `SingleThreadedExecutor` that
+      `tick()`'s `spin_some()` uses, but without the library's internal mutex, so a goal-accept
+      racing a tree-tick on the `MultiThreadedExecutor` could hit it concurrently. Fix: moved
+      `action_callback_group_` from `Reentrant` to `MutuallyExclusive` and put the tick timer on
+      the same group, serialising goal-accept and tree-tick (`compressor_node.cpp` `on_configure`
+      / `set_tick_timer`)
+- [x] All 5 BT integration test scripts pass against a single clean stack instance:
+      `test_low`, `test_high`, `test_parallel_both`, `test_setpoint_update`, `test_stop`
 
 ---
 
@@ -323,34 +356,45 @@ bridge + PLC + physical plant at the ROS boundary — booster and coordinator no
 against it **unchanged**. Implement using a local AI agent driven by that prompt.
 
 ### Discover before writing code (from prompt §0 / §9)
-- [ ] Confirm `CompressorTelemetry` field names, array sizes, and PLC warn/alarm/lockout flags;
-      add flags to message if missing (per decision record §2)
-- [ ] Confirm `BoosterCmd.srv` exists with `device_id: string`; create per decision record §4 if not
-- [ ] Confirm per-booster index mapping (vfd, PT, TT) and CSV channel → telemetry field mapping
-- [ ] Locate `C_12_1500_60_30_10.csv` in repo; confirm its path
+- [x] Confirmed `CompressorTelemetry` field names / array sizes / per-booster PT, TT, VFD,
+      SV index mapping — `sim_node.py` declares `<booster>.inlet_pt_index` etc. matching the
+      production layout (`pt_bar[16]`, `tt_celsius[12]`, `vfd_*[2]`, `sv[5]`)
+- [x] Confirmed `BoosterCmd.srv` — `sim_node.py` implements `START_VFD` / `STOP_VFD` /
+      `SET_PCSV` / `CONTROL_SV` against it directly
+- [ ] PLC warn/alarm/lockout flags — not yet surfaced by the sim (see Phase 1 below)
 
-### Phase 1 — single booster, synthetic model
-- [ ] `hyfleet_sim` Python node: `BoosterCmd` service (`/low_booster/booster_cmd`); publishes
-      `CompressorTelemetry` at ~10 Hz with physics model from prompt §5
-- [ ] VFD: first-order ramp `τ ≈ 0.5 s`; compression: `K ≈ 1 bar/s` with sawtooth ripple;
-      decay: `τ ≈ 10 s` after PCSV off
-- [ ] PLC protective layer: over-pressure / over-temp → set alarm/lockout flag, stop
-      compression autonomously (act-first, then report — matches real PLC behaviour)
-- [ ] Acceptance: `StartVFD(1500)` ramps in ~0.5 s; `SetPCSV(cpm=10)` rises ~1 bar/s with
-      sawtooth; stops at target; `SetPCSV(false)` decays τ ≈ 10 s; nodes run unchanged
+### Phase 1 — single booster, synthetic model — DONE (simplified model)
+- [x] `hyfleet_sim` Python node (`sim_node.py`): `BoosterCmd` service per booster
+      (`/low_booster/booster_cmd`, `/high_booster/booster_cmd`); publishes
+      `CompressorTelemetry` at `physics.telemetry_rate_hz` (default 10 Hz);
+      `~/reset` `Trigger` service restores initial conditions; physics tick at
+      `physics.physics_rate_hz` (default 100 Hz)
+- [x] Compression model: `pcsv_enabled AND vfd_running` → `outlet_p += bar_per_cpm * cpm * dt`;
+      otherwise pressure holds (no decay). Sufficient to drive and pass all 5 BT
+      integration tests end-to-end against `low_booster`/`high_booster`/`compressor_node`
+      running **unchanged**
+- [ ] Simplified vs. original spec — deferred, not currently needed by any test:
+      VFD start/stop is instantaneous (no first-order ramp `τ ≈ 0.5 s`), no sawtooth
+      ripple on the compression curve, no pressure decay (`τ ≈ 10 s`) when PCSV is off,
+      and no PLC protective layer (over-pressure/over-temp → alarm/lockout + autonomous stop)
+- [x] Acceptance (simplified model): `SetPCSV(cpm=N)` rises at `bar_per_cpm * N` bar/s and
+      stops at target via `OutletAtPressure`; `StartVFD`/`StopVFD`/`ControlSV` all wired;
+      nodes run unchanged against the sim — verified by all 5 passing test scripts
 
 ### Phase 2 — both boosters + SYNC
-- [ ] Second booster (`/high_booster/booster_cmd`); SYNC interstage coupling: high inlet = low outlet
-- [ ] Both boosters run independently from their own command services
-
-### CSV replay mode
-- [ ] Parse `C_12_1500_60_30_10.csv` (TwinCAT paired-column format, Windows FILETIME timestamps);
-      resample to 10 Hz; publish as `CompressorTelemetry`
-- [ ] Reproduces HBU 2 outlet trace: 262 → 592 → ~488 bar
+- [x] Second booster (`/high_booster/booster_cmd`) — both boosters run independently from
+      their own command services and own `BoosterState`
+- [x] SYNC interstage coupling: `physics.sync_mode` param — when true,
+      `high_booster.inlet_p = low_booster.outlet_p` each physics tick
 
 ### Launch
-- [ ] Launch file with `use_sim` arg so existing bringup runs against sim without changes
-- [ ] All model constants as ROS parameters; no hardcoded values
+- [x] `hyfleet_sim/launch/hyfleet_sim.launch.py` — brings up
+      `sim_node → low_booster → high_booster → hyfleet_compression → lifecycle_manager`
+      (lifecycle manager delayed 2 s); booster/compressor nodes run **unchanged** against
+      the sim. Implemented as its own dedicated launch file rather than a `use_sim` arg
+      on the production bringup launch — revisit when migrating to the live workspace (Stage 7)
+- [x] All model constants declared as ROS parameters (`physics.*`, per-booster `inlet_pressure_bar`,
+      `initial_outlet_bar`, `target_pressure_bar`, index maps); no hardcoded values
 
 ---
 
