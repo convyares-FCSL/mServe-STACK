@@ -126,7 +126,7 @@ Indices are configured per instance via ROS params.
 | `vfd_speed ≈ target` | `VFDAtSpeed` | `vfd_speed_rpm[vfd_index]` | `vfd_index`, `target_speed`, `ramp_tolerance`, `ramp_timeout_ms` |
 | `outlet_pressure >= target` | `OutletAtPressure` | `pt_bar[outlet_pt_index]` | `outlet_pt_index`, `target_pressure` |
 | `vfd_speed ≈ 0 && state != RUNNING` | `VFDStopped` | `vfd_speed_rpm[vfd_index]`, `vfd_state[vfd_index]` | `vfd_index`, `stop_threshold`, `stop_timeout_ms` |
-| outlet dropped below re-enable band | `OutletBelowPressure` | `pt_bar[outlet_pt_index]` | `outlet_pt_index`, `target_pressure`, `reenable_offset_bar` — SYNC only |
+| outlet dropped below re-enable band | `PressureBelowThreshold` | `pt_bar[pt_index]` | `pt_index`, `threshold_bar`, `timeout_ms` (0 = no wall-clock limit) — used in `start_idle_tree.xml` maintain loop |
 
 **Gate nodes (`BT::ConditionNode`)** — instantaneous check; SUCCESS or FAILURE only, never RUNNING.
 

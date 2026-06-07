@@ -1,0 +1,68 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="CompressHold">
+    <!-- Compress to target then hold at WARM, re-enabling PCSV when outlet droops below
+         the re-enable band (target - reenable_offset_bar). Loops indefinitely — never
+         returns SUCCESS. Must be preempted externally; caller sends STOP to shut down. -->
+    <Parallel success_count="1" failure_count="1">
+
+      <Sequence name="startup_compress_maintain">
+        <SubTree ID="Start" _autoremap="true"/>
+
+        <LogCompressionStart
+          outlet_pt_index="{outlet_pt_index}"
+          target_pressure="{target_pressure}"
+        />
+
+        <SetPCSV
+          service_name="{service_name}"
+          enable="true"
+          cpm="{cpm}"
+        />
+
+        <OutletAtPressure
+          outlet_pt_index="{outlet_pt_index}"
+          target_pressure="{target_pressure}"
+        />
+
+        <!-- Target reached — go WARM: PCSV off, VFD and HPU stay engaged -->
+        <SetPCSV
+          service_name="{service_name}"
+          enable="false"
+          cpm="0"
+        />
+
+        <!-- Maintain loop: wait for droop, re-enable, compress back to target, repeat.
+             timeout_ms=0 = no wall-clock limit on the droop wait. -->
+        <Repeat num_cycles="-1">
+          <Sequence>
+            <PressureBelowThreshold
+              pt_index="{outlet_pt_index}"
+              reenable_offset_bar="{reenable_offset_bar}"
+              timeout_ms="0"
+            />
+            <SetPCSV
+              service_name="{service_name}"
+              enable="true"
+              cpm="{cpm}"
+            />
+            <OutletAtPressure
+              outlet_pt_index="{outlet_pt_index}"
+              target_pressure="{target_pressure}"
+            />
+            <SetPCSV
+              service_name="{service_name}"
+              enable="false"
+              cpm="0"
+            />
+          </Sequence>
+        </Repeat>
+      </Sequence>
+
+      <InletPressureSafe
+        inlet_pt_index="{inlet_pt_index}"
+        safe_pressure="{safe_pressure}"
+      />
+
+    </Parallel>
+  </BehaviorTree>
+</root>

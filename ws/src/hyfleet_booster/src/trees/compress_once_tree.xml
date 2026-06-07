@@ -1,0 +1,42 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="CompressOnce">
+    <!-- One-shot compression cycle: startup → compress to target → ordered shutdown → OFF.
+         InletPressureSafe monitors throughout startup and compression.
+         On natural completion the booster returns to OFF state. -->
+    <Sequence name="compress_and_shutdown">
+
+      <Parallel success_count="1" failure_count="1">
+
+        <Sequence name="startup_and_compress">
+          <SubTree ID="Start" _autoremap="true"/>
+
+          <LogCompressionStart
+            outlet_pt_index="{outlet_pt_index}"
+            target_pressure="{target_pressure}"
+          />
+
+          <SetPCSV
+            service_name="{service_name}"
+            enable="true"
+            cpm="{cpm}"
+          />
+
+          <OutletAtPressure
+            outlet_pt_index="{outlet_pt_index}"
+            target_pressure="{target_pressure}"
+          />
+        </Sequence>
+
+        <InletPressureSafe
+          inlet_pt_index="{inlet_pt_index}"
+          safe_pressure="{safe_pressure}"
+        />
+
+      </Parallel>
+
+      <!-- Ordered shutdown — InletPressureSafe halted before inlet close -->
+      <SubTree ID="Stop" _autoremap="true"/>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

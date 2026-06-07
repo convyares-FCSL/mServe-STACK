@@ -40,13 +40,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
   shared_blackboard_.reset();
 
   try {
-    // Action server :Create, configure, goal callback
-    // MutuallyExclusive and shared with the tick timer (see set_tick_timer):
-    // BoostLow/BoostHigh are RosActionNode<ControlBooster> — their halt() calls
-    // cancelGoal(), which touches the same cached per-action SingleThreadedExecutor
-    // that tick()'s spin_some() uses, but without the library's internal mutex.
-    // Running goal-accepted and tree-tick on the same thread/group avoids the
-    // resulting "spin_some() called while already spinning" race.
     action_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     compressor_action_ = std::make_unique<CompressorAction>(*this, "~/control_compressor");
     compressor_action_->configure(action_callback_group_);
@@ -161,9 +154,9 @@ bool CompressorNode::start_op(OpSlot & slot, uint8_t command, uint8_t target, ui
 
   // Translate coordinator command to booster command and write goal fields
   using CB = mserve_interfaces::action::ControlBooster;
-  uint8_t booster_cmd = (command == ControlCompressor::Goal::START)   ? CB::Goal::START
+  uint8_t booster_cmd = (command == ControlCompressor::Goal::START)   ? CB::Goal::COMPRESS_ONCE
                       : (command == ControlCompressor::Goal::STOP)    ? CB::Goal::STOP
-                                                                      : CB::Goal::SAFE_STOP;
+                                                                      : CB::Goal::FORCE_STOP;
   slot.blackboard->set("command",         booster_cmd);
   slot.blackboard->set("target_pressure", target_pressure);
   slot.blackboard->set("speed_rpm", default_speed_rpm_);
@@ -294,8 +287,6 @@ void CompressorNode::set_tick_timer(bool enable)
 {
   if (tick_timer_) { tick_timer_->cancel(); tick_timer_.reset(); }
   if (enable) {
-    // Same callback group as the action server — see on_configure for why
-    // tick and goal-accepted must never run concurrently.
     tick_timer_ = create_wall_timer(100ms, [this]() { this->tick_tree_once(); }, action_callback_group_);
   }
 }

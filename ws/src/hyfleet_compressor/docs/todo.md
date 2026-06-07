@@ -103,16 +103,22 @@ All telemetry comes from ONE topic. Simpler than expected.
 - [x] Tick timer uses `active_tree_` pointer
 
 ### XML trees — one per command
-- [x] `start_tree.xml` — Parallel(success_count=1, failure_count=1):
-      Sequence: ControlSV(inlet) → InletPressureStable → StartVFD →
-      Sleep(vfd_delay_ms) → VFDAtSpeed → Sleep(vfd_stabilization_ms) →
-      ControlSV(HPU) → SetPCSV(enable) → OutletAtPressure
-      ∥ Safety: InletPressureSafe
-- [x] `start_idle_tree.xml` — same as start + AlwaysRunning (holds at target indefinitely)
-- [x] `stop_tree.xml` — Sequence: SetPCSV(disable) → ControlSV(HPU,close) →
-      StopVFD → VFDStopped → ControlSV(inlet,close)
-- [x] `stop_force_tree.xml` — Sequence: SetPCSV(disable) → ControlSV(HPU,close) →
-      StopVFD → ControlSV(inlet,close) (no ramp-down wait)
+- [x] `start_tree.xml` — SubTree ID="Start": brings booster to WARM (VFD running, HPU
+      engaged, PCSV off). No InletPressureSafe — compress trees provide that context.
+- [x] `compress_once_tree.xml` — Parallel(Sequence(SubTree(Start) → LogCompressionStart →
+      SetPCSV(on) → OutletAtPressure) ∥ InletPressureSafe) → SubTree(Stop).
+      One-shot: startup → compress to target → ordered shutdown → OFF.
+- [x] `compress_hold_tree.xml` — Parallel(Sequence(SubTree(Start) → SetPCSV(on) →
+      OutletAtPressure → SetPCSV(off) → Repeat(-1)(PressureBelowThreshold → SetPCSV(on) →
+      OutletAtPressure → SetPCSV(off))) ∥ InletPressureSafe). Never returns SUCCESS —
+      loops indefinitely; must be preempted externally then STOP sent.
+      `PressureBelowThreshold` reads `reenable_offset_bar` from blackboard directly
+      and computes threshold = `target_pressure − reenable_offset_bar` internally.
+- [x] `stop_tree.xml` — SubTree ID="Stop": SetPCSV(off) → PressureBelowThreshold(hyd_a) →
+      PressureBelowThreshold(hyd_b) → ControlSV(HPU,close) → PressureBelowThreshold(hyd_primer)
+      → StopVFD → ControlSV(inlet,close) → VFDStopped
+- [x] `force_stop_tree.xml` — Parallel(SetPCSV + HPU SV + StopVFD + inlet SV): slam all off
+      simultaneously; no hydraulic checks, no VFD ramp confirmation.
 
 ### Feedback
 - [x] Publish outlet pressure + percent_complete to action feedback each tick (from telemetry cache)
@@ -139,15 +145,18 @@ All telemetry comes from ONE topic. Simpler than expected.
       (SubTree reference requires prior registration)
 
 **SYNC dependencies — note now, implement at Stage 3 SYNC:**
-- [ ] `reenable_offset_bar` (default 50.0 bar) — operational param added; not a goal field.
-      Re-enable threshold = `target_pressure − reenable_offset_bar`. Written to blackboard.
-- [ ] `start_idle_tree.xml` — replace `AlwaysRunning` with correct maintain loop:
+- [x] `reenable_offset_bar` (default 50.0 bar) — declared in `booster_params.cpp`,
+      written to blackboard in `load_params()`; config-time machine param, not a goal field.
+      Threshold computation (`target_pressure − reenable_offset_bar`) is done inside
+      `PressureBelowThreshold::onRunning()` when `reenable_offset_bar` port is provided
+      instead of `threshold_bar`. No derived key on the blackboard.
+- [x] `start_idle_tree.xml` — maintain loop implemented:
       Phase 1 (startup, same as START): OFF → COMPRESSING → `OutletAtPressure`
       Transition: `SetPCSV(off)` → WARM
-      Phase 2 (maintain loop): `PressureBelowThreshold(outlet, target−offset)` → `SetPCSV(on)` →
-      `OutletAtPressure(target)` → `SetPCSV(off)` → repeat
-      Holds in WARM between re-engagements. STOP exits from wherever it is → OFF.
-      Note: `PressureBelowThreshold` reused here with `outlet_pt_index` and computed threshold.
+      Phase 2 (`Repeat num_cycles="-1"`): `PressureBelowThreshold(outlet, reenable_threshold_bar,
+      timeout_ms=0)` → `SetPCSV(on)` → `OutletAtPressure(target)` → `SetPCSV(off)` → repeat.
+      `timeout_ms=0` = no timeout (wait indefinitely for droop — wall-clock limit removed
+      via `timeout_ != 0ms` guard in `PressureBelowThreshold::onRunning`)
 
 ---
 
@@ -175,9 +184,10 @@ hardware work. No BoosterManager inside CompressorNode.
       is already RUNNING must mean "update target_pressure, keep compressing" not
       "halt and restart". Define and confirm in `BoosterNode` before coordinator
       re-goaling is implemented.
-- [ ] SYNC band semantics confirmed: "halt low at 280 bar" = `START_IDLE` (VFD holds ready,
+- [x] SYNC band semantics confirmed: "halt low at 280 bar" = `START_IDLE` (VFD holds ready,
       no ramp/stabilise cost on re-enable at 220 bar), not a cold `STOP`. START_IDLE
       exists exactly for this — band-control must use the idle/hold path.
+      Confirmed by `start_idle_tree.xml` maintain loop implementation and all 5 tests passing.
 
 ### PARALLEL mode — multi-goal node structure
 
@@ -215,8 +225,9 @@ tree is selected) not inside the XML. Command is written to the slot blackboard 
 `start_op` before tree instantiation, so one tree file handles start/stop/safe_stop
 for each booster target.
 
-- [x] `parallel_low.xml`  — `BoostLow(action_name={low_booster_action}, command={command}, ...)`
-- [x] `parallel_high.xml` — `BoostHigh(action_name={high_booster_action}, command={command}, ...)`
+- [x] `parallel_low.xml`  — `BoostLow(action_name={low_booster_action}, command={command}, ...)`;
+      command = COMPRESS_ONCE(1) / STOP(3) / FORCE_STOP(4) written to slot blackboard by `start_op`
+- [x] `parallel_high.xml` — same pattern for high booster
 - [ ] `sync.xml`          — stub; see SYNC section below
 
 ### Feedback — PARALLEL

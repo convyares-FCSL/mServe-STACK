@@ -176,19 +176,21 @@ void BoosterNode::register_bt_nodes(){
 
 void BoosterNode::build_bt_trees(){
     const std::string base = ament_index_cpp::get_package_share_directory("hyfleet_booster") + "/trees/";
+    // SubTree definitions registered first — compress trees reference both
+    factory_->registerBehaviorTreeFromFile(base + "start_tree.xml");
     factory_->registerBehaviorTreeFromFile(base + "stop_tree.xml");
-    trees_[0] = factory_->createTreeFromFile(base + "start_tree.xml", blackboard_);
-    trees_[1] = factory_->createTreeFromFile(base + "start_idle_tree.xml", blackboard_);
+    trees_[0] = factory_->createTreeFromFile(base + "compress_once_tree.xml", blackboard_);
+    trees_[1] = factory_->createTreeFromFile(base + "compress_hold_tree.xml", blackboard_);
     trees_[2] = factory_->createTree("Stop", blackboard_);
-    trees_[3] = factory_->createTreeFromFile(base + "stop_force_tree.xml", blackboard_);
+    trees_[3] = factory_->createTreeFromFile(base + "force_stop_tree.xml", blackboard_);
 }
 
 bool BoosterNode::select_tree(uint8_t command) {
   switch (command) {
-      case ControlBooster::Goal::START:      active_tree_ = &trees_[0]; return true;
-      case ControlBooster::Goal::START_IDLE: active_tree_ = &trees_[1]; return true;
-      case ControlBooster::Goal::STOP:       active_tree_ = &trees_[2]; return true;
-      case ControlBooster::Goal::SAFE_STOP:  active_tree_ = &trees_[3]; return true;
+      case ControlBooster::Goal::COMPRESS_ONCE: active_tree_ = &trees_[0]; return true;
+      case ControlBooster::Goal::COMPRESS_HOLD: active_tree_ = &trees_[1]; return true;
+      case ControlBooster::Goal::STOP:          active_tree_ = &trees_[2]; return true;
+      case ControlBooster::Goal::FORCE_STOP:    active_tree_ = &trees_[3]; return true;
       default: return false;
   }
 }
@@ -209,8 +211,8 @@ void BoosterNode::tick_tree_once(){
           !blackboard_->get("target_pressure", target)) { return; }
       const double pressure = msg->pt_bar[outlet_idx];
       const uint8_t cmd = active_goal_->get_goal()->command;
-      const bool is_start = (cmd == ControlBooster::Goal::START ||
-                             cmd == ControlBooster::Goal::START_IDLE);
+      const bool is_start = (cmd == ControlBooster::Goal::COMPRESS_ONCE ||
+                             cmd == ControlBooster::Goal::COMPRESS_HOLD);
       auto fb = std::make_shared<ControlBooster::Feedback>();
       fb->pressure         = pressure;
       fb->percent_complete = is_start ? std::clamp(pressure / target * 100.0, 0.0, 100.0) : 0.0;

@@ -99,9 +99,8 @@ class OutletAtPressure : public BT::StatefulActionNode {
 
 // ==============================================================================
 // WAIT — Pressure Below Threshold
-// Polls until pt_bar[pt_index] < threshold_bar. Wall-clock timeout → FAILURE.
-// Used in stop sequence to confirm hydraulic lines de-pressurised.
-// Also used in START_IDLE maintain loop to detect outlet droop below re-enable band.
+// Polls until pt_bar[pt_index] falls below the threshold. Wall-clock timeout → FAILURE.
+// Ports: threshold_bar (explicit) OR reenable_offset_bar (computes target_pressure - offset).
 // ==============================================================================
 
 class PressureBelowThreshold : public BT::StatefulActionNode {

@@ -54,6 +54,7 @@ void BoosterNode::declare_params(){
   declare_parameter<double>("safe_pressure", 25.0, pressure_bar_descriptor);
   declare_parameter<double>("target_deadband", 0.5, pressure_bar_descriptor);
   declare_parameter<double>("stability_tolerance", 0.05, pressure_bar_descriptor);
+  declare_parameter<double>("reenable_offset_bar", 50, pressure_bar_descriptor);
 
   // Temperature
   const auto pt100_temp_descriptor = mserve_utils::make_double_range_descriptor(
@@ -91,9 +92,6 @@ void BoosterNode::declare_params(){
     "Hydraulic line de-pressurise threshold (bar).", 0.0, 100.0);
   declare_parameter<double>("hyd_pressure_threshold_bar", 30.0, hyd_pressure_descriptor);
   declare_parameter<int>("hyd_timeout_ms", 10000, milliseconds_descriptor);
-
-  // START_IDLE maintain loop
-  declare_parameter<double>("reenable_offset_bar", 50.0, pressure_bar_descriptor);
 }
 
 // Loads all parameter and updates blackboard
@@ -157,6 +155,8 @@ void BoosterNode::load_params(){
   blackboard_->set("target_deadband", target_deadband);
   const double stability_tolerance = mserve_utils::get_or_declare_param(p, get_logger(), "stability_tolerance", 0.05, "Max variation for inlet stability check (bar)");
   blackboard_->set("stability_tolerance", stability_tolerance);
+  const double reenable_offset_bar = mserve_utils::get_or_declare_param(p, get_logger(), "reenable_offset_bar", 50.0, "START_IDLE re-engage threshold = target − offset (bar)");
+  blackboard_->set("reenable_offset_bar", reenable_offset_bar);
 
   // Temperature
   const double min_temp_inlet = mserve_utils::get_or_declare_param(p, get_logger(), "min_temp_inlet", 0.00, "Minimum inlet temperature (°C)");
@@ -196,9 +196,6 @@ void BoosterNode::load_params(){
   const int hyd_timeout_ms = mserve_utils::get_or_declare_param(p, get_logger(), "hyd_timeout_ms", 10000, "Max wait for hydraulic line to de-pressurise (ms)");
   blackboard_->set("hyd_timeout_ms", hyd_timeout_ms);
 
-  // START_IDLE maintain loop
-  const double reenable_offset_bar = mserve_utils::get_or_declare_param(p, get_logger(), "reenable_offset_bar", 50.0, "START_IDLE re-engage threshold = target − offset (bar)");
-  blackboard_->set("reenable_offset_bar", reenable_offset_bar);
 }
 
 rcl_interfaces::msg::SetParametersResult BoosterNode::on_parameters(const std::vector<rclcpp::Parameter> & params){

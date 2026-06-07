@@ -280,7 +280,8 @@ PressureBelowThreshold::PressureBelowThreshold(const std::string& name, const BT
 BT::PortsList PressureBelowThreshold::providedPorts() {
     return {
         BT::InputPort<int>("pt_index"),
-        BT::InputPort<double>("threshold_bar"),
+        BT::InputPort<double>("threshold_bar"),       // explicit threshold; used in stop sequence
+        BT::InputPort<double>("reenable_offset_bar"), // if provided: threshold = target_pressure - offset
         BT::InputPort<int>("timeout_ms")
     };
 }
@@ -297,7 +298,9 @@ BT::NodeStatus PressureBelowThreshold::onStart() {
 }
 
 BT::NodeStatus PressureBelowThreshold::onRunning() {
-    if (std::chrono::steady_clock::now() - start_time_ > timeout_) {
+    // timeout_ms=0 means no timeout (used by the START_IDLE maintain loop)
+    if (timeout_ != std::chrono::milliseconds(0) &&
+        std::chrono::steady_clock::now() - start_time_ > timeout_) {
         RCLCPP_WARN(rclcpp::get_logger(name()), "PressureBelowThreshold: timeout waiting for pressure to drop");
         return BT::NodeStatus::FAILURE;
     }
@@ -311,18 +314,30 @@ BT::NodeStatus PressureBelowThreshold::onRunning() {
     auto [msg, stamp] = cache->latest();
     if (!msg) { return BT::NodeStatus::RUNNING; }
 
-    auto index_res     = getInput<int>("pt_index");
-    auto threshold_res = getInput<double>("threshold_bar");
-    if (!index_res || !threshold_res) {
-        RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: missing input ports");
+    auto index_res = getInput<int>("pt_index");
+    if (!index_res) {
+        RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: missing pt_index port");
         return BT::NodeStatus::FAILURE;
     }
 
-    const double pressure  = msg->pt_bar[index_res.value()];
-    const double threshold = threshold_res.value();
+    double threshold;
+    auto thresh_res = getInput<double>("threshold_bar");
+    if (thresh_res) {
+        threshold = thresh_res.value();
+    } else {
+        auto offset_res = getInput<double>("reenable_offset_bar");
+        if (!offset_res) {
+            RCLCPP_ERROR(rclcpp::get_logger(name()), "PressureBelowThreshold: neither threshold_bar nor reenable_offset_bar provided");
+            return BT::NodeStatus::FAILURE;
+        }
+        double target{};
+        config().blackboard->get("target_pressure", target);
+        threshold = target - offset_res.value();
+    }
 
+    const double pressure = msg->pt_bar[index_res.value()];
     if (pressure < threshold) {
-        RCLCPP_INFO(rclcpp::get_logger(name()), "PressureBelowThreshold: %.1f bar below threshold %.1f bar", pressure, threshold);
+        RCLCPP_INFO(rclcpp::get_logger(name()), "PressureBelowThreshold: %.1f bar below %.1f bar", pressure, threshold);
         return BT::NodeStatus::SUCCESS;
     }
     return BT::NodeStatus::RUNNING;
