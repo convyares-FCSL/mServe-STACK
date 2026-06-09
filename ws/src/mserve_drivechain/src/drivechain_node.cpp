@@ -59,6 +59,7 @@ DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecyc
     // Put pointers on blackboard for BT nodes
     blackboard_->set("uart",          uart_.get());
     blackboard_->set("cmd_vel_cache", cmd_vel_cache_.get());
+    blackboard_->set("ros_logger",    get_logger());
 
     // --- lifecycle publishers (activate/deactivate with node state) ---
     wheel_feedback_pub_ = create_publisher<WheelFeedback>(

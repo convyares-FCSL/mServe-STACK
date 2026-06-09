@@ -47,6 +47,15 @@
       margin-bottom: 20px;
     }
 
+    /* Two-column mid row */
+    .mid-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 680px) { .mid-row { grid-template-columns: 1fr; } }
+
     /* D-pad */
     .dpad-wrap {
       display: flex;
@@ -176,34 +185,57 @@
       <div id="service-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 
-    <!-- Speed sliders ───────────────────────────────────────────────────── -->
-    <section class="panel">
-      <h2>Speed</h2>
-      <div class="sliders">
-        <label for="slider-linear">Linear</label>
-        <input id="slider-linear" type="range" min="0.05" max="0.5" step="0.05" value="0.2" />
-        <span id="val-linear">0.20 m/s</span>
+    <!-- Drive + Feedback ── two columns ─────────────────────────────────── -->
+    <div class="mid-row">
 
-        <label for="slider-angular">Turn rate</label>
-        <input id="slider-angular" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
-        <span id="val-angular">1.00 rad/s</span>
-      </div>
-    </section>
+      <!-- LEFT: Speed + D-pad -->
+      <section class="panel" style="margin:0">
+        <h2>Drive</h2>
+        <div class="sliders">
+          <label for="slider-linear">Linear</label>
+          <input id="slider-linear" type="range" min="0.05" max="0.5" step="0.05" value="0.2" />
+          <span id="val-linear">0.20 m/s</span>
 
-    <!-- D-pad ───────────────────────────────────────────────────────────── -->
-    <section class="panel">
-      <h2>Drive</h2>
-      <div class="dpad-wrap">
-        <div class="dpad">
-          <button class="dpad-forward" id="btn-forward" data-dir="forward">▲</button>
-          <button class="dpad-left"    id="btn-left"    data-dir="left">◄</button>
-          <button class="dpad-stop"    id="btn-stop"    data-dir="stop">■</button>
-          <button class="dpad-right"   id="btn-right"   data-dir="right">►</button>
-          <button class="dpad-back"    id="btn-back"    data-dir="back">▼</button>
+          <label for="slider-angular">Turn rate</label>
+          <input id="slider-angular" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
+          <span id="val-angular">1.00 rad/s</span>
         </div>
-        <span class="kbd-hint">Hold to move · Keyboard: W A S D or arrow keys · Space = stop</span>
-      </div>
-    </section>
+        <div class="dpad-wrap">
+          <div class="dpad">
+            <button class="dpad-forward" id="btn-forward" data-dir="forward">▲</button>
+            <button class="dpad-left"    id="btn-left"    data-dir="left">◄</button>
+            <button class="dpad-stop"    id="btn-stop"    data-dir="stop">■</button>
+            <button class="dpad-right"   id="btn-right"   data-dir="right">►</button>
+            <button class="dpad-back"    id="btn-back"    data-dir="back">▼</button>
+          </div>
+          <span class="kbd-hint">Hold to move · W A S D or arrow keys · Space = stop</span>
+        </div>
+      </section>
+
+      <!-- RIGHT: Wheel Feedback -->
+      <section class="panel" style="margin:0">
+        <h2>Feedback</h2>
+        <div class="feedback-grid">
+          <div class="feedback-card">
+            <h4>Left velocity</h4>
+            <span class="feedback-value" id="fb-left-vel">—</span><span class="feedback-unit">rad/s</span>
+          </div>
+          <div class="feedback-card">
+            <h4>Right velocity</h4>
+            <span class="feedback-value" id="fb-right-vel">—</span><span class="feedback-unit">rad/s</span>
+          </div>
+          <div class="feedback-card">
+            <h4>Left position</h4>
+            <span class="feedback-value" id="fb-left-pos">—</span><span class="feedback-unit">°</span>
+          </div>
+          <div class="feedback-card">
+            <h4>Right position</h4>
+            <span class="feedback-value" id="fb-right-pos">—</span><span class="feedback-unit">°</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
 
     <!-- Logs ────────────────────────────────────────────────────────────── -->
     <section class="panel">
@@ -214,29 +246,6 @@
         <label><input type="checkbox" id="chk-debug"> Show DEBUG</label>
       </div>
       <div id="log-box"></div>
-    </section>
-
-    <!-- Feedback ────────────────────────────────────────────────────────── -->
-    <section class="panel">
-      <h2>Wheel Feedback</h2>
-      <div class="feedback-grid">
-        <div class="feedback-card">
-          <h4>Left velocity</h4>
-          <span class="feedback-value" id="fb-left-vel">—</span><span class="feedback-unit">rad/s</span>
-        </div>
-        <div class="feedback-card">
-          <h4>Right velocity</h4>
-          <span class="feedback-value" id="fb-right-vel">—</span><span class="feedback-unit">rad/s</span>
-        </div>
-        <div class="feedback-card">
-          <h4>Left position</h4>
-          <span class="feedback-value" id="fb-left-pos">—</span><span class="feedback-unit">°</span>
-        </div>
-        <div class="feedback-card">
-          <h4>Right position</h4>
-          <span class="feedback-value" id="fb-right-pos">—</span><span class="feedback-unit">°</span>
-        </div>
-      </div>
     </section>
   </div>
 

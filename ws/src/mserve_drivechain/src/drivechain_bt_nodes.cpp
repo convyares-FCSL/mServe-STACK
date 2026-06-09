@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <functional>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
 
 namespace mserve_drivechain {
 
@@ -26,6 +28,13 @@ static T bb_get(const BT::Blackboard::Ptr & bb, const std::string & key, const T
 static DriveUart * get_uart(const BT::NodeConfig & cfg)
 {
   return bb_ptr<DriveUart>(cfg, "uart");
+}
+
+static rclcpp::Logger get_ros_logger(const BT::NodeConfig & cfg)
+{
+  rclcpp::Logger logger = rclcpp::get_logger("drivechain_bt");
+  (void)cfg.blackboard->get("ros_logger", logger);
+  return logger;
 }
 
 // ==============================================================================
@@ -83,8 +92,12 @@ BT::NodeStatus OpenUart::tick()
   getInput("device", device);
   getInput("baud",   baud);
 
-  if (!uart->open(device, baud)) return BT::NodeStatus::FAILURE;
+  if (!uart->open(device, baud)) {
+    RCLCPP_WARN(get_ros_logger(config()), "OpenUart FAILED: cannot open %s", device.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
 
+  RCLCPP_INFO(get_ros_logger(config()), "OpenUart OK: %s @ %d baud", device.c_str(), baud);
   config().blackboard->set("uart_connected", true);
   return BT::NodeStatus::SUCCESS;
 }
@@ -117,8 +130,13 @@ BT::NodeStatus PingMotor::tick()
 
   int motor_id = 0;
   getInput("motor_id", motor_id);
-  return uart->ping(static_cast<uint8_t>(motor_id))
-    ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  const bool ok = uart->ping(static_cast<uint8_t>(motor_id));
+  if (!ok) {
+    RCLCPP_WARN(get_ros_logger(config()),
+      "PingMotor FAILED: motor_id=%d — no response (wrong ID? not powered? RS-485 wiring?)",
+      motor_id);
+  }
+  return ok ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 // -------------------------------------------------------------------------------
@@ -138,8 +156,15 @@ BT::NodeStatus SetMotorMode::tick()
   int motor_id = 0, mode = 2;
   getInput("motor_id", motor_id);
   getInput("mode",     mode);
-  return uart->set_mode(static_cast<uint8_t>(motor_id), static_cast<uint8_t>(mode))
-    ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  const bool ok = uart->set_mode(static_cast<uint8_t>(motor_id), static_cast<uint8_t>(mode));
+  if (!ok) {
+    RCLCPP_WARN(get_ros_logger(config()),
+      "SetMotorMode FAILED: motor_id=%d mode=%d", motor_id, mode);
+  } else {
+    RCLCPP_INFO(get_ros_logger(config()),
+      "SetMotorMode OK: motor_id=%d mode=%d", motor_id, mode);
+  }
+  return ok ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 // -------------------------------------------------------------------------------
