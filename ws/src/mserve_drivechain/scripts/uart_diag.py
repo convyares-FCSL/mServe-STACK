@@ -61,8 +61,10 @@ def open_port(device: str, baud: int):
 
     tty = termios.tcgetattr(fd)
     baud_const = {9600: termios.B9600, 57600: termios.B57600, 115200: termios.B115200}[baud]
-    termios.cfsetospeed(tty, baud_const)
-    termios.cfsetispeed(tty, baud_const)
+
+    # In Python 3, ispeed=tty[4] and ospeed=tty[5]
+    tty[4] = baud_const
+    tty[5] = baud_const
 
     # 8N1, no flow control, raw mode
     tty[2] = (tty[2] & ~termios.CSIZE) | termios.CS8
