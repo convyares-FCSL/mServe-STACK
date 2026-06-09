@@ -151,7 +151,32 @@ else
   ros2 run mserve_drivechain drivechain_node $NODE_ARGS &
   NATIVE_PIDS+=($!)
 fi
-sleep 2
+
+# ── Wait for node to appear ───────────────────────────────────────────────────
+echo "Waiting for drivechain node…"
+NODE_UP=false
+for i in $(seq 1 30); do
+  if [[ "$USE_DOCKER" == true ]]; then
+    CHECK=$(docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
+      source /opt/ros/jazzy/setup.bash
+      source /ws/install/setup.bash
+      ros2 lifecycle get /mserve_drivechain 2>/dev/null
+    " 2>/dev/null || true)
+  else
+    CHECK=$(ros2 lifecycle get /mserve_drivechain 2>/dev/null || true)
+  fi
+  if [[ "$CHECK" == *"unconfigured"* ]]; then
+    NODE_UP=true
+    break
+  fi
+  echo "  ($i/30) not ready yet…"
+  sleep 1
+done
+
+if [[ "$NODE_UP" == false ]]; then
+  echo "ERROR: drivechain node did not appear after 30 s. Check logs."
+  exit 1
+fi
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 echo "Configuring drivechain node…"
