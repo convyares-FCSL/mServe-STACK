@@ -206,3 +206,50 @@ document.addEventListener('keyup', (e) => {
 // ── Periodic state refresh ────────────────────────────────────────────────────
 
 setInterval(refreshNodeState, 4000);
+
+// ── /rosout log panel ─────────────────────────────────────────────────────────
+
+const logBox       = document.getElementById('log-box');
+const chkAllNodes  = document.getElementById('chk-all-nodes');
+const chkDebug     = document.getElementById('chk-debug');
+
+document.getElementById('btn-log-clear').addEventListener('click', () => { logBox.innerHTML = ''; });
+
+const LOG_LEVELS = { 10: ['DEBUG','log-debug'], 20: ['INFO','log-info'], 30: ['WARN','log-warn'], 40: ['ERROR','log-error'], 50: ['FATAL','log-fatal'] };
+
+const rosoutSub = new ROSLIB.Topic({
+  ros,
+  name: '/rosout',
+  messageType: 'rcl_interfaces/msg/Log',
+});
+
+rosoutSub.subscribe((msg) => {
+  const level = msg.level ?? 20;
+  if (level === 10 && !chkDebug.checked) return;
+  const nodeName = msg.name ?? '';
+  if (!chkAllNodes.checked && !nodeName.includes('mserve_drivechain')) return;
+
+  const [levelLabel, levelClass] = LOG_LEVELS[level] ?? ['?', 'log-info'];
+  const d = new Date();
+  const ts = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+
+  const line = document.createElement('div');
+  line.className = levelClass;
+  line.innerHTML =
+    `<span class="log-ts">${ts}</span>` +
+    `<span class="log-node">[${nodeName}]</span>` +
+    `<span>[${levelLabel}] ${escHtml(msg.msg ?? '')}</span>`;
+  logBox.appendChild(line);
+
+  // keep max 500 lines
+  while (logBox.children.length > 500) logBox.removeChild(logBox.firstChild);
+
+  // auto-scroll if already near the bottom
+  if (logBox.scrollHeight - logBox.scrollTop < logBox.clientHeight + 60) {
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+});
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}

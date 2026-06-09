@@ -85,6 +85,34 @@
       color: #64748b;
     }
 
+    /* Log panel */
+    .log-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .log-toolbar label { font-size: 0.85rem; color: #94a3b8; cursor: pointer; user-select: none; }
+    #log-box {
+      background: #0f172a;
+      border-radius: 10px;
+      padding: 12px 14px;
+      height: 240px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #cbd5e1;
+    }
+    .log-info  { color: #cbd5e1; }
+    .log-warn  { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-fatal { color: #f87171; font-weight: 700; }
+    .log-debug { color: #64748b; }
+    .log-ts    { color: #475569; margin-right: 6px; }
+    .log-node  { color: #60a5fa; margin-right: 6px; }
+
     /* Feedback table */
     .feedback-grid {
       display: grid;
@@ -175,6 +203,17 @@
         </div>
         <span class="kbd-hint">Hold to move · Keyboard: W A S D or arrow keys · Space = stop</span>
       </div>
+    </section>
+
+    <!-- Logs ────────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Logs</h2>
+      <div class="log-toolbar">
+        <button id="btn-log-clear" style="padding:4px 12px;font-size:0.8rem">Clear</button>
+        <label><input type="checkbox" id="chk-all-nodes"> Show all nodes</label>
+        <label><input type="checkbox" id="chk-debug"> Show DEBUG</label>
+      </div>
+      <div id="log-box"></div>
     </section>
 
     <!-- Feedback ────────────────────────────────────────────────────────── -->
