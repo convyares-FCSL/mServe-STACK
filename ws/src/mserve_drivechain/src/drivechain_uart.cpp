@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -13,8 +15,7 @@
 namespace mserve_drivechain {
 
 // ==============================================================================
-// CRC-8/MAXIM (Dallas/Maxim 1-Wire CRC)
-// Polynomial 0x8C (reflected). Initial value 0x00.
+// CRC-8/MAXIM — kept for unit-test compatibility, not used in JSON protocol
 // ==============================================================================
 
 uint8_t DriveUart::crc8(const uint8_t * data, size_t len)
@@ -31,7 +32,87 @@ uint8_t DriveUart::crc8(const uint8_t * data, size_t len)
 }
 
 // ==============================================================================
-// Construction / lifecycle
+// JSON helpers
+// ==============================================================================
+
+// Extract an integer field from a JSON string: {"key":value,...}
+static int json_int(const std::string & s, const char * key, int def = 0)
+{
+  std::string k = std::string("\"") + key + "\":";
+  auto pos = s.find(k);
+  if (pos == std::string::npos) return def;
+  try { return std::stoi(s.substr(pos + k.size())); }
+  catch (...) { return def; }
+}
+
+static float json_float(const std::string & s, const char * key, float def = 0.0f)
+{
+  std::string k = std::string("\"") + key + "\":";
+  auto pos = s.find(k);
+  if (pos == std::string::npos) return def;
+  try { return std::stof(s.substr(pos + k.size())); }
+  catch (...) { return def; }
+}
+
+bool DriveUart::send_json(const std::string & cmd)
+{
+  if (fd_ < 0) return false;
+  std::string line = cmd + "\n";
+  ssize_t n = write(fd_, line.c_str(), line.size());
+  return n == static_cast<ssize_t>(line.size());
+}
+
+bool DriveUart::read_line(std::string & out, int timeout_ms)
+{
+  out.clear();
+  if (fd_ < 0) return false;
+
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+
+  while (true) {
+    auto now = std::chrono::steady_clock::now();
+    if (now >= deadline) return false;
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(deadline - now).count();
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(fd_, &fds);
+    timeval tv;
+    tv.tv_sec  = us / 1'000'000;
+    tv.tv_usec = us % 1'000'000;
+
+    if (select(fd_ + 1, &fds, nullptr, nullptr, &tv) <= 0) return false;
+
+    char c;
+    if (read(fd_, &c, 1) <= 0) return false;
+    if (c == '\n') return !out.empty();
+    if (c != '\r') out += c;  // skip CR in CRLF
+  }
+}
+
+// Parse a JSON motor feedback line from the ESP32.
+// Expected format: {"T":20010,"id":1,"typ":115,"spd":50,"crt":1.2,"act":3,"tep":35,"err":0}
+bool DriveUart::parse_json_feedback(const std::string & line, uint8_t expected_id,
+  MotorFeedback & fb)
+{
+  if (line.empty() || line[0] != '{') return false;
+  const int t = json_int(line, "T");
+  if (t != 20010 && t != 20030) return false;  // motor ctrl / info response
+
+  const int id = json_int(line, "id", -1);
+  if (id != static_cast<int>(expected_id)) return false;
+
+  fb.mode        = 2;
+  fb.speed_rpm   = json_int(line,   "spd");
+  fb.fault_code  = json_int(line,   "err");
+  fb.current     = json_float(line, "crt");
+  fb.temperature = json_float(line, "tep");
+  fb.position    = 0;  // not returned in speed-loop feedback
+  return true;
+}
+
+// ==============================================================================
+// Lifecycle
 // ==============================================================================
 
 DriveUart::DriveUart(bool sim_mode) : sim_mode_(sim_mode) {}
@@ -53,14 +134,16 @@ bool DriveUart::open(const std::string & device, int baud)
   if (baud == 57600)  speed = B57600;
   if (baud == 115200) speed = B115200;
 
-  cfsetospeed(&tty, speed);
-  cfsetispeed(&tty, speed);
+  // In Python-3-style termios, ispeed=tty[4] ospeed=tty[5], but in C termios
+  // we use cfsetspeed.
+  cfsetspeed(&tty, speed);
 
   tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
   tty.c_cflag &= ~(PARENB | CSTOPB | CRTSCTS);
   tty.c_cflag |= CLOCAL | CREAD;
   tty.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-  tty.c_iflag &= ~(IXON | IXOFF | IXANY | IGNBRK | BRKINT | PARMRK | INPCK | ISTRIP | INLCR | IGNCR | ICRNL);
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY | IGNBRK | BRKINT | PARMRK |
+                   INPCK | ISTRIP | INLCR | IGNCR | ICRNL);
   tty.c_oflag &= ~OPOST;
   tty.c_cc[VMIN]  = 0;
   tty.c_cc[VTIME] = 0;
@@ -83,66 +166,6 @@ bool DriveUart::is_open() const
 }
 
 // ==============================================================================
-// Internal helpers
-// ==============================================================================
-
-bool DriveUart::write_packet(const uint8_t * pkt)
-{
-  if (sim_mode_) return true;
-  if (fd_ < 0) return false;
-  ssize_t written = write(fd_, pkt, 10);
-  return written == 10;
-}
-
-bool DriveUart::read_bytes(uint8_t * buf, size_t n, int timeout_ms)
-{
-  if (sim_mode_) return false;  // caller handles sim path separately
-  if (fd_ < 0) return false;
-
-  size_t received = 0;
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-
-  while (received < n) {
-    auto now = std::chrono::steady_clock::now();
-    if (now >= deadline) return false;
-
-    auto remaining_us = std::chrono::duration_cast<std::chrono::microseconds>(deadline - now).count();
-
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(fd_, &fds);
-    timeval tv;
-    tv.tv_sec  = remaining_us / 1'000'000;
-    tv.tv_usec = remaining_us % 1'000'000;
-
-    int ret = select(fd_ + 1, &fds, nullptr, nullptr, &tv);
-    if (ret <= 0) return false;
-
-    ssize_t got = read(fd_, buf + received, n - received);
-    if (got <= 0) return false;
-    received += static_cast<size_t>(got);
-  }
-  return true;
-}
-
-bool DriveUart::parse_feedback_115(const uint8_t * data, MotorFeedback & fb)
-{
-  // Verify CRC over bytes [0..8]
-  if (crc8(data, 9) != data[9]) return false;
-
-  fb.mode  = data[1];
-
-  fb.torque = static_cast<int16_t>((data[2] << 8) | data[3]);
-
-  fb.speed_rpm = static_cast<int16_t>((data[4] << 8) | data[5]);
-
-  // position field (normal feedback; not get_info)
-  fb.position  = (data[6] << 8) | data[7];
-  fb.fault_code = data[8];
-  return true;
-}
-
-// ==============================================================================
 // Motor commands
 // ==============================================================================
 
@@ -152,28 +175,27 @@ bool DriveUart::set_speed(uint8_t id, int rpm, MotorFeedback & fb)
 
   if (sim_mode_) {
     sim_cmds_[id] = rpm;
-    fb.mode       = 2;
-    fb.speed_rpm  = rpm;
-    fb.fault_code = 0;
+    fb.mode        = 2;
+    fb.speed_rpm   = rpm;
+    fb.fault_code  = 0;
+    fb.current     = 0.0f;
+    fb.temperature = 0.0f;
     return true;
   }
 
-  uint8_t pkt[10] = {};
-  int16_t cmd16 = static_cast<int16_t>(rpm);
-  pkt[0] = id;
-  pkt[1] = 0x64;
-  pkt[2] = (cmd16 >> 8) & 0xFF;
-  pkt[3] = cmd16 & 0xFF;
-  // bytes 4-8 remain 0x00
-  pkt[9] = crc8(pkt, 9);
+  char buf[64];
+  std::snprintf(buf, sizeof(buf),
+    "{\"T\":10010,\"id\":%d,\"cmd\":%d,\"act\":0}", id, rpm);
 
-  if (!write_packet(pkt)) return false;
+  if (!send_json(buf)) return false;
 
-  uint8_t resp[10];
-  if (!read_bytes(resp, 10, 10)) return false;
-  if (resp[0] != id) return false;
-
-  return parse_feedback_115(resp, fb);
+  // The ESP32 may send unrelated lines first; scan up to 5 lines for a match.
+  for (int i = 0; i < 5; ++i) {
+    std::string line;
+    if (!read_line(line, 100)) return false;
+    if (parse_json_feedback(line, id, fb)) return true;
+  }
+  return false;
 }
 
 bool DriveUart::stop(uint8_t id, MotorFeedback & fb)
@@ -185,22 +207,23 @@ bool DriveUart::set_mode(uint8_t id, uint8_t mode)
 {
   if (sim_mode_) return true;
 
-  uint8_t pkt[10] = {};
-  pkt[0] = id;
-  pkt[1] = 0xA0;
-  // bytes 2-8 remain 0x00
-  pkt[9] = mode;  // DDSM115 protocol: mode in byte[9], not CRC
+  char buf[64];
+  std::snprintf(buf, sizeof(buf),
+    "{\"T\":10012,\"id\":%d,\"mode\":%d}", id, static_cast<int>(mode));
 
-  return write_packet(pkt);
-  // No response for mode change
+  if (!send_json(buf)) return false;
+
+  // Mode changes may or may not return feedback — drain any response.
+  std::string line;
+  read_line(line, 150);
+  return true;
 }
 
 bool DriveUart::ping(uint8_t id)
 {
   if (sim_mode_) return true;
-
   MotorFeedback fb;
-  return stop(id, fb) && fb.fault_code == 0;
+  return set_speed(id, 0, fb) && fb.fault_code == 0;
 }
 
 // ==============================================================================
@@ -211,36 +234,28 @@ int DriveUart::id_check()
 {
   if (sim_mode_) return 1;
 
-  // Broadcast packet — only use when exactly one motor is on the bus.
-  uint8_t pkt[10] = {0xC8, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE};
-  if (!write_packet(pkt)) return -1;
+  // Only safe when exactly one motor is on the bus.
+  if (!send_json("{\"T\":10031}")) return -1;
 
-  uint8_t resp[10];
-  if (!read_bytes(resp, 10, 20)) return -1;
+  std::string line;
+  if (!read_line(line, 500)) return -1;
 
-  if (crc8(resp, 9) != resp[9]) return -1;
-
-  return static_cast<int>(resp[0]);
+  return json_int(line, "id", -1);
 }
 
 bool DriveUart::change_id(uint8_t current_id, uint8_t new_id)
 {
   if (sim_mode_) return true;
+  (void)current_id;  // single motor on bus — no need to address by current ID
 
-  uint8_t pkt[10] = {};
-  pkt[0] = 0xAA;
-  pkt[1] = 0x55;
-  pkt[2] = 0x53;
-  pkt[3] = new_id;
-  // bytes 4-8 remain 0x00
-  pkt[9] = crc8(pkt, 9);
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "{\"T\":10011,\"id\":%d}", static_cast<int>(new_id));
 
-  for (int i = 0; i < 5; ++i) {
-    write_packet(pkt);
-    std::this_thread::sleep_for(std::chrono::milliseconds(4));
-  }
+  if (!send_json(buf)) return false;
 
-  (void)current_id;
+  // Give the ESP32 time to reprogram the motor ID.
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
   return ping(new_id);
 }
 

@@ -8,13 +8,14 @@
 
 namespace mserve_drivechain {
 
-// Low-level DDSM115 protocol layer.
+// DDSM Driver HAT (A) protocol layer — JSON over UART to onboard ESP32.
+//
+// The HAT's ESP32 accepts newline-terminated JSON commands and returns JSON
+// feedback.  Raw DDSM115 binary packets are handled internally by the ESP32;
+// this class never sends them directly.
 //
 // In sim_mode the port is never opened; all commands succeed immediately
-// and feedback echoes commanded speed. This lets the higher-level node
-// and BT trees operate identically regardless of backend.
-//
-// All reads use select() so no call ever blocks longer than timeout_ms.
+// and feedback echoes commanded speed.
 class DriveUart {
 public:
   explicit DriveUart(bool sim_mode);
@@ -54,13 +55,14 @@ public:
   // Change motor ID. Sends the 5× change-id sequence then calls ping(new_id).
   bool change_id(uint8_t current_id, uint8_t new_id);
 
-  // --- CRC utility (public so tests can use it) ---
+  // CRC-8/MAXIM — kept for unit-test compatibility (not used in JSON protocol).
   static uint8_t crc8(const uint8_t * data, size_t len);
 
 private:
-  bool write_packet(const uint8_t * pkt);
-  bool read_bytes(uint8_t * buf, size_t n, int timeout_ms = 10);
-  bool parse_feedback_115(const uint8_t * data, MotorFeedback & fb);
+  // JSON protocol helpers
+  bool send_json(const std::string & cmd);
+  bool read_line(std::string & out, int timeout_ms);
+  bool parse_json_feedback(const std::string & line, uint8_t expected_id, MotorFeedback & fb);
 
   bool sim_mode_;
   int  fd_ = -1;

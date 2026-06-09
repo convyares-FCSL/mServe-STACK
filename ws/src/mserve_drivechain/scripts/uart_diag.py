@@ -1,53 +1,31 @@
 #!/usr/bin/env python3
 """
-uart_diag.py — DDSM115 RS-485 serial diagnostic
+uart_diag.py — DDSM Driver HAT (A) / ESP32 JSON serial diagnostic
 
-Tries to talk to DDSM115 motors on the given UART device and prints what
-it finds. Run this BEFORE the ROS node to rule out wiring / switch issues.
+Communicates with the HAT's ESP32 using JSON commands (NOT raw DDSM115
+binary). The ESP32 translates JSON → RS-485 → motors internally.
 
-Usage (inside Docker container or natively on Pi):
+Switch position: "Serial Port Control Switch" must be set to ESP32.
+  - /dev/serial0  → Pi GPIO UART → ESP32 (switch in ESP32 position)
+  - /dev/ttyUSB0  → USB-C cable  → ESP32 (switch in USB position)
+
+Usage:
     python3 uart_diag.py [device] [motor_ids...]
 
 Examples:
     python3 uart_diag.py
-    python3 uart_diag.py /dev/serial0
     python3 uart_diag.py /dev/serial0 1 2
     python3 uart_diag.py /dev/ttyUSB0 1
 """
 
 import sys
-import struct
+import json
 import time
 
 DEVICE   = sys.argv[1] if len(sys.argv) > 1 else "/dev/serial0"
 IDS      = [int(x) for x in sys.argv[2:]] if len(sys.argv) > 2 else [1, 2]
 BAUD     = 115200
-TIMEOUT  = 0.05  # 50 ms receive window
-
-# ── CRC-8/MAXIM (polynomial 0x8C, reflected) ──────────────────────────────────
-def crc8(data: bytes) -> int:
-    crc = 0
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 0x01:
-                crc = (crc >> 1) ^ 0x8C
-            else:
-                crc >>= 1
-    return crc
-
-# ── Packet builders ────────────────────────────────────────────────────────────
-def stop_packet(motor_id: int) -> bytes:
-    pkt = bytearray(10)
-    pkt[0] = motor_id
-    pkt[1] = 0x64   # speed command
-    # bytes 2-8 = 0x00  (RPM = 0)
-    pkt[9] = crc8(pkt[:9])
-    return bytes(pkt)
-
-def broadcast_id_check() -> bytes:
-    # Fixed broadcast packet — use only with one motor on bus
-    return bytes([0xC8, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE])
+TIMEOUT  = 0.5  # 500 ms — generous for ESP32 processing
 
 # ── Open port ──────────────────────────────────────────────────────────────────
 import os, termios, fcntl, select
@@ -80,34 +58,25 @@ def open_port(device: str, baud: int):
     termios.tcflush(fd, termios.TCIOFLUSH)
     return fd
 
-def send_recv(fd, pkt: bytes, timeout: float):
-    os.write(fd, pkt)
+def send_cmd(fd, cmd: str):
+    os.write(fd, (cmd + "\n").encode())
+
+def read_line(fd, timeout: float) -> str:
     deadline = time.monotonic() + timeout
     buf = b""
-    while len(buf) < 10:
+    while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            break
+            return ""
         r, _, _ = select.select([fd], [], [], remaining)
         if not r:
-            break
-        chunk = os.read(fd, 10 - len(buf))
-        if not chunk:
-            break
-        buf += chunk
-    return buf
-
-def parse_feedback(data: bytes):
-    if len(data) < 10:
-        return None
-    if crc8(data[:9]) != data[9]:
-        return None
-    torque    = struct.unpack(">h", data[2:4])[0]
-    speed_rpm = struct.unpack(">h", data[4:6])[0]
-    position  = struct.unpack(">H", data[6:8])[0]
-    fault     = data[8]
-    return {"mode": data[1], "torque": torque, "speed_rpm": speed_rpm,
-            "position": position, "fault": fault}
+            return ""
+        ch = os.read(fd, 1)
+        if not ch:
+            return ""
+        if ch == b"\n":
+            return buf.decode(errors="replace").strip()
+        buf += ch
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
@@ -128,53 +97,49 @@ print(f"  OK  : {DEVICE} exists")
 fd = open_port(DEVICE, BAUD)
 print(f"  OK  : opened {DEVICE} at {BAUD} baud\n")
 
-# 3. Ping each motor ID
+# 3. ID check — query ESP32 for any connected motor (one motor on bus)
+print("  Sending ID check ({"+"T:10031} — needs single motor on bus) ...", end="  ", flush=True)
+send_cmd(fd, '{"T":10031}')
+line = read_line(fd, TIMEOUT)
+if line:
+    print(f"Response: {line}")
+    try:
+        d = json.loads(line)
+        print(f"        ✓ ESP32 responded — motor ID={d.get('id','?')} type={d.get('typ','?')}")
+    except json.JSONDecodeError:
+        print(f"        → non-JSON response: {line!r}")
+else:
+    print("NO RESPONSE")
+    print("        → check switch position (must be ESP32), motor powered, wiring")
+
+print()
+
+# 4. Ping each motor ID with a speed=0 command
 any_found = False
 for mid in IDS:
-    pkt  = stop_packet(mid)
-    print(f"  Pinging motor ID {mid} ...", end="  ", flush=True)
-    resp = send_recv(fd, pkt, TIMEOUT)
-
-    if not resp:
-        print(f"NO RESPONSE (timeout {int(TIMEOUT*1000)} ms)")
-        print(f"        → motor not powered? wrong ID? RS-485 wiring? HAT switch in ESP32 mode?")
-        continue
-
-    print(f"got {len(resp)} bytes: {resp.hex(' ').upper()}")
-
-    if len(resp) < 10:
-        print(f"        → truncated response — possible noise or baud rate mismatch")
-        continue
-
-    if resp[0] != mid:
-        print(f"        → response ID {resp[0]} doesn't match expected {mid}")
-
-    fb = parse_feedback(resp)
-    if fb is None:
-        print(f"        → CRC FAIL — data corruption? wrong baud rate?")
-    else:
-        any_found = True
-        deg = fb['position'] * 360.0 / 32767.0
-        print(f"        → mode={fb['mode']} rpm={fb['speed_rpm']} pos={deg:.1f}° fault={fb['fault']}")
-        print(f"        ✓ Motor {mid} alive")
-
-# 4. Broadcast ID check (only if no motors found, and only safe with 1 motor on bus)
-if not any_found:
-    print(f"\n  Trying broadcast ID check (safe only with 1 motor on bus) ...")
-    pkt  = broadcast_id_check()
-    resp = send_recv(fd, pkt, TIMEOUT)
-    if not resp:
-        print("  NO RESPONSE to broadcast — bus is silent")
-        print("\n  Likely causes:")
-        print("    1. HAT DIP switch in ESP32/USB mode — set to Pi UART / passthrough")
-        print("    2. Motor(s) not powered")
-        print("    3. RS-485 A/B wires swapped or not connected")
-        print("    4. Wrong UART device (try /dev/ttyAMA0 instead of /dev/serial0)")
-    else:
-        print(f"  Got {len(resp)} bytes: {resp.hex(' ').upper()}")
-        fb = parse_feedback(resp)
-        if fb:
-            print(f"  Motor responded with ID={resp[0]} — that's the ID to use in params")
+    cmd = f'{{"T":10010,"id":{mid},"cmd":0,"act":0}}'
+    print(f"  Pinging motor ID {mid} (speed=0 cmd) ...", end="  ", flush=True)
+    send_cmd(fd, cmd)
+    # scan up to 3 lines for a matching response
+    found = False
+    for _ in range(3):
+        resp = read_line(fd, TIMEOUT)
+        if not resp:
+            break
+        try:
+            d = json.loads(resp)
+            if d.get("id") == mid:
+                any_found = found = True
+                print(f"Response: {resp}")
+                print(f"        ✓ Motor {mid} alive — spd={d.get('spd')} rpm, "
+                      f"crt={d.get('crt')} A, tep={d.get('tep')}°C, err={d.get('err')}")
+                break
+        except json.JSONDecodeError:
+            print(f"        non-JSON: {resp!r}")
+            break
+    if not found:
+        print("NO RESPONSE")
+        print(f"        → motor ID {mid} not responding — powered? connected? correct ID?")
 
 os.close(fd)
 print()
