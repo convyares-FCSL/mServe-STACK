@@ -1,0 +1,26 @@
+<!--
+  set_id_tree — triggered by DriveChainCmd::SET_ID service call.
+
+  IMPORTANT: only connect ONE motor to the bus before calling SET_ID.
+  Having two motors on the bus during an ID change will corrupt both.
+
+  Blackboard inputs written by the service handler before ticking:
+    target_motor_id — current ID of the motor to reassign
+    new_motor_id    — desired new ID (1–253)
+
+  Sequence:
+    1. Stop the motor (safety — ensure it's not spinning).
+    2. Send the 5× change-id sequence and verify with ping.
+    3. Ping the new ID to confirm success.
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="SetId">
+    <Sequence name="set_id">
+
+      <StopMotor motor_id="{target_motor_id}" />
+      <SetMotorId motor_id="{target_motor_id}" new_id="{new_motor_id}" />
+      <PingMotor  motor_id="{new_motor_id}" />
+
+    </Sequence>
+  </BehaviorTree>
+</root>

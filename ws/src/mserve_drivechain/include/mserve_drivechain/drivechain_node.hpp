@@ -1,61 +1,79 @@
-#ifndef MSERVE_DRIVECHAIN_DRIVECHAIN_NODE_HPP
-#define MSERVE_DRIVECHAIN_DRIVECHAIN_NODE_HPP
+#pragma once
 
+#include <array>
 #include <memory>
-#include <string>
+#include <mutex>
 #include <vector>
 
-#include <geometry_msgs/msg/twist.hpp>
-#include <mserve_interfaces/msg/esp32_status.hpp>
-#include <mserve_interfaces/msg/wheel_feedback.hpp>
+#include <behaviortree_cpp/bt_factory.h>
+#include <behaviortree_cpp/blackboard.h>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
+#include <mserve_interfaces/msg/drive_status.hpp>
+#include <mserve_interfaces/msg/wheel_feedback.hpp>
+#include <mserve_interfaces/srv/drive_chain_cmd.hpp>
+
 #include "mserve_drivechain/diff_drive.hpp"
+#include "mserve_drivechain/motor_feedback.hpp"
 
 namespace mserve_drivechain {
 
- // ==============================================================================
-// DrivechainNode: a lifecycle node that subscribes to cmd_vel, applies speed limits, and republishes safely.
-// ==============================================================================
+// Forward-declare private implementation types (complete definitions in src/).
+class DriveUart;
+class CmdVelCache;
 
 class DrivechainNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit DrivechainNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  ~DrivechainNode() override;
 
 protected:
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_configure(const rclcpp_lifecycle::State &) override;
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(const rclcpp_lifecycle::State &) override;
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State &) override;
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State &) override;
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_shutdown(const rclcpp_lifecycle::State &) override;
+  using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
+  CallbackReturn on_configure(const rclcpp_lifecycle::State &) override;
+  CallbackReturn on_activate(const rclcpp_lifecycle::State &) override;
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State &) override;
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State &) override;
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State &) override;
 
 private:
-  void on_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg);
-  void on_feedback_timer();
-  rcl_interfaces::msg::SetParametersResult on_parameters(const std::vector<rclcpp::Parameter> & params);
-  void apply_feedback_rate(double rate);
-
-  std::string cmd_vel_safe_topic_;
-  std::string wheel_feedback_topic_;
-  std::string drivechain_status_topic_;
-  double wheel_separation_{};
-  double wheel_radius_{};
-  double feedback_rate_{};
-
-  bool active_ = false;
-  WheelSpeeds last_speeds_{0.0, 0.0};
-
-  std::unique_ptr<DiffDrive> diff_drive_;
-
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
-  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::WheelFeedback>::SharedPtr wheel_feedback_pub_;
-  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::Esp32Status>::SharedPtr drivechain_status_pub_;
-  rclcpp::TimerBase::SharedPtr feedback_timer_;
+  // Params (drivechain_params.cpp)
+  void declare_params();
+  void load_params();
+  rcl_interfaces::msg::SetParametersResult on_parameters(const std::vector<rclcpp::Parameter> &);
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+
+  // BT
+  void register_bt_nodes();
+  void build_bt_trees();
+  bool run_tree_sync(BT::Tree &, std::chrono::milliseconds timeout = std::chrono::milliseconds(3000));
+  void tick_drive_tree();
+
+  BT::BehaviorTreeFactory         factory_;
+  std::shared_ptr<BT::Blackboard> blackboard_;
+  std::array<BT::Tree, 4>         trees_;  // [0]=connect [1]=stop [2]=set_id [3]=drive
+
+  // Service
+  using DriveChainCmd = mserve_interfaces::srv::DriveChainCmd;
+  void on_drivechain_cmd(DriveChainCmd::Request::SharedPtr, DriveChainCmd::Response::SharedPtr);
+  rclcpp::Service<DriveChainCmd>::SharedPtr cmd_service_;
+  rclcpp::CallbackGroup::SharedPtr          service_cbg_;
+
+  // Hardware & kinematics
+  std::unique_ptr<DriveUart>   uart_;
+  std::unique_ptr<DiffDrive>   diff_drive_;
+  std::unique_ptr<CmdVelCache> cmd_vel_cache_;
+  std::mutex                   uart_mutex_;
+
+  // Publishers — lifecycle-managed, pointers placed on blackboard as std::function
+  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::WheelFeedback>::SharedPtr wheel_feedback_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::DriveStatus>::SharedPtr   drive_status_pub_;
+
+  // Drive tick
+  rclcpp::TimerBase::SharedPtr drive_timer_;
+  bool                         drive_active_ = false;
 };
 
 }  // namespace mserve_drivechain
-
-#endif  // MSERVE_DRIVECHAIN_DRIVECHAIN_NODE_HPP

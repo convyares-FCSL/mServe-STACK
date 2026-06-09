@@ -1,0 +1,10 @@
+uint8 CONNECT = 1   # Open UART, verify motor IDs, set speed loop mode
+uint8 STOP    = 2   # Zero both motors, close UART
+uint8 SET_ID  = 3   # Change a motor's hardware ID (one-time setup, one motor on bus)
+
+uint8  command
+uint8  motor_id   # SET_ID: current ID of the motor to reassign
+uint8  new_id     # SET_ID: new ID to assign (1–253)
+---
+bool   success
+string message

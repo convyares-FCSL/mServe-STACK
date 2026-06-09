@@ -25,6 +25,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/BoosterCmd.srv"
   "srv/CompressorCmd.srv"
   "srv/DispenserCmd.srv"
+  "srv/DriveChainCmd.srv"
   "srv/GasRouterCmd.srv"
   "srv/SetDisplayMode.srv"
   "srv/SetMode.srv"

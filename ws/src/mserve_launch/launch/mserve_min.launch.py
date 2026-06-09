@@ -10,26 +10,10 @@ def generate_launch_description():
     interfaces_share = get_package_share_directory('mserve_interfaces')
     params_file = os.path.join(interfaces_share, 'config', 'mserve_params.yaml')
 
-    low_booster_node = Node(
-        package='hyfleet_booster',
-        executable='booster_node',
-        name='low_booster',
-        output='screen',
-        parameters=[params_file]
-    )
-
-    high_booster_node = Node(
-        package='hyfleet_booster',
-        executable='booster_node',
-        name='high_booster',
-        output='screen',
-        parameters=[params_file]
-    )
-
-    compressor_node = Node(
-        package='hyfleet_compressor',
-        executable='compressor_node',
-        name='hyfleet_compression',
+    drivechain = Node(
+        package='mserve_drivechain',
+        executable='mserve_drivechain',
+        name='drivechain',
         output='screen',
         parameters=[params_file]
     )
@@ -42,8 +26,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        low_booster_node,
-        high_booster_node,
-        compressor_node,
+        drivechain,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])

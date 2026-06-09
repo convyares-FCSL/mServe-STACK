@@ -1,0 +1,33 @@
+<!--
+  connect_tree — triggered by DriveChainCmd::CONNECT service call.
+
+  Opens the UART, pings both motors to confirm they respond,
+  then sets speed-loop mode (mode=2) on each.
+
+  Blackboard inputs (set by load_params):
+    uart_device     — e.g. "/dev/serial0"
+    left_motor_id   — e.g. 1
+    right_motor_id  — e.g. 2
+
+  In sim mode: OpenUart and PingMotor succeed immediately (no hardware access).
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="Connect">
+    <Sequence name="connect">
+
+      <OpenUart device="{uart_device}" baud="115200" />
+
+      <RetryUntilSuccessful num_attempts="3">
+        <PingMotor motor_id="{left_motor_id}" />
+      </RetryUntilSuccessful>
+
+      <RetryUntilSuccessful num_attempts="3">
+        <PingMotor motor_id="{right_motor_id}" />
+      </RetryUntilSuccessful>
+
+      <SetMotorMode motor_id="{left_motor_id}"  mode="2" />
+      <SetMotorMode motor_id="{right_motor_id}" mode="2" />
+
+    </Sequence>
+  </BehaviorTree>
+</root>

@@ -1,22 +1,25 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>mserve_drivechain</name>
-  <version>0.1.0</version>
-  <description>Drivechain node for mServe. Owns diff-drive kinematics and DDSM115 motor communication.</description>
-  <maintainer email="ecm@example.com">ecm</maintainer>
+  <version>0.2.0</version>
+  <description>
+    Drivechain node for mServe. Controls two DDSM115 motors via a Waveshare
+    DDSM Driver HAT (A) on Raspberry Pi GPIO UART. Supports a sim backend
+    (default) for Gazebo development and a hardware backend for the real robot.
+  </description>
+  <maintainer email="cvonayres@fuelcellsystems.co.uk">ecm</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>rclcpp</build_depend>
-  <build_depend>rclcpp_lifecycle</build_depend>
-  <build_depend>mserve_interfaces</build_depend>
-  <build_depend>mserve_utils</build_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>rclcpp</exec_depend>
-  <exec_depend>rclcpp_lifecycle</exec_depend>
-  <exec_depend>mserve_interfaces</exec_depend>
-  <exec_depend>mserve_utils</exec_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>behaviortree_cpp</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>mserve_interfaces</depend>
+  <depend>mserve_utils</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
