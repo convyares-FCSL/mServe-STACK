@@ -118,6 +118,15 @@ if [[ "$SIM_MODE" == false ]]; then
   fi
 fi
 
+# ── Kill any stale ROS processes from previous run ───────────────────────────
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
+    "pkill -f rosbridge_websocket 2>/dev/null; pkill -f drivechain_node 2>/dev/null; sleep 1; true" 2>/dev/null || true
+else
+  pkill -f rosbridge_websocket 2>/dev/null || true
+  pkill -f drivechain_node     2>/dev/null || true
+fi
+
 # ── Start rosbridge ───────────────────────────────────────────────────────────
 echo "Starting rosbridge on ws://localhost:9090…"
 if [[ "$USE_DOCKER" == true ]]; then
