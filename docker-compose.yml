@@ -17,6 +17,10 @@ services:
       - ./ws:/ws
       - ./web:/web
     working_dir: /ws
+    devices:
+      - /dev/serial0:/dev/serial0
+    group_add:
+      - dialout
     command:
       - bash
       - -lc

@@ -2,114 +2,188 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # run_drivechain_hw.sh
 #
-# Starts the full drivechain stack on real hardware:
-#   1. drivechain node (hardware backend, /dev/serial0)
-#   2. rosbridge websocket on port 9090
-#   3. static web server on port 8080
-#
-# Run this on the Raspberry Pi (or any host with the workspace built and
-# the DDSM Driver HAT accessible at /dev/serial0).
+# Starts the full drivechain stack — works both natively (if ROS is installed)
+# and inside the mserve Docker container (Raspberry Pi / Debian).
 #
 # Usage:
-#   ./run_drivechain_hw.sh [--sim] [uart_device]
+#   ./web/run_drivechain_hw.sh [--sim] [uart_device]
 #
 # Examples:
-#   ./run_drivechain_hw.sh                   # hardware, defaults to /dev/serial0
-#   ./run_drivechain_hw.sh /dev/ttyAMA0      # hardware, custom device
-#   ./run_drivechain_hw.sh --sim             # sim mode, no UART needed
+#   ./web/run_drivechain_hw.sh --sim             # sim, no hardware needed
+#   ./web/run_drivechain_hw.sh                   # hardware, /dev/serial0
+#   ./web/run_drivechain_hw.sh /dev/ttyAMA0      # hardware, custom device
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-WS_DIR=$(cd "$SCRIPT_DIR/../ws" && pwd)
+ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+WS_DIR="$ROOT_DIR/ws"
 
-# Parse --sim flag
+# ── Parse arguments ───────────────────────────────────────────────────────────
 SIM_MODE=false
 if [[ "${1:-}" == "--sim" ]]; then
   SIM_MODE=true
   shift
 fi
-
 UART_DEVICE="${1:-/dev/serial0}"
 
-# ── Source workspace ──────────────────────────────────────────────────────────
-SETUP="$WS_DIR/install/setup.bash"
-if [[ ! -f "$SETUP" ]]; then
-  echo "ERROR: workspace not built — $SETUP not found"
-  echo "       Run: colcon build --packages-select mserve_interfaces mserve_drivechain"
-  exit 1
+# ── Detect native vs Docker ───────────────────────────────────────────────────
+if command -v ros2 >/dev/null 2>&1; then
+  USE_DOCKER=false
+  echo "ROS 2 found — running natively"
+else
+  USE_DOCKER=true
+  echo "ROS 2 not found — using Docker container"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: docker not found. Install Docker or ROS 2 Jazzy."
+    exit 1
+  fi
 fi
-# shellcheck disable=SC1090
-source "$SETUP"
 
-# ── Check UART device (hardware only) ────────────────────────────────────────
-if [[ "$SIM_MODE" == false && ! -e "$UART_DEVICE" ]]; then
-  echo "WARNING: UART device $UART_DEVICE not found."
-  echo "         Check raspi-config → serial port is enabled and login shell is disabled."
-  echo "         Use --sim to run without hardware."
-fi
+# ── Helpers ───────────────────────────────────────────────────────────────────
+ros_exec() {
+  # Run a ROS command either natively or inside the container
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "$*"
+  else
+    bash -lc "$*"
+  fi
+}
+
+ros_exec_bg() {
+  # Run a ROS command in the background (container or native)
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "$*"
+  else
+    bash -lc "$*" &
+    echo $!
+  fi
+}
 
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
-PIDS=()
+NATIVE_PIDS=()
 cleanup() {
   echo ""
   echo "Shutting down…"
-  for pid in "${PIDS[@]}"; do
+  for pid in "${NATIVE_PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
+      "pkill -f drivechain_node || true; pkill -f rosbridge_websocket || true" 2>/dev/null || true
+  fi
   wait 2>/dev/null || true
   echo "Done."
 }
 trap cleanup SIGINT SIGTERM EXIT
 
+# ── Docker: ensure container is running, build packages ──────────────────────
+if [[ "$USE_DOCKER" == true ]]; then
+  echo "Starting Docker container…"
+  docker compose -f "$ROOT_DIR/docker-compose.yml" up -d robot-mserve
+  sleep 2
+
+  echo "Building ROS packages inside container…"
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    cd /ws
+    colcon build \
+      --packages-select mserve_interfaces mserve_utils mserve_drivechain \
+      --cmake-args -DBUILD_TESTING=OFF \
+      --symlink-install 2>&1
+  "
+  echo "Build complete."
+else
+  # Native: source workspace
+  SETUP="$WS_DIR/install/setup.bash"
+  if [[ ! -f "$SETUP" ]]; then
+    echo "ERROR: workspace not built — run:"
+    echo "       colcon build --packages-select mserve_interfaces mserve_utils mserve_drivechain"
+    exit 1
+  fi
+  source "$SETUP"
+fi
+
+# ── Check UART (hardware only) ────────────────────────────────────────────────
+if [[ "$SIM_MODE" == false ]]; then
+  if [[ "$USE_DOCKER" == true ]]; then
+    if ! docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve \
+        bash -lc "test -e $UART_DEVICE" 2>/dev/null; then
+      echo "WARNING: $UART_DEVICE not visible inside container."
+      echo "         Check docker-compose.yml devices: and that raspi-config serial is enabled."
+    fi
+  elif [[ ! -e "$UART_DEVICE" ]]; then
+    echo "WARNING: $UART_DEVICE not found. Check raspi-config serial port settings."
+    echo "         Use --sim to run without hardware."
+  fi
+fi
+
 # ── Start rosbridge ───────────────────────────────────────────────────────────
-echo "Starting rosbridge on ws://localhost:9090 …"
-ros2 run rosbridge_server rosbridge_websocket --port 9090 &
-PIDS+=($!)
+echo "Starting rosbridge on ws://localhost:9090…"
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 run rosbridge_server rosbridge_websocket --port 9090
+  "
+else
+  ros2 run rosbridge_server rosbridge_websocket --port 9090 &
+  NATIVE_PIDS+=($!)
+fi
 sleep 1
 
 # ── Start drivechain node ─────────────────────────────────────────────────────
 if [[ "$SIM_MODE" == true ]]; then
-  echo "Starting drivechain node (sim) …"
-  ros2 run mserve_drivechain drivechain_node \
-    --ros-args -p drive.backend:=sim &
+  echo "Starting drivechain node (sim)…"
+  NODE_ARGS="--ros-args -p drive.backend:=sim"
 else
-  echo "Starting drivechain node (hardware, $UART_DEVICE) …"
-  ros2 run mserve_drivechain drivechain_node \
-    --ros-args \
-    -p drive.backend:=hardware \
-    -p hardware.uart_device:="$UART_DEVICE" &
+  echo "Starting drivechain node (hardware, $UART_DEVICE)…"
+  NODE_ARGS="--ros-args -p drive.backend:=hardware -p hardware.uart_device:=$UART_DEVICE"
 fi
-PIDS+=($!)
-sleep 1
 
-# ── Lifecycle: configure + activate ──────────────────────────────────────────
-echo "Configuring drivechain node …"
-ros2 lifecycle set /mserve_drivechain configure
-echo "Activating drivechain node …"
-ros2 lifecycle set /mserve_drivechain activate
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 run mserve_drivechain drivechain_node $NODE_ARGS
+  "
+else
+  ros2 run mserve_drivechain drivechain_node $NODE_ARGS &
+  NATIVE_PIDS+=($!)
+fi
+sleep 2
 
-# ── Start web server ──────────────────────────────────────────────────────────
-echo "Starting web server on http://localhost:8080 …"
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+echo "Configuring drivechain node…"
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 lifecycle set /mserve_drivechain configure
+    ros2 lifecycle set /mserve_drivechain activate
+  "
+else
+  ros2 lifecycle set /mserve_drivechain configure
+  ros2 lifecycle set /mserve_drivechain activate
+fi
+
+# ── Web server (always native — Python is always available) ───────────────────
+echo "Starting web server on http://localhost:8080…"
 cd "$SCRIPT_DIR"
 python3 -m http.server 8080 &
-PIDS+=($!)
+NATIVE_PIDS+=($!)
 
-# ── Print access URL ──────────────────────────────────────────────────────────
+# ── Print URL ─────────────────────────────────────────────────────────────────
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+BACKEND_LABEL=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware ($UART_DEVICE)")
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-BACKEND_LABEL=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware ($UART_DEVICE)")
 echo "  Drivechain ready  [$BACKEND_LABEL]"
 echo ""
 echo "  Open in browser:"
 echo "    http://${LOCAL_IP}:8080/drivechain.html"
 echo ""
-echo "  CONNECT the motors from the web UI, then use the"
-echo "  D-pad or W/A/S/D / arrow keys to drive."
-echo ""
 echo "  Press Ctrl+C to stop everything."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
 
 wait

@@ -111,6 +111,8 @@ web/
 
 The `run_drivechain_hw.sh` script starts rosbridge, the drivechain node, runs the lifecycle, and serves the web UI — all in one command. Press **Ctrl+C** to cleanly stop everything.
 
+**The script auto-detects whether ROS 2 is installed natively.** If `ros2` is not found (e.g., on a Raspberry Pi running Debian without ROS), it falls back automatically to Docker — starting the container, building the packages inside it, and routing all ROS commands through `docker compose exec`.
+
 **Sim (no hardware needed):**
 ```bash
 cd ~/ai-workspace/projects/mServe-STACK
@@ -130,6 +132,43 @@ cd ~/ai-workspace/projects/mServe-STACK
 ```
 
 The browser banner shows `[sim]` or `[hardware (/dev/serial0)]` so you can tell at a glance which mode is running.
+
+### Running on a Raspberry Pi (Debian / no native ROS)
+
+The Pi typically has no ROS installation. The Docker stack handles everything:
+
+**Prerequisites (one-time):**
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in so the group takes effect
+
+# Enable the hardware UART (if not already done — see One-time Pi setup above)
+```
+
+**Clone and run:**
+```bash
+git clone <repo-url> ~/mServe-STACK
+cd ~/mServe-STACK
+
+# First run: Docker builds the image and compiles the ROS packages (takes a few minutes)
+./web/run_drivechain_hw.sh
+
+# Subsequent runs: incremental build, much faster
+```
+
+On the Pi, `run_drivechain_hw.sh` automatically:
+1. Detects that `ros2` is not available natively
+2. Starts the `robot-mserve` Docker container
+3. Runs `colcon build` inside the container
+4. Launches rosbridge and the drivechain node inside the container
+5. Runs the lifecycle transitions inside the container
+6. Serves the web UI natively with Python on port 8080
+
+The web server always runs natively (Python is always available on Debian), so the browser URL is simply `http://<pi-ip>:8080/drivechain.html` from any machine on the same network.
+
+> **Serial device passthrough**: `docker-compose.yml` maps `/dev/serial0` into the container and adds the `dialout` group. If your Pi uses a different device (e.g., `/dev/ttyAMA0`), pass it as an argument: `./web/run_drivechain_hw.sh /dev/ttyAMA0` — but also update `docker-compose.yml` devices accordingly.
 
 ### Web UI controls
 
