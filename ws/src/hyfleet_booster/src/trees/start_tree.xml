@@ -10,13 +10,6 @@
         enable="true"
       />
 
-      <InletPressureStable
-        inlet_pt_index="{inlet_pt_index}"
-        stabilization_samples="{stabilization_samples}"
-        stability_tolerance="{stability_tolerance}"
-        stability_timeout_ms="{stability_timeout_ms}"
-      />
-
       <StartVFD
         service_name="{service_name}"
         speed_rpm="{speed_rpm}"

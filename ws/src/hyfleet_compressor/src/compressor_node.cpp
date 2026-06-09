@@ -60,7 +60,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Compre
         resp->message = (current_mode_ == SetMode::Request::PERFORMANCE) ? "PERFORMANCE" : "ECO";
         RCLCPP_INFO(get_logger(), "Compressor mode set to %s", resp->message.c_str());
       },
-      rmw_qos_profile_services_default,
+      rclcpp::ServicesQoS(),
       action_callback_group_
     );
 
