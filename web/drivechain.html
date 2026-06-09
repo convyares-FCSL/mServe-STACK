@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mServe — Drivechain</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Drivechain-specific styles ─────────────────────────────────────── */
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    /* Service row */
+    .service-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .service-status {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    .service-status.idle-sim      { background: var(--surface-2); color: var(--accent); }
+    .service-status.connected-sim { background: var(--success);   color: #0f172a; }
+    .service-status.idle-hw       { background: var(--surface-2); color: var(--accent-2); }
+    .service-status.connected-hw  { background: #22c55e;          color: #0f172a; }
+    .service-status.unknown       { background: var(--surface-2); color: var(--text); }
+
+    /* Speed sliders */
+    .sliders {
+      display: grid;
+      grid-template-columns: 120px 1fr 52px;
+      gap: 10px 14px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    /* D-pad */
+    .dpad-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 72px);
+      grid-template-rows: repeat(3, 72px);
+      gap: 10px;
+    }
+    .dpad-forward { grid-column: 2; grid-row: 1; }
+    .dpad-left    { grid-column: 1; grid-row: 2; }
+    .dpad-stop    { grid-column: 2; grid-row: 2; }
+    .dpad-right   { grid-column: 3; grid-row: 2; }
+    .dpad-back    { grid-column: 2; grid-row: 3; }
+
+    .dpad button {
+      width: 100%;
+      height: 100%;
+      font-size: 1.5rem;
+      border-radius: 12px;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .dpad-stop { background: var(--danger); }
+    .dpad button.active { filter: brightness(1.3); transform: scale(0.95); }
+
+    .kbd-hint {
+      font-size: 0.78rem;
+      color: #64748b;
+    }
+
+    /* Feedback table */
+    .feedback-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .feedback-card {
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .feedback-card h4 {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+    }
+    .feedback-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .feedback-unit {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back-link" href="index.html">← mServe Debug Bridge</a>
+
+    <header>
+      <h1>Drivechain</h1>
+      <p>DDSM115 motor control via DDSM Driver HAT</p>
+      <div class="status-row">
+        <span id="connection-status" class="status disconnected">ROS Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Lifecycle + connect ─────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Node</h2>
+      <div class="node-state" style="margin-bottom:12px">
+        State: <span id="node-state" class="state-label">?</span>
+      </div>
+      <div class="button-row" style="margin-bottom:16px">
+        <button id="btn-configure">Configure</button>
+        <button id="btn-activate">Activate</button>
+        <button id="btn-deactivate">Deactivate</button>
+      </div>
+
+      <div class="service-row">
+        <button id="btn-connect">Connect motors</button>
+        <button id="btn-hw-stop" class="btn-danger">Stop motors</button>
+        <span id="drive-status" class="service-status unknown">—</span>
+      </div>
+      <div id="service-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
+    <!-- Speed sliders ───────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Speed</h2>
+      <div class="sliders">
+        <label for="slider-linear">Linear</label>
+        <input id="slider-linear" type="range" min="0.05" max="0.5" step="0.05" value="0.2" />
+        <span id="val-linear">0.20 m/s</span>
+
+        <label for="slider-angular">Turn rate</label>
+        <input id="slider-angular" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
+        <span id="val-angular">1.00 rad/s</span>
+      </div>
+    </section>
+
+    <!-- D-pad ───────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Drive</h2>
+      <div class="dpad-wrap">
+        <div class="dpad">
+          <button class="dpad-forward" id="btn-forward" data-dir="forward">▲</button>
+          <button class="dpad-left"    id="btn-left"    data-dir="left">◄</button>
+          <button class="dpad-stop"    id="btn-stop"    data-dir="stop">■</button>
+          <button class="dpad-right"   id="btn-right"   data-dir="right">►</button>
+          <button class="dpad-back"    id="btn-back"    data-dir="back">▼</button>
+        </div>
+        <span class="kbd-hint">Hold to move · Keyboard: W A S D or arrow keys · Space = stop</span>
+      </div>
+    </section>
+
+    <!-- Feedback ────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Wheel Feedback</h2>
+      <div class="feedback-grid">
+        <div class="feedback-card">
+          <h4>Left velocity</h4>
+          <span class="feedback-value" id="fb-left-vel">—</span><span class="feedback-unit">rad/s</span>
+        </div>
+        <div class="feedback-card">
+          <h4>Right velocity</h4>
+          <span class="feedback-value" id="fb-right-vel">—</span><span class="feedback-unit">rad/s</span>
+        </div>
+        <div class="feedback-card">
+          <h4>Left position</h4>
+          <span class="feedback-value" id="fb-left-pos">—</span><span class="feedback-unit">°</span>
+        </div>
+        <div class="feedback-card">
+          <h4>Right position</h4>
+          <span class="feedback-value" id="fb-right-pos">—</span><span class="feedback-unit">°</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="roslib.min.js"></script>
+  <script src="drivechain.js"></script>
+</body>
+</html>

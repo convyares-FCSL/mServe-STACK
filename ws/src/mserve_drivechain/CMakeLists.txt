@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 project(mserve_drivechain LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -20,15 +21,6 @@ find_package(ament_index_cpp REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(mserve_interfaces REQUIRED)
 find_package(mserve_utils REQUIRED)
-
-# ==============================================================================
-# Pure kinematics library — no ROS, fully unit-testable
-# ==============================================================================
-
-add_library(diff_drive src/diff_drive.cpp)
-target_include_directories(diff_drive PUBLIC
-  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-  "$<INSTALL_INTERFACE:include>")
 
 # ==============================================================================
 # UART + packet layer — no ROS, no BT deps, unit-testable
@@ -69,13 +61,13 @@ ament_target_dependencies(drivechain_node_lib
   mserve_utils
 )
 
-target_link_libraries(drivechain_node_lib diff_drive drivechain_uart)
+target_link_libraries(drivechain_node_lib drivechain_uart)
 
 # ==============================================================================
 # Executable
 # ==============================================================================
 
-add_executable(drivechain_node src/drivechain_node_main.cpp)
+add_executable(drivechain_node src/main.cpp)
 target_include_directories(drivechain_node PRIVATE include)
 ament_target_dependencies(drivechain_node rclcpp)
 target_link_libraries(drivechain_node drivechain_node_lib)
@@ -84,7 +76,7 @@ target_link_libraries(drivechain_node drivechain_node_lib)
 # Install
 # ==============================================================================
 
-install(TARGETS drivechain_node_lib diff_drive drivechain_uart
+install(TARGETS drivechain_node_lib drivechain_uart
   EXPORT export_mserve_drivechain
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
@@ -110,9 +102,6 @@ install(DIRECTORY src/trees/
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-
-  ament_add_gtest(test_diff_drive test/test_diff_drive.cpp src/diff_drive.cpp)
-  target_include_directories(test_diff_drive PRIVATE include)
 
   ament_add_gtest(test_packet_codec test/test_packet_codec.cpp src/drivechain_uart.cpp)
   target_include_directories(test_packet_codec PRIVATE src include)

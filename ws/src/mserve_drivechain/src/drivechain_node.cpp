@@ -32,8 +32,7 @@ DrivechainNode::~DrivechainNode() = default;
 // Lifecycle
 // ==============================================================================
 
-DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecycle::State &)
-{
+DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecycle::State &) {
   try {
     // --- blackboard first: load_params writes to it ---
     blackboard_ = BT::Blackboard::create();
@@ -52,19 +51,13 @@ DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecyc
 
     // --- hardware objects (constructed from blackboard values) ---
     bool sim_mode = true;
-    blackboard_->get("sim_mode", sim_mode);
+    (void)blackboard_->get("sim_mode", sim_mode);
     uart_ = std::make_unique<DriveUart>(sim_mode);
-
-    double sep = 0.35, rad = 0.08;
-    blackboard_->get("wheel_separation", sep);
-    blackboard_->get("wheel_radius",     rad);
-    diff_drive_ = std::make_unique<DiffDrive>(sep, rad);
 
     cmd_vel_cache_ = std::make_unique<CmdVelCache>(*this, "cmd_vel");
 
     // Put pointers on blackboard for BT nodes
     blackboard_->set("uart",          uart_.get());
-    blackboard_->set("diff_drive",    diff_drive_.get());
     blackboard_->set("cmd_vel_cache", cmd_vel_cache_.get());
 
     // --- lifecycle publishers (activate/deactivate with node state) ---
@@ -100,10 +93,10 @@ DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecyc
       rclcpp::ServicesQoS(), service_cbg_);
 
     bool sim = true;
-    blackboard_->get("sim_mode", sim);
+    (void)blackboard_->get("sim_mode", sim);
     int left_id = 1, right_id = 2;
-    blackboard_->get("left_motor_id", left_id);
-    blackboard_->get("right_motor_id", right_id);
+    (void)blackboard_->get("left_motor_id", left_id);
+    (void)blackboard_->get("right_motor_id", right_id);
     RCLCPP_INFO(get_logger(), "Configured — backend: %s, motors L=%d R=%d",
       sim ? "sim" : "hardware", left_id, right_id);
 
@@ -114,14 +107,13 @@ DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecyc
   return CallbackReturn::SUCCESS;
 }
 
-DrivechainNode::CallbackReturn DrivechainNode::on_activate(const rclcpp_lifecycle::State &)
-{
+DrivechainNode::CallbackReturn DrivechainNode::on_activate(const rclcpp_lifecycle::State &) {
   wheel_feedback_pub_->on_activate();
   drive_status_pub_->on_activate();
   drive_active_ = true;
 
   double rate = 10.0;
-  blackboard_->get("feedback_rate", rate);
+  (void)blackboard_->get("feedback_rate", rate);
   drive_timer_ = create_wall_timer(
     std::chrono::duration<double>(1.0 / rate),
     [this]() { tick_drive_tree(); });
@@ -130,8 +122,7 @@ DrivechainNode::CallbackReturn DrivechainNode::on_activate(const rclcpp_lifecycl
   return CallbackReturn::SUCCESS;
 }
 
-DrivechainNode::CallbackReturn DrivechainNode::on_deactivate(const rclcpp_lifecycle::State &)
-{
+DrivechainNode::CallbackReturn DrivechainNode::on_deactivate(const rclcpp_lifecycle::State &) {
   drive_active_ = false;
   if (drive_timer_) { drive_timer_->cancel(); drive_timer_.reset(); }
 
@@ -146,14 +137,12 @@ DrivechainNode::CallbackReturn DrivechainNode::on_deactivate(const rclcpp_lifecy
   return CallbackReturn::SUCCESS;
 }
 
-DrivechainNode::CallbackReturn DrivechainNode::on_cleanup(const rclcpp_lifecycle::State &)
-{
+DrivechainNode::CallbackReturn DrivechainNode::on_cleanup(const rclcpp_lifecycle::State &) {
   if (drive_timer_) { drive_timer_->cancel(); drive_timer_.reset(); }
   trees_          = {};
   blackboard_.reset();
   cmd_vel_cache_.reset();
   uart_.reset();
-  diff_drive_.reset();
   wheel_feedback_pub_.reset();
   drive_status_pub_.reset();
   cmd_service_.reset();
@@ -161,8 +150,7 @@ DrivechainNode::CallbackReturn DrivechainNode::on_cleanup(const rclcpp_lifecycle
   return CallbackReturn::SUCCESS;
 }
 
-DrivechainNode::CallbackReturn DrivechainNode::on_shutdown(const rclcpp_lifecycle::State &)
-{
+DrivechainNode::CallbackReturn DrivechainNode::on_shutdown(const rclcpp_lifecycle::State &) {
   if (drive_timer_) { drive_timer_->cancel(); drive_timer_.reset(); }
   if (uart_ && uart_->is_open()) {
     std::lock_guard<std::mutex> lock(uart_mutex_);
@@ -176,8 +164,7 @@ DrivechainNode::CallbackReturn DrivechainNode::on_shutdown(const rclcpp_lifecycl
 // BT
 // ==============================================================================
 
-void DrivechainNode::register_bt_nodes()
-{
+void DrivechainNode::register_bt_nodes() {
   // Connect / stop tree nodes
   factory_.registerNodeType<UartOpen>("UartOpen");
   factory_.registerNodeType<OpenUart>("OpenUart");
@@ -195,8 +182,7 @@ void DrivechainNode::register_bt_nodes()
   factory_.registerNodeType<PublishDriveStatus>("PublishDriveStatus");
 }
 
-void DrivechainNode::build_bt_trees()
-{
+void DrivechainNode::build_bt_trees() {
   const std::string base =
     ament_index_cpp::get_package_share_directory("mserve_drivechain") + "/trees/";
   trees_[0] = factory_.createTreeFromFile(base + "connect_tree.xml", blackboard_);
@@ -205,8 +191,7 @@ void DrivechainNode::build_bt_trees()
   trees_[3] = factory_.createTreeFromFile(base + "drive_tree.xml",   blackboard_);
 }
 
-bool DrivechainNode::run_tree_sync(BT::Tree & tree, std::chrono::milliseconds timeout)
-{
+bool DrivechainNode::run_tree_sync(BT::Tree & tree, std::chrono::milliseconds timeout) {
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
 
@@ -220,8 +205,7 @@ bool DrivechainNode::run_tree_sync(BT::Tree & tree, std::chrono::milliseconds ti
   return status == BT::NodeStatus::SUCCESS;
 }
 
-void DrivechainNode::tick_drive_tree()
-{
+void DrivechainNode::tick_drive_tree() {
   if (!drive_active_) return;
   std::lock_guard<std::mutex> lock(uart_mutex_);
   trees_[3].tickOnce();
@@ -231,9 +215,7 @@ void DrivechainNode::tick_drive_tree()
 // Service
 // ==============================================================================
 
-void DrivechainNode::on_drivechain_cmd(
-  DriveChainCmd::Request::SharedPtr req, DriveChainCmd::Response::SharedPtr res)
-{
+void DrivechainNode::on_drivechain_cmd( DriveChainCmd::Request::SharedPtr req, DriveChainCmd::Response::SharedPtr res) {
   if (!drive_active_) {
     res->success = false; res->message = "node not activated"; return;
   }
@@ -244,7 +226,7 @@ void DrivechainNode::on_drivechain_cmd(
     case DriveChainCmd::Request::CONNECT: {
       const bool ok = run_tree_sync(trees_[0], 5000ms);
       res->success = ok;
-      bool sim = true; blackboard_->get("sim_mode", sim);
+      bool sim = true; (void)blackboard_->get("sim_mode", sim);
       res->message = ok
         ? (sim ? "connected (sim)" : "connected (hardware)")
         : "connect_tree failed — check motor IDs and uart_device param";

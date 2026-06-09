@@ -16,7 +16,7 @@ public:
   template <typename NodeT>
   CmdVelCache(NodeT & node, const std::string & topic = "cmd_vel")
   {
-    sub_ = node.create_subscription<geometry_msgs::msg::Twist>(
+    sub_ = node.template create_subscription<geometry_msgs::msg::Twist>(
       topic, rclcpp::QoS(10),
       [this](const geometry_msgs::msg::Twist::SharedPtr msg) {
         std::lock_guard<std::mutex> lk(mutex_);

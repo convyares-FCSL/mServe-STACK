@@ -10,14 +10,15 @@
 //
 // All nodes read shared objects from the blackboard:
 //   "uart"              DriveUart*
-//   "diff_drive"        DiffDrive*
 //   "cmd_vel_cache"     CmdVelCache*
 //
 // Config scalars on the blackboard (written by load_params):
-//   "left_motor_id"     int
-//   "right_motor_id"    int
-//   "max_rpm"           int
+//   "left_motor_id"      int
+//   "right_motor_id"     int
+//   "max_rpm"            int
 //   "cmd_vel_timeout_ms" int
+//   "wheel_separation"   double  (m)
+//   "wheel_radius"       double  (m)
 //
 // Runtime state on the blackboard (written by drive loop nodes):
 //   "uart_connected"    bool
@@ -41,7 +42,6 @@
 
 #include "drivechain_uart.hpp"
 #include "drivechain_cmd_vel_cache.hpp"
-#include "mserve_drivechain/diff_drive.hpp"
 
 namespace mserve_drivechain {
 

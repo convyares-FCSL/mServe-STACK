@@ -15,7 +15,6 @@
 #include <mserve_interfaces/msg/wheel_feedback.hpp>
 #include <mserve_interfaces/srv/drive_chain_cmd.hpp>
 
-#include "mserve_drivechain/diff_drive.hpp"
 #include "mserve_drivechain/motor_feedback.hpp"
 
 namespace mserve_drivechain {
@@ -61,9 +60,8 @@ private:
   rclcpp::Service<DriveChainCmd>::SharedPtr cmd_service_;
   rclcpp::CallbackGroup::SharedPtr          service_cbg_;
 
-  // Hardware & kinematics
+  // Hardware
   std::unique_ptr<DriveUart>   uart_;
-  std::unique_ptr<DiffDrive>   diff_drive_;
   std::unique_ptr<CmdVelCache> cmd_vel_cache_;
   std::mutex                   uart_mutex_;
 

@@ -7,30 +7,40 @@ Controls two DDSM115 brushless motors via a Waveshare **DDSM Driver HAT (A)** mo
 ```
 DrivechainNode (lifecycle)
 │
-├── Service  ~/mserve_drivechain/drivechain_cmd  ← CONNECT / STOP / SET_ID
-│     └── BT trees: connect_tree, stop_tree, set_id_tree
+├── Service  ~/drivechain_cmd  ← CONNECT / STOP / SET_ID
+│     └── BT trees: connect_tree, stop_tree, set_id_tree (run synchronously under uart_mutex)
 │
 ├── Subscription  /cmd_vel  (geometry_msgs/Twist)
-│     └── DiffDrive kinematics → left_rpm / right_rpm → blackboard
+│     └── CmdVelCache — always holds latest Twist + steady_clock timestamp
 │
-├── Timer  10 Hz drive loop
-│     └── DriveUart::set_speed() → UART → motors → feedback → publish
+├── Timer  (feedback_rate Hz, default 10 Hz)
+│     └── drive_tree.xml: UartOpen → ComputeRpm → SetMotorSpeed×2 → Publish×2
+│           ComputeRpm: diff-drive kinematics + cmd_vel watchdog → left_rpm / right_rpm
+│           SetMotorSpeed: UART → motor feedback → blackboard → publishers
 │
-├── Publisher  ~/mserve_drivechain/wheel_feedback  (WheelFeedback)
-└── Publisher  ~/mserve_drivechain/drive_status    (DriveStatus)
+├── Publisher  ~/wheel_feedback  (WheelFeedback)
+└── Publisher  ~/drive_status    (DriveStatus)
 ```
 
-The **blackboard** connects everything:
+The **blackboard** is the single source of truth shared between the node and all BT nodes:
 
-| Key | Written by | Read by |
-|---|---|---|
-| `uart` | on_configure | BT nodes |
-| `uart_connected` | OpenUart / CloseUart | drive timer |
-| `uart_device` | load_params | OpenUart BT node |
-| `left_motor_id` / `right_motor_id` | load_params | BT nodes + drive timer |
-| `left_rpm` / `right_rpm` | on_cmd_vel | drive timer |
-| `left_fault` / `right_fault` | drive timer | MotorHealthy condition |
-| `target_motor_id` / `new_motor_id` | service handler | set_id tree |
+| Key | Type | Written by | Read by |
+|---|---|---|---|
+| `uart` | `DriveUart*` | on_configure | BT nodes |
+| `cmd_vel_cache` | `CmdVelCache*` | on_configure | ComputeRpm |
+| `uart_connected` | bool | OpenUart / CloseUart | PublishDriveStatus |
+| `uart_device` | string | load_params | OpenUart |
+| `left_motor_id` / `right_motor_id` | int | load_params | BT nodes |
+| `wheel_separation` / `wheel_radius` | double | load_params | ComputeRpm |
+| `max_rpm` / `cmd_vel_timeout_ms` | int | load_params | ComputeRpm |
+| `feedback_rate` | double | load_params | on_activate, on_parameters |
+| `left_rpm` / `right_rpm` | int | ComputeRpm | SetMotorSpeed |
+| `left_speed_fb` / `right_speed_fb` | double (rad/s) | SetMotorSpeed | PublishWheelFeedback |
+| `left_pos_fb` / `right_pos_fb` | double (rad) | SetMotorSpeed | PublishWheelFeedback |
+| `left_fault` / `right_fault` | int | SetMotorSpeed | MotorHealthy condition |
+| `target_motor_id` / `new_motor_id` | int | service handler | set_id_tree |
+| `publish_wheel_feedback` | `std::function` | on_configure | PublishWheelFeedback |
+| `publish_drive_status` | `std::function` | on_configure | PublishDriveStatus |
 
 ## Hardware: DDSM Driver HAT (A) on Raspberry Pi
 
@@ -50,30 +60,28 @@ After reboot the UART is available at `/dev/serial0` (symlink to `/dev/ttyAMA0` 
 
 ### Motor IDs
 
-Each DDSM115 on the RS-485 bus needs a unique ID. Factory default is ID=1 for both motors, so you must assign them before connecting. Connect **one motor at a time** and use the SET_ID command:
+Each DDSM115 on the RS-485 bus needs a unique ID. Factory default is ID=1 for both motors, so assign them before first use. Connect **one motor at a time** and use the SET_ID command:
 
 ```bash
-# Assign left motor ID=1 (factory default — just verifies)
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd \
-  "{command: 3, motor_id: 1, new_id: 1}"
+# With only the left motor connected — confirm it's ID 1 (factory default)
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 3, motor_id: 1, new_id: 1}"
 
-# Swap motor, assign right motor ID=2
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd \
-  "{command: 3, motor_id: 1, new_id: 2}"
+# Swap to the right motor — reassign from ID 1 → ID 2
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 3, motor_id: 1, new_id: 2}"
 ```
 
 ## Parameters
 
 | Parameter | Default | Notes |
 |---|---|---|
-| `drive.backend` | `"sim"` | `"sim"` = Gazebo/no hardware; `"hardware"` = real HAT |
+| `drive.backend` | `"sim"` | `"sim"` = no hardware; `"hardware"` = real HAT |
 | `hardware.uart_device` | `"/dev/serial0"` | UART device path |
 | `hardware.left_motor_id` | `1` | DDSM115 bus ID for left wheel |
 | `hardware.right_motor_id` | `2` | DDSM115 bus ID for right wheel |
-| `hardware.wheel_separation` | `0.35` | Centre-to-centre (m) |
+| `hardware.wheel_separation` | `0.35` | Centre-to-centre distance (m) |
 | `hardware.wheel_radius` | `0.08` | Wheel radius (m) |
-| `drive.max_rpm` | `200` | Max speed (DDSM115 ceiling is 200 RPM) |
-| `drive.cmd_vel_timeout_ms` | `500` | Zero motors if no cmd_vel for this long |
+| `drive.max_rpm` | `200` | Max speed — DDSM115 ceiling is 200 RPM |
+| `drive.cmd_vel_timeout_ms` | `500` | Zero motors if no cmd_vel received for this long |
 | `feedback_rate` | `10.0` | Drive loop / publish rate (Hz) |
 
 Hardware params (`drive.backend`, `hardware.*`, `drive.max_rpm`) can only be changed in `UNCONFIGURED` state.
@@ -86,51 +94,146 @@ colcon build --packages-select mserve_interfaces mserve_drivechain
 source install/setup.bash
 ```
 
-## Run
+## Web UI
 
-### Sim / Gazebo mode (default)
+A browser-based control panel is in `web/` at the repo root. It connects to ROS via rosbridge and provides lifecycle controls, motor connect/stop, a D-pad with speed sliders, and live wheel feedback.
 
+```
+web/
+├── drivechain.html     — drivechain control page
+├── drivechain.js
+├── index.html          — main debug bridge (links to drivechain page)
+├── run_drivechain_hw.sh — one-command stack launcher (sim or hardware)
+└── roslib.min.js
+```
+
+### Quick launch (recommended)
+
+The `run_drivechain_hw.sh` script starts rosbridge, the drivechain node, runs the lifecycle, and serves the web UI — all in one command. Press **Ctrl+C** to cleanly stop everything.
+
+**Sim (no hardware needed):**
 ```bash
+cd ~/ai-workspace/projects/mServe-STACK
+./web/run_drivechain_hw.sh --sim
+# Open: http://localhost:8080/drivechain.html
+```
+
+**Real hardware (Pi with HAT):**
+```bash
+cd ~/ai-workspace/projects/mServe-STACK
+# Ensure Pi UART is configured (see One-time Pi setup) and motor IDs are set
+./web/run_drivechain_hw.sh
+# Open: http://<pi-ip>:8080/drivechain.html
+
+# Custom UART device:
+./web/run_drivechain_hw.sh /dev/ttyAMA0
+```
+
+The browser banner shows `[sim]` or `[hardware (/dev/serial0)]` so you can tell at a glance which mode is running.
+
+### Web UI controls
+
+| Control | Action |
+|---|---|
+| Configure / Activate / Deactivate | Lifecycle transitions |
+| **Connect motors** | Calls CONNECT service — opens UART, pings motors, sets speed mode |
+| **Stop motors** | Calls STOP service — zeros motors, closes UART |
+| Linear / Turn rate sliders | Sets max speed for D-pad buttons |
+| ▲ ▼ ◄ ► | Hold to drive in that direction; release to stop |
+| ■ | Immediate stop (zero cmd_vel) |
+| W / A / S / D or arrow keys | Same as D-pad, hold to move |
+| Space | Stop |
+
+The drive status badge updates live: `idle_sim`, `connected_sim`, `idle_hw`, `connected_hw`.
+
+---
+
+## Run (manual / CLI)
+
+> **Every new terminal must source the workspace before using `ros2 service call`.**
+> The lifecycle commands work without sourcing but the service type lookup does not.
+> ```bash
+> source install/setup.bash
+> ```
+
+---
+
+### Sim mode (default — no hardware needed)
+
+**Terminal 1 — node:**
+```bash
+source install/setup.bash
 ros2 run mserve_drivechain drivechain_node
 ```
 
-In another terminal, bring the node through its lifecycle:
-
+**Terminal 2 — lifecycle + control:**
 ```bash
+source install/setup.bash
+
 ros2 lifecycle set /mserve_drivechain configure
 ros2 lifecycle set /mserve_drivechain activate
 
 # Connect (sim: always succeeds immediately)
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd \
-  "{command: 1}"
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 1}"
 
-# Drive
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.2}, angular: {z: 0.0}}"
+# Drive forward at 0.2 m/s
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.0}}"
 
 # Stop and close
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd \
-  "{command: 2}"
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 2}"
 ```
 
-### Real hardware
+---
 
+### Real hardware (DDSM Driver HAT on Raspberry Pi)
+
+Ensure the Pi UART is configured (see [One-time Pi setup](#one-time-pi-setup)) and both motors are assigned unique IDs (see [Motor IDs](#motor-ids)).
+
+**Terminal 1 — node:**
 ```bash
-ros2 run mserve_drivechain drivechain_node \
-  --ros-args -p drive.backend:=hardware -p hardware.uart_device:=/dev/serial0
+source install/setup.bash
+ros2 run mserve_drivechain drivechain_node --ros-args \
+  -p drive.backend:=hardware \
+  -p hardware.uart_device:=/dev/serial0
+```
+
+**Terminal 2 — lifecycle + control:**
+```bash
+source install/setup.bash
 
 ros2 lifecycle set /mserve_drivechain configure
 ros2 lifecycle set /mserve_drivechain activate
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd \
-  "{command: 1}"
+
+# Connect — opens UART, pings both motors, sets speed-loop mode
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 1}"
+
+# Drive forward at 0.2 m/s
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.0}}"
+
+# Stop and close UART
+ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 2}"
 ```
 
-### Monitor feedback
+---
+
+### Real-time monitoring (sim and hardware)
 
 ```bash
+source install/setup.bash
+
+# Wheel velocity and position feedback
 ros2 topic echo /mserve_drivechain/wheel_feedback
+
+# Connection state (idle_sim / connected_sim / idle_hw / connected_hw)
 ros2 topic echo /mserve_drivechain/drive_status
+
+# Check drive loop is ticking at the configured rate
+ros2 topic hz /mserve_drivechain/wheel_feedback
 ```
+
+Expected feedback at `linear.x: 0.2 m/s` (default geometry: sep=0.35 m, radius=0.08 m):
+- `left_velocity` ≈ `right_velocity` ≈ **2.5 rad/s**
+- No angular component → both wheels at equal speed
 
 ## Service reference
 
@@ -149,6 +252,9 @@ Service: `~/drivechain_cmd` (`mserve_interfaces/srv/DriveChainCmd`)
 | Connect | `connect_tree.xml` | CONNECT service call |
 | Stop | `stop_tree.xml` | STOP service call or on_deactivate |
 | Set ID | `set_id_tree.xml` | SET_ID service call |
+| Drive | `drive_tree.xml` | Timer tick (every 1/feedback_rate seconds) |
+
+The drive tree short-circuits silently when not connected (`UartOpen` returns FAILURE), so cmd_vel commands are safely ignored until CONNECT has been called.
 
 ## Tests
 
@@ -156,7 +262,6 @@ Service: `~/drivechain_cmd` (`mserve_interfaces/srv/DriveChainCmd`)
 colcon test --packages-select mserve_drivechain --event-handlers console_direct+
 ```
 
-- `test_diff_drive` — kinematics: straight, reverse, pivot, arc
 - `test_packet_codec` — CRC-8/MAXIM verification + sim-mode DriveUart round-trips
 
 ## DDSM115 protocol notes
@@ -165,5 +270,5 @@ colcon test --packages-select mserve_drivechain --event-handlers console_direct+
 - 10-byte packets: CRC-8/MAXIM (polynomial 0x8C) over bytes [0..8], stored in byte [9]
 - Speed loop (mode=2): RPM range −200 to +200
 - Feedback: mode, torque, speed_rpm, position (0–32767 = 0–360°), fault_code
-- Mode change quirk: byte[9] = mode value directly, no CRC
-- ID change: send 5× with 4ms gaps, then verify with ping
+- Mode change quirk: byte[9] = mode value directly, not a CRC
+- ID change: send 5× with 4 ms gaps, then verify with ping

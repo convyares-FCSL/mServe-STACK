@@ -5,26 +5,34 @@
 
 namespace mserve_drivechain {
 
-// Helper: fetch typed pointer from blackboard, return nullptr on failure.
+// bb_ptr: fetch a typed pointer from the blackboard; nullptr if absent.
 template <typename T>
-static T * get_bb_ptr(const BT::NodeConfig & cfg, const std::string & key)
+static T * bb_ptr(const BT::NodeConfig & cfg, const std::string & key)
 {
-  T * ptr = nullptr;
-  cfg.blackboard->get(key, ptr);
-  return ptr;
+  T * p = nullptr;
+  (void)cfg.blackboard->get(key, p);
+  return p;
+}
+
+// bb_get: read a value from the blackboard; return def if the key is absent.
+template <typename T>
+static T bb_get(const BT::Blackboard::Ptr & bb, const std::string & key, const T & def = T{})
+{
+  T v = def;
+  (void)bb->get(key, v);
+  return v;
 }
 
 static DriveUart * get_uart(const BT::NodeConfig & cfg)
 {
-  return get_bb_ptr<DriveUart>(cfg, "uart");
+  return bb_ptr<DriveUart>(cfg, "uart");
 }
 
 // ==============================================================================
 // Conditions
 // ==============================================================================
 
-UartOpen::UartOpen(const std::string & name, const BT::NodeConfig & cfg)
-: BT::ConditionNode(name, cfg) {}
+UartOpen::UartOpen(const std::string & name, const BT::NodeConfig & cfg) : BT::ConditionNode(name, cfg) {}
 
 BT::NodeStatus UartOpen::tick()
 {
@@ -34,8 +42,7 @@ BT::NodeStatus UartOpen::tick()
 
 // -------------------------------------------------------------------------------
 
-MotorHealthy::MotorHealthy(const std::string & name, const BT::NodeConfig & cfg)
-: BT::ConditionNode(name, cfg) {}
+MotorHealthy::MotorHealthy(const std::string & name, const BT::NodeConfig & cfg) : BT::ConditionNode(name, cfg) {}
 
 BT::PortsList MotorHealthy::providedPorts()
 {
@@ -44,12 +51,11 @@ BT::PortsList MotorHealthy::providedPorts()
 
 BT::NodeStatus MotorHealthy::tick()
 {
-  int motor_id = 0, left_id = 1;
+  int motor_id = 0;
   getInput("motor_id", motor_id);
-  config().blackboard->get("left_motor_id", left_id);
-
-  int fault = 0;
-  config().blackboard->get((motor_id == left_id) ? "left_fault" : "right_fault", fault);
+  const int left_id = bb_get(config().blackboard, std::string("left_motor_id"), 1);
+  const int fault   = bb_get(config().blackboard,
+    std::string((motor_id == left_id) ? "left_fault" : "right_fault"), 0);
   return (fault == 0) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
@@ -57,8 +63,7 @@ BT::NodeStatus MotorHealthy::tick()
 // Connect / stop tree actions
 // ==============================================================================
 
-OpenUart::OpenUart(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+OpenUart::OpenUart(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::PortsList OpenUart::providedPorts()
 {
@@ -86,8 +91,7 @@ BT::NodeStatus OpenUart::tick()
 
 // -------------------------------------------------------------------------------
 
-CloseUart::CloseUart(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+CloseUart::CloseUart(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::NodeStatus CloseUart::tick()
 {
@@ -99,8 +103,7 @@ BT::NodeStatus CloseUart::tick()
 
 // -------------------------------------------------------------------------------
 
-PingMotor::PingMotor(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+PingMotor::PingMotor(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::PortsList PingMotor::providedPorts()
 {
@@ -120,8 +123,7 @@ BT::NodeStatus PingMotor::tick()
 
 // -------------------------------------------------------------------------------
 
-SetMotorMode::SetMotorMode(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+SetMotorMode::SetMotorMode(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::PortsList SetMotorMode::providedPorts()
 {
@@ -142,8 +144,7 @@ BT::NodeStatus SetMotorMode::tick()
 
 // -------------------------------------------------------------------------------
 
-StopMotor::StopMotor(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+StopMotor::StopMotor(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::PortsList StopMotor::providedPorts()
 {
@@ -164,8 +165,7 @@ BT::NodeStatus StopMotor::tick()
 
 // -------------------------------------------------------------------------------
 
-SetMotorId::SetMotorId(const std::string & name, const BT::NodeConfig & cfg)
-: BT::StatefulActionNode(name, cfg) {}
+SetMotorId::SetMotorId(const std::string & name, const BT::NodeConfig & cfg) : BT::StatefulActionNode(name, cfg) {}
 
 BT::PortsList SetMotorId::providedPorts()
 {
@@ -193,42 +193,43 @@ BT::NodeStatus SetMotorId::onRunning()
 // Drive tree actions
 // ==============================================================================
 
-ComputeRpm::ComputeRpm(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+ComputeRpm::ComputeRpm(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::NodeStatus ComputeRpm::tick()
 {
-  auto * cache      = get_bb_ptr<CmdVelCache>(config(), "cmd_vel_cache");
-  auto * diff_drive = get_bb_ptr<DiffDrive>(config(), "diff_drive");
+  auto * cache = bb_ptr<CmdVelCache>(config(), "cmd_vel_cache");
+  auto & bb    = config().blackboard;
 
-  int max_rpm = 200, timeout_ms = 500;
-  config().blackboard->get("max_rpm",           max_rpm);
-  config().blackboard->get("cmd_vel_timeout_ms", timeout_ms);
+  const int    max_rpm    = bb_get(bb, std::string("max_rpm"),            200);
+  const int    timeout_ms = bb_get(bb, std::string("cmd_vel_timeout_ms"), 500);
+  const double wheel_sep  = bb_get(bb, std::string("wheel_separation"),   0.35);
+  const double wheel_rad  = bb_get(bb, std::string("wheel_radius"),       0.08);
 
   int left_rpm = 0, right_rpm = 0;
 
-  if (cache && diff_drive && cache->age_ms() < static_cast<double>(timeout_ms)) {
-    const auto twist  = cache->latest();
-    const auto speeds = diff_drive->compute(twist.linear.x, twist.angular.z);
+  if (cache && cache->age_ms() < static_cast<double>(timeout_ms)) {
+    const auto   twist  = cache->latest();
+    const double half   = wheel_sep / 2.0;
+    const double l_rads = (twist.linear.x - twist.angular.z * half) / wheel_rad;
+    const double r_rads = (twist.linear.x + twist.angular.z * half) / wheel_rad;
 
     const auto to_rpm = [max_rpm](double rads) -> int {
       int rpm = static_cast<int>(std::round(rads * 60.0 / (2.0 * M_PI)));
       return std::clamp(rpm, -max_rpm, max_rpm);
     };
-    left_rpm  = to_rpm(speeds.left);
-    right_rpm = to_rpm(speeds.right);
+    left_rpm  = to_rpm(l_rads);
+    right_rpm = to_rpm(r_rads);
   }
-  // If cache is stale or missing: write 0/0 (watchdog zero)
+  // Stale / missing cache → write 0/0 (watchdog zero)
 
-  config().blackboard->set("left_rpm",  left_rpm);
-  config().blackboard->set("right_rpm", right_rpm);
+  bb->set("left_rpm",  left_rpm);
+  bb->set("right_rpm", right_rpm);
   return BT::NodeStatus::SUCCESS;
 }
 
 // -------------------------------------------------------------------------------
 
-SetMotorSpeed::SetMotorSpeed(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+SetMotorSpeed::SetMotorSpeed(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::PortsList SetMotorSpeed::providedPorts()
 {
@@ -247,24 +248,22 @@ BT::NodeStatus SetMotorSpeed::tick()
   MotorFeedback fb;
   uart->set_speed(static_cast<uint8_t>(motor_id), rpm, fb);
 
-  // Write feedback to blackboard using "left_*" / "right_*" keys.
-  int left_id = 1;
-  config().blackboard->get("left_motor_id", left_id);
+  auto & bb = config().blackboard;
+  const int left_id = bb_get(bb, std::string("left_motor_id"), 1);
   const std::string side = (motor_id == left_id) ? "left" : "right";
 
   constexpr double kRpmToRads = 2.0 * M_PI / 60.0;
   constexpr double kTickToRad = 2.0 * M_PI / 32767.0;
-  config().blackboard->set(side + "_speed_fb", fb.speed_rpm * kRpmToRads);
-  config().blackboard->set(side + "_pos_fb",   fb.position  * kTickToRad);
-  config().blackboard->set(side + "_fault",    fb.fault_code);
+  bb->set(side + "_speed_fb", fb.speed_rpm * kRpmToRads);
+  bb->set(side + "_pos_fb",   fb.position  * kTickToRad);
+  bb->set(side + "_fault",    fb.fault_code);
 
   return BT::NodeStatus::SUCCESS;
 }
 
 // -------------------------------------------------------------------------------
 
-PublishWheelFeedback::PublishWheelFeedback(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+PublishWheelFeedback::PublishWheelFeedback(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::NodeStatus PublishWheelFeedback::tick()
 {
@@ -276,17 +275,12 @@ BT::NodeStatus PublishWheelFeedback::tick()
     return BT::NodeStatus::SUCCESS;
   }
 
-  double lv = 0, rv = 0, lp = 0, rp = 0;
-  config().blackboard->get("left_speed_fb",  lv);
-  config().blackboard->get("right_speed_fb", rv);
-  config().blackboard->get("left_pos_fb",    lp);
-  config().blackboard->get("right_pos_fb",   rp);
-
+  auto & bb = config().blackboard;
   WheelFeedback msg;
-  msg.left_velocity  = static_cast<float>(lv);
-  msg.right_velocity = static_cast<float>(rv);
-  msg.left_position  = static_cast<float>(lp);
-  msg.right_position = static_cast<float>(rp);
+  msg.left_velocity  = static_cast<float>(bb_get(bb, std::string("left_speed_fb"),  0.0));
+  msg.right_velocity = static_cast<float>(bb_get(bb, std::string("right_speed_fb"), 0.0));
+  msg.left_position  = static_cast<float>(bb_get(bb, std::string("left_pos_fb"),    0.0));
+  msg.right_position = static_cast<float>(bb_get(bb, std::string("right_pos_fb"),   0.0));
   pub_fn(msg);
 
   return BT::NodeStatus::SUCCESS;
@@ -294,8 +288,7 @@ BT::NodeStatus PublishWheelFeedback::tick()
 
 // -------------------------------------------------------------------------------
 
-PublishDriveStatus::PublishDriveStatus(const std::string & name, const BT::NodeConfig & cfg)
-: BT::SyncActionNode(name, cfg) {}
+PublishDriveStatus::PublishDriveStatus(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
 BT::NodeStatus PublishDriveStatus::tick()
 {
@@ -307,9 +300,9 @@ BT::NodeStatus PublishDriveStatus::tick()
     return BT::NodeStatus::SUCCESS;
   }
 
-  bool connected = false, sim_mode = true;
-  config().blackboard->get("uart_connected", connected);
-  config().blackboard->get("sim_mode",       sim_mode);
+  auto & bb = config().blackboard;
+  const bool connected = bb_get(bb, std::string("uart_connected"), false);
+  const bool sim_mode  = bb_get(bb, std::string("sim_mode"),       true);
 
   DriveStatus msg;
   msg.status = connected
