@@ -1,5 +1,7 @@
 #include "mserve_base/base_node.hpp"
 #include "mserve_base/base_limits.hpp"
+#include "mserve_utils/qos.hpp"
+#include "mserve_utils/topics.hpp"
 #include "mserve_utils/utils.hpp"
 
 #include <lifecycle_msgs/msg/state.hpp>
@@ -40,6 +42,14 @@ void BaseNode::declare_params()
   this->declare_parameter("feedback_rate", 10.0,
     mserve_utils::make_double_range_descriptor(
       "Drive loop tick rate (Hz)", kFeedbackRateMin, kFeedbackRateMax));
+
+  // Pre-declare topic_names.*/qos.* here, before add_on_set_parameters_callback
+  // is registered — declaring them lazily inside on_configure() would trigger
+  // on_parameters() while the state is CONFIGURING, which rejects the change
+  // because it isn't UNCONFIGURED.
+  mserve_topics::cmd_vel(*this);
+  mserve_topics::cmd_vel_safe(*this);
+  mserve_qos::commands(*this);
 }
 
 void BaseNode::load_params()

@@ -6,6 +6,8 @@
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 
+#include "mserve_base/base_limits.hpp"
+
 namespace mserve_base {
 
 // bb_get: read a value from the blackboard; return def if the key is absent.

@@ -38,6 +38,7 @@
 #include <interfaces/msg/drive_status.hpp>
 #include <interfaces/msg/motor_command.hpp>
 #include <interfaces/srv/drive.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include "base_types.hpp"
 

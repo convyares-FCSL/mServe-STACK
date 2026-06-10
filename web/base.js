@@ -1,0 +1,183 @@
+// ── ROS connection ─────────────────────────────────────────────────────────────
+
+const ros = new ROSLIB.Ros({ url: `ws://${window.location.hostname}:9090` });
+
+const elStatus    = document.getElementById('connection-status');
+const elNodeState = document.getElementById('node-state');
+
+ros.on('connection', () => {
+  elStatus.textContent = 'ROS Connected';
+  elStatus.className = 'status connected';
+  refreshNodeState();
+});
+ros.on('error',  () => { elStatus.textContent = 'ROS Error';        elStatus.className = 'status disconnected'; });
+ros.on('close',  () => { elStatus.textContent = 'ROS Disconnected'; elStatus.className = 'status disconnected'; });
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────────
+
+const TRANSITIONS = { configure: 1, activate: 3, deactivate: 4, cleanup: 2 };
+
+function changeState(transitionId) {
+  new ROSLIB.Service({
+    ros,
+    name: '/mserve_base/change_state',
+    serviceType: 'lifecycle_msgs/srv/ChangeState',
+  }).callService(
+    new ROSLIB.ServiceRequest({ transition: { id: transitionId, label: '' } }),
+    () => setTimeout(refreshNodeState, 400),
+    (err) => console.error('change_state error', err),
+  );
+}
+
+function refreshNodeState() {
+  new ROSLIB.Service({
+    ros,
+    name: '/mserve_base/get_state',
+    serviceType: 'lifecycle_msgs/srv/GetState',
+  }).callService(new ROSLIB.ServiceRequest({}), (res) => {
+    const label = res?.current_state?.label ?? 'unavailable';
+    elNodeState.textContent = label;
+    elNodeState.className = `state-label state-${label}`;
+  }, () => {
+    elNodeState.textContent = 'unavailable';
+    elNodeState.className = 'state-label state-unavailable';
+  });
+}
+
+document.getElementById('btn-configure').addEventListener('click',  () => changeState(TRANSITIONS.configure));
+document.getElementById('btn-activate').addEventListener('click',   () => changeState(TRANSITIONS.activate));
+document.getElementById('btn-deactivate').addEventListener('click', () => changeState(TRANSITIONS.deactivate));
+document.getElementById('btn-cleanup').addEventListener('click',    () => changeState(TRANSITIONS.cleanup));
+
+setInterval(refreshNodeState, 4000);
+
+// ── Drive controls ─────────────────────────────────────────────────────────────
+
+const cmdVelTopic = new ROSLIB.Topic({
+  ros,
+  name: '/cmd_vel',
+  messageType: 'geometry_msgs/msg/Twist',
+});
+
+const speedLinearSlider  = document.getElementById('speed-linear');
+const speedAngularSlider = document.getElementById('speed-angular');
+const speedLinearVal     = document.getElementById('speed-linear-val');
+const speedAngularVal    = document.getElementById('speed-angular-val');
+
+speedLinearSlider.addEventListener('input', () => {
+  speedLinearVal.textContent = `${parseFloat(speedLinearSlider.value).toFixed(2)} m/s`;
+});
+speedAngularSlider.addEventListener('input', () => {
+  speedAngularVal.textContent = `${parseFloat(speedAngularSlider.value).toFixed(2)} rad/s`;
+});
+
+function publishTwist(linear, angular) {
+  cmdVelTopic.publish(new ROSLIB.Message({
+    linear:  { x: linear, y: 0, z: 0 },
+    angular: { x: 0, y: 0, z: angular },
+  }));
+}
+
+let driveInterval = null;
+let currentTwist  = { linear: 0, angular: 0 };
+
+function startDrive(linear, angular) {
+  currentTwist = { linear, angular };
+  publishTwist(linear, angular);
+  if (driveInterval) clearInterval(driveInterval);
+  driveInterval = setInterval(() => publishTwist(currentTwist.linear, currentTwist.angular), 100);
+}
+
+function stopDrive() {
+  if (driveInterval) { clearInterval(driveInterval); driveInterval = null; }
+  publishTwist(0, 0);
+}
+
+// Bind a D-pad button to start driving on press and stop on release, covering
+// both mouse and touch input.
+function bindHold(buttonId, getLinear, getAngular) {
+  const btn = document.getElementById(buttonId);
+  const press = (e) => { e.preventDefault(); startDrive(getLinear(), getAngular()); };
+  const release = (e) => { e.preventDefault(); stopDrive(); };
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('touchstart', press, { passive: false });
+  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach((evt) => btn.addEventListener(evt, release));
+}
+
+bindHold('btn-fwd',   () =>  parseFloat(speedLinearSlider.value),  () => 0);
+bindHold('btn-back',  () => -parseFloat(speedLinearSlider.value),  () => 0);
+bindHold('btn-left',  () => 0, () =>  parseFloat(speedAngularSlider.value));
+bindHold('btn-right', () => 0, () => -parseFloat(speedAngularSlider.value));
+
+document.getElementById('btn-stop').addEventListener('click', stopDrive);
+
+// Safety: stop driving if the page loses focus while a button is held.
+window.addEventListener('blur', stopDrive);
+
+// ── Status subscriptions ─────────────────────────────────────────────────────
+
+new ROSLIB.Topic({
+  ros,
+  name: '/mserve/cmd_vel_safe',
+  messageType: 'geometry_msgs/msg/Twist',
+}).subscribe((msg) => {
+  document.getElementById('safe-linear').textContent  = msg.linear.x.toFixed(2);
+  document.getElementById('safe-angular').textContent = msg.angular.z.toFixed(2);
+});
+
+new ROSLIB.Topic({
+  ros,
+  name: '/mserve_base/base_status',
+  messageType: 'interfaces/msg/DriveStatus',
+}).subscribe((msg) => {
+  const elBridgeStatus = document.getElementById('bridge-status');
+  elBridgeStatus.textContent = msg.status ?? '—';
+  elBridgeStatus.style.color = msg.board_alive ? 'var(--success)' : 'var(--danger)';
+  document.getElementById('bridge-detail').textContent =
+    `battery ${msg.battery_level.toFixed(1)} V`;
+});
+
+// ── /rosout log panel ──────────────────────────────────────────────────────────
+
+const logBox      = document.getElementById('log-box');
+const chkAllNodes = document.getElementById('chk-all-nodes');
+const chkDebug    = document.getElementById('chk-debug');
+
+document.getElementById('btn-log-clear').addEventListener('click', () => { logBox.innerHTML = ''; });
+
+const LOG_LEVELS = {
+  10: ['DEBUG','log-debug'], 20: ['INFO','log-info'],
+  30: ['WARN','log-warn'],   40: ['ERROR','log-error'], 50: ['FATAL','log-fatal'],
+};
+
+new ROSLIB.Topic({
+  ros,
+  name: '/rosout',
+  messageType: 'rcl_interfaces/msg/Log',
+}).subscribe((msg) => {
+  const level = msg.level ?? 20;
+  if (level === 10 && !chkDebug.checked) return;
+  const nodeName = msg.name ?? '';
+  if (!chkAllNodes.checked && !nodeName.includes('mserve_base')) return;
+
+  const [levelLabel, levelClass] = LOG_LEVELS[level] ?? ['?', 'log-info'];
+  const d  = new Date();
+  const ts = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+
+  const line = document.createElement('div');
+  line.className = levelClass;
+  line.innerHTML =
+    `<span class="log-ts">${ts}</span>` +
+    `<span class="log-node">[${nodeName}]</span>` +
+    `<span>[${levelLabel}] ${escHtml(msg.msg ?? '')}</span>`;
+  logBox.appendChild(line);
+
+  while (logBox.children.length > 500) logBox.removeChild(logBox.firstChild);
+  if (logBox.scrollHeight - logBox.scrollTop < logBox.clientHeight + 60) {
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}

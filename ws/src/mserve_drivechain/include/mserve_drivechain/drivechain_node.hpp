@@ -3,6 +3,7 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include <behaviortree_cpp/bt_factory.h>
@@ -77,6 +78,7 @@ private:
   std::unique_ptr<DriveUart>         uart_;
   std::unique_ptr<DriveCommandStore> drive_cmd_store_;
   std::mutex                         uart_mutex_;
+  std::string                        last_drive_log_;
 
   // Drive tick
   rclcpp::TimerBase::SharedPtr drive_timer_;

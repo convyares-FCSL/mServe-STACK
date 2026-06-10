@@ -258,7 +258,10 @@ void DrivechainNode::on_drive( DriveService::Request::SharedPtr req, DriveServic
   for (const auto & c : req->motor_commands)
     s += std::string(s.empty() ? "" : "  ") + "#" + std::to_string(c.motor_id)
        + "→" + std::to_string(c.rpm) + "rpm";
-  RCLCPP_DEBUG(get_logger(), "DRIVE: [%s]", s.c_str());
+  if (s != last_drive_log_) {
+    RCLCPP_DEBUG(get_logger(), "DRIVE: [%s]", s.c_str());
+    last_drive_log_ = s;
+  }
 
   res->success = true;
   res->message = "ok";

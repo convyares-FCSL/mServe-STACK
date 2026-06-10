@@ -43,7 +43,7 @@ cd /home/ecm/mServe-STACK/web
 
 5. Open the browser:
 
-`http://localhost:8080`
+`http://localhost:6240`
 
 ## Notes
 

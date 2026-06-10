@@ -2,8 +2,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # run_drivechain_hw.sh
 #
-# Starts the full drivechain stack — works both natively (if ROS is installed)
-# and inside the mserve Docker container (Raspberry Pi / Debian).
+# Starts the full drive stack (mserve_drivechain + mserve_base) — works both
+# natively (if ROS is installed) and inside the mserve Docker container
+# (Raspberry Pi / Debian).
 #
 # Usage:
 #   ./web/run_drivechain_hw.sh [--sim] [uart_device]
@@ -70,7 +71,14 @@ cleanup() {
   done
   if [[ "$USE_DOCKER" == true ]]; then
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
-      "pkill -f drivechain_node || true; pkill -f rosbridge_websocket || true" 2>/dev/null || true
+      "pkill -f drivechain_node || true; pkill -f base_node || true; pkill -f rosbridge_websocket || true" 2>/dev/null || true
+  else
+    # `ros2 run` does not always exec-replace itself, so $! may only be the
+    # wrapper PID — pkill the actual node binaries by name as well.
+    pkill -f drivechain_node     2>/dev/null || true
+    pkill -f base_node           2>/dev/null || true
+    pkill -f rosbridge_websocket 2>/dev/null || true
+    pkill -f "http.server 6240"  2>/dev/null || true
   fi
   # rosbridge can get stuck in rclpy shutdown; force-kill after 2s
   sleep 2
@@ -79,6 +87,11 @@ cleanup() {
       kill -9 "$pid" 2>/dev/null || true
     fi
   done
+  if [[ "$USE_DOCKER" != true ]]; then
+    pkill -9 -f drivechain_node     2>/dev/null || true
+    pkill -9 -f base_node           2>/dev/null || true
+    pkill -9 -f rosbridge_websocket 2>/dev/null || true
+  fi
   wait 2>/dev/null || true
   echo "Done."
 }
@@ -95,7 +108,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     source /opt/ros/jazzy/setup.bash
     cd /ws
     colcon build \
-      --packages-select mserve_interfaces mserve_utils mserve_drivechain \
+      --packages-select interfaces utils mserve_drivechain mserve_base \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "
@@ -105,7 +118,7 @@ else
   SETUP="$WS_DIR/install/setup.bash"
   if [[ ! -f "$SETUP" ]]; then
     echo "ERROR: workspace not built — run:"
-    echo "       colcon build --packages-select interfaces utils mserve_drivechain"
+    echo "       colcon build --packages-select interfaces utils mserve_drivechain mserve_base"
     exit 1
   fi
   source "$SETUP"
@@ -128,11 +141,13 @@ fi
 # ── Kill any stale ROS processes from previous run ───────────────────────────
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
-    "pkill -f rosbridge_websocket 2>/dev/null; pkill -f drivechain_node 2>/dev/null; sleep 1; true" 2>/dev/null || true
+    "pkill -f rosbridge_websocket 2>/dev/null; pkill -f drivechain_node 2>/dev/null; pkill -f base_node 2>/dev/null; sleep 1; true" 2>/dev/null || true
 else
-  pkill -f rosbridge_websocket 2>/dev/null || true
-  pkill -f drivechain_node     2>/dev/null || true
-  sleep 2  # wait for port 9090 to be released before restarting rosbridge
+  pkill -f rosbridge_websocket  2>/dev/null || true
+  pkill -f drivechain_node      2>/dev/null || true
+  pkill -f base_node            2>/dev/null || true
+  pkill -f "http.server 6240"   2>/dev/null || true
+  sleep 2  # wait for port 9090/6240 to be released before restarting
 fi
 
 # ── Start rosbridge ───────────────────────────────────────────────────────────
@@ -171,50 +186,76 @@ else
   NATIVE_PIDS+=($!)
 fi
 
-# ── Wait for node to appear ───────────────────────────────────────────────────
-echo "Waiting for drivechain node…"
-NODE_UP=false
-for i in $(seq 1 30); do
-  if [[ "$USE_DOCKER" == true ]]; then
-    CHECK=$(docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
-      source /opt/ros/jazzy/setup.bash
-      source /ws/install/setup.bash
-      ros2 lifecycle get /mserve_drivechain 2>/dev/null
-    " 2>/dev/null || true)
-  else
-    CHECK=$(ros2 lifecycle get /mserve_drivechain 2>/dev/null || true)
-  fi
-  if [[ "$CHECK" == *"unconfigured"* ]]; then
-    NODE_UP=true
-    break
-  fi
-  echo "  ($i/30) not ready yet…"
-  sleep 1
-done
+# ── Start base node ────────────────────────────────────────────────────────────
+echo "Starting base node…"
+BASE_NODE_ARGS="--ros-args --log-level mserve_base:=debug"
 
-if [[ "$NODE_UP" == false ]]; then
-  echo "ERROR: drivechain node did not appear after 30 s. Check logs."
-  exit 1
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 run mserve_base base_node $BASE_NODE_ARGS
+  "
+else
+  ros2 run mserve_base base_node $BASE_NODE_ARGS &
+  NATIVE_PIDS+=($!)
 fi
 
+# ── Wait for a lifecycle node to appear ──────────────────────────────────────
+wait_for_lifecycle_node() {
+  local node_name="$1"
+  local up=false
+  for i in $(seq 1 30); do
+    if [[ "$USE_DOCKER" == true ]]; then
+      CHECK=$(docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
+        source /opt/ros/jazzy/setup.bash
+        source /ws/install/setup.bash
+        ros2 lifecycle get $node_name 2>/dev/null
+      " 2>/dev/null || true)
+    else
+      CHECK=$(ros2 lifecycle get "$node_name" 2>/dev/null || true)
+    fi
+    if [[ "$CHECK" == *"unconfigured"* ]]; then
+      up=true
+      break
+    fi
+    echo "  ($i/30) $node_name not ready yet…"
+    sleep 1
+  done
+  if [[ "$up" == false ]]; then
+    echo "ERROR: $node_name did not appear after 30 s. Check logs."
+    exit 1
+  fi
+}
+
+echo "Waiting for drivechain node…"
+wait_for_lifecycle_node /mserve_drivechain
+
+echo "Waiting for base node…"
+wait_for_lifecycle_node /mserve_base
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
-echo "Configuring drivechain node…"
+echo "Configuring drivechain + base nodes…"
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
     source /opt/ros/jazzy/setup.bash
     source /ws/install/setup.bash
     ros2 lifecycle set /mserve_drivechain configure
     ros2 lifecycle set /mserve_drivechain activate
+    ros2 lifecycle set /mserve_base configure
+    ros2 lifecycle set /mserve_base activate
   "
 else
   ros2 lifecycle set /mserve_drivechain configure
   ros2 lifecycle set /mserve_drivechain activate
+  ros2 lifecycle set /mserve_base configure
+  ros2 lifecycle set /mserve_base activate
 fi
 
 # ── Web server (always native — Python is always available) ───────────────────
-echo "Starting web server on http://localhost:8080…"
+echo "Starting web server on http://localhost:6240…"
 cd "$SCRIPT_DIR"
-python3 -m http.server 8080 &
+python3 -m http.server 6240 &
 NATIVE_PIDS+=($!)
 
 # ── Print URL ─────────────────────────────────────────────────────────────────
@@ -222,10 +263,11 @@ LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 BACKEND_LABEL=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware ($UART_DEVICE)")
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Drivechain ready  [$BACKEND_LABEL]"
+echo "  Drivechain + Base ready  [$BACKEND_LABEL]"
 echo ""
 echo "  Open in browser:"
-echo "    http://${LOCAL_IP}:8080/drivechain.html"
+echo "    http://${LOCAL_IP}:6240/drivechain.html"
+echo "    http://${LOCAL_IP}:6240/base.html"
 echo ""
 echo "  rosbridge log: /tmp/rosbridge.log"
 echo ""

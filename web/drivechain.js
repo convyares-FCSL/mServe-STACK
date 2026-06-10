@@ -17,7 +17,7 @@ ros.on('close',  () => { elStatus.textContent = 'ROS Disconnected'; elStatus.cla
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
-const TRANSITIONS = { configure: 1, activate: 3, deactivate: 4 };
+const TRANSITIONS = { configure: 1, activate: 3, deactivate: 4, cleanup: 2 };
 
 function changeState(transitionId) {
   new ROSLIB.Service({
@@ -49,8 +49,150 @@ function refreshNodeState() {
 document.getElementById('btn-configure').addEventListener('click',  () => changeState(TRANSITIONS.configure));
 document.getElementById('btn-activate').addEventListener('click',   () => changeState(TRANSITIONS.activate));
 document.getElementById('btn-deactivate').addEventListener('click', () => changeState(TRANSITIONS.deactivate));
+document.getElementById('btn-cleanup').addEventListener('click',    () => changeState(TRANSITIONS.cleanup));
 
 setInterval(refreshNodeState, 4000);
+
+// ── Parameters ───────────────────────────────────────────────────────────────
+
+// rcl_interfaces/msg/ParameterType constants
+const PARAM_TYPE_BOOL           = 1;
+const PARAM_TYPE_INTEGER        = 2;
+const PARAM_TYPE_DOUBLE         = 3;
+const PARAM_TYPE_STRING         = 4;
+const PARAM_TYPE_BOOL_ARRAY     = 6;
+const PARAM_TYPE_INTEGER_ARRAY  = 7;
+const PARAM_TYPE_DOUBLE_ARRAY   = 8;
+const PARAM_TYPE_STRING_ARRAY   = 9;
+
+const listParamsSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/list_parameters',
+  serviceType: 'rcl_interfaces/srv/ListParameters',
+});
+const getParamsSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/get_parameters',
+  serviceType: 'rcl_interfaces/srv/GetParameters',
+});
+const setParamsSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/set_parameters',
+  serviceType: 'rcl_interfaces/srv/SetParameters',
+});
+
+const elParamsBody = document.getElementById('params-table-body');
+const elParamsMsg  = document.getElementById('params-msg');
+
+function paramValueToText(value) {
+  switch (value.type) {
+    case PARAM_TYPE_BOOL:          return String(value.bool_value);
+    case PARAM_TYPE_INTEGER:       return String(value.integer_value);
+    case PARAM_TYPE_DOUBLE:        return String(value.double_value);
+    case PARAM_TYPE_STRING:        return value.string_value;
+    case PARAM_TYPE_BOOL_ARRAY:    return value.bool_array_value.join(', ');
+    case PARAM_TYPE_INTEGER_ARRAY: return value.integer_array_value.join(', ');
+    case PARAM_TYPE_DOUBLE_ARRAY:  return value.double_array_value.join(', ');
+    case PARAM_TYPE_STRING_ARRAY:  return value.string_array_value.join(', ');
+    default:                       return '';
+  }
+}
+
+function textToParamValue(type, text) {
+  switch (type) {
+    case PARAM_TYPE_BOOL:
+      return { type, bool_value: text };
+    case PARAM_TYPE_INTEGER:
+      return { type, integer_value: parseInt(text, 10) || 0 };
+    case PARAM_TYPE_DOUBLE:
+      return { type, double_value: parseFloat(text) || 0 };
+    case PARAM_TYPE_STRING:
+      return { type, string_value: text };
+    case PARAM_TYPE_BOOL_ARRAY:
+      return { type, bool_array_value: text.split(',').map(s => s.trim().toLowerCase() === 'true') };
+    case PARAM_TYPE_INTEGER_ARRAY:
+      return { type, integer_array_value: text.split(',').map(s => parseInt(s.trim(), 10) || 0) };
+    case PARAM_TYPE_DOUBLE_ARRAY:
+      return { type, double_array_value: text.split(',').map(s => parseFloat(s.trim()) || 0) };
+    case PARAM_TYPE_STRING_ARRAY:
+      return { type, string_array_value: text.split(',').map(s => s.trim()) };
+    default:
+      return { type: 0 };
+  }
+}
+
+function loadParameters() {
+  elParamsMsg.textContent = 'Loading…';
+  listParamsSvc.callService(new ROSLIB.ServiceRequest({ prefixes: [], depth: 0 }), (listRes) => {
+    const names = listRes?.result?.names ?? [];
+    if (names.length === 0) {
+      elParamsBody.innerHTML = '<tr><td colspan="2" class="motor-cmd-empty">No parameters reported.</td></tr>';
+      elParamsMsg.textContent = '';
+      return;
+    }
+
+    getParamsSvc.callService(new ROSLIB.ServiceRequest({ names }), (getRes) => {
+      elParamsBody.innerHTML = '';
+      names.forEach((name, i) => {
+        const value = getRes.values[i];
+        const row = document.createElement('tr');
+        row.dataset.paramName = name;
+        row.dataset.paramType = value.type;
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'param-name';
+        nameCell.textContent = name;
+
+        const valueCell = document.createElement('td');
+        const input = document.createElement('input');
+        input.className = 'param-input';
+        if (value.type === PARAM_TYPE_BOOL) {
+          input.type = 'checkbox';
+          input.checked = value.bool_value;
+        } else {
+          input.type = 'text';
+          input.value = paramValueToText(value);
+        }
+        valueCell.appendChild(input);
+
+        row.append(nameCell, valueCell);
+        elParamsBody.appendChild(row);
+      });
+      elParamsMsg.textContent = `Loaded ${names.length} parameters.`;
+    }, (err) => { elParamsMsg.textContent = `Error: ${err}`; });
+  }, (err) => { elParamsMsg.textContent = `Error: ${err}`; });
+}
+
+function applyParameters() {
+  const rows = [...elParamsBody.querySelectorAll('tr[data-param-name]')];
+  const parameters = rows.map((row) => {
+    const name = row.dataset.paramName;
+    const type = parseInt(row.dataset.paramType, 10);
+    const input = row.querySelector('.param-input');
+    const text = (type === PARAM_TYPE_BOOL) ? String(input.checked) : input.value;
+    return { name, value: textToParamValue(type, text) };
+  });
+
+  elParamsMsg.textContent = 'Applying…';
+  setParamsSvc.callService(new ROSLIB.ServiceRequest({ parameters }), (res) => {
+    const results = res?.results ?? [];
+    const failed = results.filter(r => !r.successful);
+    if (failed.length === 0) {
+      elParamsMsg.textContent = `Applied ${results.length} parameters.`;
+    } else {
+      elParamsMsg.textContent = `${failed.length} failed: ${failed.map(r => r.reason).join('; ')}`;
+    }
+  }, (err) => { elParamsMsg.textContent = `Error: ${err}`; });
+}
+
+document.getElementById('btn-params-refresh').addEventListener('click', loadParameters);
+document.getElementById('btn-params-apply').addEventListener('click', () => {
+  if (elNodeState.textContent !== 'unconfigured') {
+    elParamsMsg.textContent = 'Node must be unconfigured to apply parameter changes.';
+    return;
+  }
+  applyParameters();
+});
 
 // ── DriveChain services ────────────────────────────────────────────────────────
 
@@ -145,12 +287,16 @@ function sendAll() {
   );
 }
 
-// Zero all sliders then send all — per-motor Stop is a full Stop All,
-// since ~/drive replaces the whole motor_commands vector each call.
+// Zero one motor's slider then send all (other motors keep their current command).
+// For an all-stop, use the "Stop All" button.
 function stopMotor(motorId) {
-  void motorId;
-  document.querySelectorAll('.motor-rpm-slider').forEach(s => { s.value = '0'; });
-  document.querySelectorAll('.motor-rpm-val').forEach(d => { d.textContent = '0 rpm'; });
+  const row = document.querySelector(`.motor-cmd-row[data-motor-id="${motorId}"]`);
+  if (row) {
+    const slider = row.querySelector('.motor-rpm-slider');
+    const display = row.querySelector('.motor-rpm-val');
+    slider.value = '0';
+    display.textContent = '0 rpm';
+  }
   sendAll();
 }
 
