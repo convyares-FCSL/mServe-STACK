@@ -7,6 +7,16 @@ mserve_base:
     limits:
       max_linear_speed: 0.8        # m/s  — robot-level safety cap
       max_angular_speed: 1.2       # rad/s — robot-level safety cap
+    geometry:
+      wheel_separation: 0.35       # m — track width between wheel centers
+      wheel_radius: 0.08           # m
+      gear_ratio: 1.0              # motor revs per wheel rev
+    motor_ids:
+      left: 2                      # mserve_drivechain hardware.motor_ids mapping
+      right: 1
+    drive:
+      cmd_vel_timeout_ms: 500      # send a zero drive command if no /cmd_vel within this window
+    feedback_rate: 10.0            # Hz — drive loop tick rate
     topic_names:
       cmd_vel: /cmd_vel            # standard ROS topic — Nav2 and joy publish here
       cmd_vel_safe: /mserve/cmd_vel_safe

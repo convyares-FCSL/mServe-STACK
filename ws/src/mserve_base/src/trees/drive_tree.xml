@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4">
+  <BehaviorTree ID="DriveTree">
+    <!--
+      Runs every tick timer period (default 1/feedback_rate, 10 Hz).
+      ApplyCmdVelSafety reads the /cmd_vel cache; substitutes a zero Twist if the
+      cache is stale (dead-man switch, cmd_vel_timeout_ms) and clamps to limits.*.
+      ComputeKinematics converts the safe Twist to per-wheel RPM via
+      differential-drive kinematics (geometry.*, motor_ids.*).
+      CallDriveService forwards the wheel commands to mserve_drivechain's
+      ~/drive service (best-effort — SUCCESS even if unreachable).
+    -->
+    <Sequence name="drive_cycle">
+      <ApplyCmdVelSafety />
+      <ComputeKinematics />
+      <CallDriveService />
+      <PublishBaseStatus />
+    </Sequence>
+  </BehaviorTree>
+</root>
