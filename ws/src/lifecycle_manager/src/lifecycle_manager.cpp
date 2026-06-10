@@ -145,15 +145,15 @@ void LifecycleManager::build() {
     });
 
     // Export the tree model to an XML file for visualization in Groot2
-    std::string models_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/node_models.xml";
+    std::string models_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/node_models.xml";
     std::ofstream(models_path) << BT::writeTreeNodesModelXML(factory);
 
     // Load the behavior tree from an XML file
-    std::string tree_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/bringup.xml";
+    std::string tree_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/bringup.xml";
     tree_ = factory.createTreeFromFile(tree_path);
 
     // Load the shutdown tree from an XML file
-    std::string shutdown_path = ament_index_cpp::get_package_share_directory("mserve_lifecycle_manager") + "/trees/shutdown.xml";
+    std::string shutdown_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/shutdown.xml";
     shutdown_tree_ = factory.createTreeFromFile(shutdown_path);
 
     // Create a ZMQ publisher to visualize the tree in Groot2, if its default port is free.

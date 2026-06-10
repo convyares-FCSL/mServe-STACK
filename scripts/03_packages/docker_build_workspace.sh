@@ -9,10 +9,10 @@ docker compose up -d --build robot-mserve
 docker compose exec robot-mserve bash -lc '
   source /opt/ros/jazzy/setup.bash &&
   cd /ws &&
-  colcon build --symlink-install \
+  colcon build --symlink-install --allow-overriding launch \
     --packages-select \
-      mserve_interfaces \
-      mserve_utils \
+      interfaces \
+      utils \
       mserve_base \
       mserve_drivechain \
       mserve_description \

@@ -19,8 +19,8 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
-find_package(mserve_interfaces REQUIRED)
-find_package(mserve_utils REQUIRED)
+find_package(interfaces REQUIRED)
+find_package(utils REQUIRED)
 
 # ==============================================================================
 # UART + packet layer — no ROS, no BT deps, unit-testable
@@ -57,8 +57,8 @@ ament_target_dependencies(drivechain_node_lib
   behaviortree_cpp
   ament_index_cpp
   lifecycle_msgs
-  mserve_interfaces
-  mserve_utils
+  interfaces
+  utils
 )
 
 target_link_libraries(drivechain_node_lib drivechain_uart)

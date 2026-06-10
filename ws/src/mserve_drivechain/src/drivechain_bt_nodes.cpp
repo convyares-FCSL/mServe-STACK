@@ -292,7 +292,7 @@ PublishWheelFeedback::PublishWheelFeedback(const std::string & name, const BT::N
 
 BT::NodeStatus PublishWheelFeedback::tick()
 {
-  using WheelFeedback = mserve_interfaces::msg::WheelFeedback;
+  using WheelFeedback = interfaces::msg::WheelFeedback;
   using Fn = std::function<void(const WheelFeedback &)>;
 
   Fn pub_fn;
@@ -317,7 +317,7 @@ PublishDriveStatus::PublishDriveStatus(const std::string & name, const BT::NodeC
 
 BT::NodeStatus PublishDriveStatus::tick()
 {
-  using DriveStatus = mserve_interfaces::msg::DriveStatus;
+  using DriveStatus = interfaces::msg::DriveStatus;
   using Fn = std::function<void(const DriveStatus &)>;
 
   Fn pub_fn;

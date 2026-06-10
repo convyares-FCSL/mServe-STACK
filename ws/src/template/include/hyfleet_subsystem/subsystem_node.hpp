@@ -15,14 +15,14 @@
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 // TODO: replace with your action header, e.g.:
-//   #include "mserve_interfaces/action/control_<name>.hpp"
-#include "mserve_interfaces/action/control_subsystem.hpp"
+//   #include "interfaces/action/control_<name>.hpp"
+#include "interfaces/action/control_subsystem.hpp"
 
 // TODO: rename namespace to hyfleet_<name>
 namespace hyfleet_subsystem {
 
 // TODO: replace ControlSubsystem with your action type
-using ControlSubsystem = mserve_interfaces::action::ControlSubsystem;
+using ControlSubsystem = interfaces::action::ControlSubsystem;
 using GoalHandleControlSubsystem = rclcpp_action::ServerGoalHandle<ControlSubsystem>;
 
 class SubsystemAction;

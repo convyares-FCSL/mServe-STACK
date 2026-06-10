@@ -6,11 +6,11 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 source "$ROOT_DIR/scripts/01_setup/env_setup.sh"
 cd "$ROOT_DIR/ws"
 
-colcon build --symlink-install --packages-select \
-  mserve_interfaces \
-  mserve_utils \
+colcon build --symlink-install --allow-overriding launch --packages-select \
+  interfaces \
+  utils \
   mserve_base \
   mserve_drivechain \
   mserve_description \
-  mserve_launch \
-  mserve_lifecycle_manager
+  launch \
+  lifecycle_manager

@@ -9,8 +9,8 @@
 namespace mserve_drivechain {
 
 using namespace std::chrono_literals;
-using WheelFeedback = mserve_interfaces::msg::WheelFeedback;
-using DriveStatus   = mserve_interfaces::msg::DriveStatus;
+using WheelFeedback = interfaces::msg::WheelFeedback;
+using DriveStatus   = interfaces::msg::DriveStatus;
 
 // ==============================================================================
 // Construction / destruction

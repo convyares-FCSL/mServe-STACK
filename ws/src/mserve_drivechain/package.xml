@@ -18,8 +18,8 @@
   <depend>behaviortree_cpp</depend>
   <depend>ament_index_cpp</depend>
   <depend>lifecycle_msgs</depend>
-  <depend>mserve_interfaces</depend>
-  <depend>mserve_utils</depend>
+  <depend>interfaces</depend>
+  <depend>utils</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_auto</test_depend>

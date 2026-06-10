@@ -9,5 +9,5 @@ builtin_interfaces/Time telemetry_timestamp
 bool telemetry_received
 uint8 telemetry_mode
 
-mserve_interfaces/BoosterDiagnostics low_booster
-mserve_interfaces/BoosterDiagnostics high_booster
+interfaces/BoosterDiagnostics low_booster
+interfaces/BoosterDiagnostics high_booster

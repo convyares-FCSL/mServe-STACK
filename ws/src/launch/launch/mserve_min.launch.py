@@ -7,7 +7,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    interfaces_share = get_package_share_directory('mserve_interfaces')
+    interfaces_share = get_package_share_directory('interfaces')
     params_file = os.path.join(interfaces_share, 'config', 'mserve_params.yaml')
 
     drivechain = Node(
@@ -19,7 +19,7 @@ def generate_launch_description():
     )
 
     lifecycle_manager = Node(
-        package='mserve_lifecycle_manager',
+        package='lifecycle_manager',
         executable='lifecycle_manager',
         name='lifecycle_manager',
         output='screen'

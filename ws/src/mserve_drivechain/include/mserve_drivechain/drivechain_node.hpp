@@ -11,9 +11,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
-#include <mserve_interfaces/msg/drive_status.hpp>
-#include <mserve_interfaces/msg/wheel_feedback.hpp>
-#include <mserve_interfaces/srv/drive_chain_cmd.hpp>
+#include <interfaces/msg/drive_status.hpp>
+#include <interfaces/msg/wheel_feedback.hpp>
+#include <interfaces/srv/drive_chain_cmd.hpp>
 
 #include "mserve_drivechain/motor_feedback.hpp"
 
@@ -55,7 +55,7 @@ private:
   std::array<BT::Tree, 4>         trees_;  // [0]=connect [1]=stop [2]=set_id [3]=drive
 
   // Service
-  using DriveChainCmd = mserve_interfaces::srv::DriveChainCmd;
+  using DriveChainCmd = interfaces::srv::DriveChainCmd;
   void on_drivechain_cmd(DriveChainCmd::Request::SharedPtr, DriveChainCmd::Response::SharedPtr);
   rclcpp::Service<DriveChainCmd>::SharedPtr cmd_service_;
   rclcpp::CallbackGroup::SharedPtr          service_cbg_;
@@ -66,8 +66,8 @@ private:
   std::mutex                   uart_mutex_;
 
   // Publishers — lifecycle-managed, pointers placed on blackboard as std::function
-  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::WheelFeedback>::SharedPtr wheel_feedback_pub_;
-  rclcpp_lifecycle::LifecyclePublisher<mserve_interfaces::msg::DriveStatus>::SharedPtr   drive_status_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::WheelFeedback>::SharedPtr wheel_feedback_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::DriveStatus>::SharedPtr   drive_status_pub_;
 
   // Drive tick
   rclcpp::TimerBase::SharedPtr drive_timer_;

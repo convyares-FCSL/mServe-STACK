@@ -10,13 +10,13 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 // TODO: replace with your action header
-#include "mserve_interfaces/action/control_subsystem.hpp"
+#include "interfaces/action/control_subsystem.hpp"
 
 // TODO: rename namespace to hyfleet_<name>
 namespace hyfleet_subsystem
 {
 // TODO: replace ControlSubsystem with your action type
-using ControlSubsystem = mserve_interfaces::action::ControlSubsystem;
+using ControlSubsystem = interfaces::action::ControlSubsystem;
 using GoalHandleControlSubsystem = rclcpp_action::ServerGoalHandle<ControlSubsystem>;
 
 // TODO: rename class to <Name>Action

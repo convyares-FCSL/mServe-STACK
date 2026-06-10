@@ -24,8 +24,8 @@ find_package(ament_index_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
-find_package(mserve_interfaces REQUIRED)
-find_package(mserve_utils REQUIRED)
+find_package(interfaces REQUIRED)
+find_package(utils REQUIRED)
 # TODO: add any subsystem-specific deps here (and in package.xml)
 
 # ==============================================================================
@@ -52,8 +52,8 @@ ament_target_dependencies(subsystem_node_lib
   rclcpp
   rclcpp_lifecycle
   rclcpp_action
-  mserve_interfaces
-  mserve_utils
+  interfaces
+  utils
   behaviortree_cpp
   behaviortree_ros2
   ament_index_cpp
@@ -105,7 +105,7 @@ install(DIRECTORY include/
 ament_export_include_directories(include)
 ament_export_libraries(subsystem_node_lib)
 ament_export_targets(export_hyfleet_subsystem HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp rclcpp_lifecycle rclcpp_action mserve_interfaces)
+ament_export_dependencies(rclcpp rclcpp_lifecycle rclcpp_action interfaces)
 
 # ==============================================================================
 # Tests

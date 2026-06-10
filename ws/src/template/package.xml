@@ -20,8 +20,8 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>diagnostic_msgs</depend>
-  <depend>mserve_interfaces</depend>
-  <depend>mserve_utils</depend>
+  <depend>interfaces</depend>
+  <depend>utils</depend>
   <!-- TODO: add subsystem-specific deps -->
 
   <test_depend>ament_lint_auto</test_depend>

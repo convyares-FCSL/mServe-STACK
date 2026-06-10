@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>mserve_launch</name>
+  <name>launch</name>
   <version>0.1.0</version>
   <description>Launch and bringup support for the mServe system.</description>
   <maintainer email="ecm@example.com">ecm</maintainer>
@@ -8,7 +8,6 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>ament_index_python</exec_depend>
-  <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
   <export>
