@@ -10,18 +10,18 @@
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
+#include <interfaces/msg/drive_motor_feedback.hpp>
 #include <interfaces/msg/drive_status.hpp>
-#include <interfaces/msg/wheel_feedback.hpp>
-#include <interfaces/srv/drive_chain_cmd.hpp>
-
-#include "mserve_drivechain/motor_feedback.hpp"
+#include <interfaces/srv/drive.hpp>
+#include <interfaces/srv/set_motor_id.hpp>
 
 namespace mserve_drivechain {
 
 // Forward-declare private implementation types (complete definitions in src/).
 class DriveUart;
-class CmdVelCache;
+class DriveCommandStore;
 
 class DrivechainNode : public rclcpp_lifecycle::LifecycleNode {
 public:
@@ -54,20 +54,29 @@ private:
   std::shared_ptr<BT::Blackboard> blackboard_;
   std::array<BT::Tree, 4>         trees_;  // [0]=connect [1]=stop [2]=set_id [3]=drive
 
-  // Service
-  using DriveChainCmd = interfaces::srv::DriveChainCmd;
-  void on_drivechain_cmd(DriveChainCmd::Request::SharedPtr, DriveChainCmd::Response::SharedPtr);
-  rclcpp::Service<DriveChainCmd>::SharedPtr cmd_service_;
-  rclcpp::CallbackGroup::SharedPtr          service_cbg_;
+  // Services — one per command concern
+  void create_services();
+  void on_connect(std_srvs::srv::Trigger::Request::SharedPtr,         std_srvs::srv::Trigger::Response::SharedPtr);
+  void on_stop   (std_srvs::srv::Trigger::Request::SharedPtr,         std_srvs::srv::Trigger::Response::SharedPtr);
+  void on_drive  (interfaces::srv::Drive::Request::SharedPtr,         interfaces::srv::Drive::Response::SharedPtr);
+  void on_set_id (interfaces::srv::SetMotorId::Request::SharedPtr,    interfaces::srv::SetMotorId::Response::SharedPtr);
 
-  // Hardware
-  std::unique_ptr<DriveUart>   uart_;
-  std::unique_ptr<CmdVelCache> cmd_vel_cache_;
-  std::mutex                   uart_mutex_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr connect_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_service_;
+  rclcpp::Service<interfaces::srv::Drive>::SharedPtr drive_service_;
+  rclcpp::Service<interfaces::srv::SetMotorId>::SharedPtr  set_id_service_;
+  rclcpp::CallbackGroup::SharedPtr service_cbg_;
 
   // Publishers — lifecycle-managed, pointers placed on blackboard as std::function
-  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::WheelFeedback>::SharedPtr wheel_feedback_pub_;
-  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::DriveStatus>::SharedPtr   drive_status_pub_;
+  void create_publishers();
+  void create_motor_feedback(bool sim_mode);
+  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::DriveMotorFeedback>::SharedPtr motor_feedback_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<interfaces::msg::DriveStatus>::SharedPtr        drive_status_pub_;
+
+   // Hardware
+  std::unique_ptr<DriveUart>         uart_;
+  std::unique_ptr<DriveCommandStore> drive_cmd_store_;
+  std::mutex                         uart_mutex_;
 
   // Drive tick
   rclcpp::TimerBase::SharedPtr drive_timer_;

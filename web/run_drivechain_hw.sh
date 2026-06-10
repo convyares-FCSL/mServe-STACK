@@ -72,6 +72,13 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
       "pkill -f drivechain_node || true; pkill -f rosbridge_websocket || true" 2>/dev/null || true
   fi
+  # rosbridge can get stuck in rclpy shutdown; force-kill after 2s
+  sleep 2
+  for pid in "${NATIVE_PIDS[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
   wait 2>/dev/null || true
   echo "Done."
 }
@@ -98,7 +105,7 @@ else
   SETUP="$WS_DIR/install/setup.bash"
   if [[ ! -f "$SETUP" ]]; then
     echo "ERROR: workspace not built — run:"
-    echo "       colcon build --packages-select mserve_interfaces mserve_utils mserve_drivechain"
+    echo "       colcon build --packages-select interfaces utils mserve_drivechain"
     exit 1
   fi
   source "$SETUP"
@@ -125,6 +132,7 @@ if [[ "$USE_DOCKER" == true ]]; then
 else
   pkill -f rosbridge_websocket 2>/dev/null || true
   pkill -f drivechain_node     2>/dev/null || true
+  sleep 2  # wait for port 9090 to be released before restarting rosbridge
 fi
 
 # ── Start rosbridge ───────────────────────────────────────────────────────────
@@ -136,7 +144,9 @@ if [[ "$USE_DOCKER" == true ]]; then
     ros2 run rosbridge_server rosbridge_websocket --port 9090
   "
 else
-  ros2 run rosbridge_server rosbridge_websocket --port 9090 &
+  # rosbridge throws a known rclpy/Tornado traceback on SIGINT shutdown (Jazzy
+  # bug) — redirect to a log file so it doesn't spam the terminal on Ctrl+C.
+  ros2 run rosbridge_server rosbridge_websocket --port 9090 > /tmp/rosbridge.log 2>&1 &
   NATIVE_PIDS+=($!)
 fi
 sleep 1
@@ -144,10 +154,10 @@ sleep 1
 # ── Start drivechain node ─────────────────────────────────────────────────────
 if [[ "$SIM_MODE" == true ]]; then
   echo "Starting drivechain node (sim)…"
-  NODE_ARGS="--ros-args -p drive.backend:=sim"
+  NODE_ARGS="--ros-args -p drive.backend:=sim --log-level mserve_drivechain:=debug"
 else
   echo "Starting drivechain node (hardware, $UART_DEVICE)…"
-  NODE_ARGS="--ros-args -p drive.backend:=hardware -p hardware.uart_device:=$UART_DEVICE"
+  NODE_ARGS="--ros-args -p drive.backend:=hardware -p hardware.uart_device:=$UART_DEVICE --log-level mserve_drivechain:=debug"
 fi
 
 if [[ "$USE_DOCKER" == true ]]; then
@@ -216,6 +226,8 @@ echo "  Drivechain ready  [$BACKEND_LABEL]"
 echo ""
 echo "  Open in browser:"
 echo "    http://${LOCAL_IP}:8080/drivechain.html"
+echo ""
+echo "  rosbridge log: /tmp/rosbridge.log"
 echo ""
 echo "  Press Ctrl+C to stop everything."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -62,10 +62,16 @@ BT::NodeStatus MotorHealthy::tick()
 {
   int motor_id = 0;
   getInput("motor_id", motor_id);
-  const int left_id = bb_get(config().blackboard, std::string("left_motor_id"), 1);
-  const int fault   = bb_get(config().blackboard,
-    std::string((motor_id == left_id) ? "left_fault" : "right_fault"), 0);
-  return (fault == 0) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+
+  std::vector<interfaces::msg::MotorState> states;
+  (void)config().blackboard->get("motor_states", states);
+
+  for (const auto & s : states) {
+    if (s.motor_id == static_cast<uint8_t>(motor_id)) {
+      return (s.fault_code == 0) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+    }
+  }
+  return BT::NodeStatus::FAILURE;  // motor not found → treat as unhealthy
 }
 
 // ==============================================================================
@@ -215,99 +221,144 @@ BT::NodeStatus SetMotorId::onRunning()
 }
 
 // ==============================================================================
-// Drive tree actions
+// N-motor connect / stop
 // ==============================================================================
 
-ComputeRpm::ComputeRpm(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+ConnectAllMotors::ConnectAllMotors(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
-BT::NodeStatus ComputeRpm::tick()
+BT::NodeStatus ConnectAllMotors::tick()
 {
-  auto * cache = bb_ptr<CmdVelCache>(config(), "cmd_vel_cache");
-  auto & bb    = config().blackboard;
+  DriveUart * uart = get_uart(config());
+  if (!uart || !uart->is_open()) return BT::NodeStatus::FAILURE;
 
-  const int    max_rpm    = bb_get(bb, std::string("max_rpm"),            200);
-  const int    timeout_ms = bb_get(bb, std::string("cmd_vel_timeout_ms"), 500);
-  const double wheel_sep  = bb_get(bb, std::string("wheel_separation"),   0.35);
-  const double wheel_rad  = bb_get(bb, std::string("wheel_radius"),       0.08);
+  std::vector<MotorDescriptor> motors;
+  (void)config().blackboard->get("motor_list", motors);
 
-  int left_rpm = 0, right_rpm = 0;
+  for (const auto & m : motors) {
+    if (!m.enabled) continue;
 
-  if (cache && cache->age_ms() < static_cast<double>(timeout_ms)) {
-    const auto   twist  = cache->latest();
-    const double half   = wheel_sep / 2.0;
-    const double l_rads = (twist.linear.x - twist.angular.z * half) / wheel_rad;
-    const double r_rads = (twist.linear.x + twist.angular.z * half) / wheel_rad;
+    bool pinged = false;
+    for (int attempt = 0; attempt < 3 && !pinged; ++attempt) {
+      pinged = uart->ping(m.id);
+    }
+    if (!pinged) {
+      RCLCPP_WARN(get_ros_logger(config()),
+        "ConnectAllMotors: motor %s #%d not responding", m.name.c_str(), m.id);
+      return BT::NodeStatus::FAILURE;
+    }
 
-    const auto to_rpm = [max_rpm](double rads) -> int {
-      int rpm = static_cast<int>(std::round(rads * 60.0 / (2.0 * M_PI)));
-      return std::clamp(rpm, -max_rpm, max_rpm);
-    };
-    left_rpm  = to_rpm(l_rads);
-    right_rpm = to_rpm(r_rads);
+    if (!uart->set_mode(m.id, 2)) {
+      RCLCPP_WARN(get_ros_logger(config()),
+        "ConnectAllMotors: motor %s #%d set_mode(2) failed", m.name.c_str(), m.id);
+      return BT::NodeStatus::FAILURE;
+    }
+
+    RCLCPP_INFO(get_ros_logger(config()),
+      "ConnectAllMotors: motor %s #%d OK", m.name.c_str(), m.id);
   }
-  // Stale / missing cache → write 0/0 (watchdog zero)
-
-  bb->set("left_rpm",  left_rpm);
-  bb->set("right_rpm", right_rpm);
   return BT::NodeStatus::SUCCESS;
 }
 
 // -------------------------------------------------------------------------------
 
-SetMotorSpeed::SetMotorSpeed(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+StopAllMotors::StopAllMotors(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
-BT::PortsList SetMotorSpeed::providedPorts()
+BT::NodeStatus StopAllMotors::tick()
 {
-  return { BT::InputPort<int>("motor_id"), BT::InputPort<int>("rpm") };
+  DriveUart * uart = get_uart(config());
+
+  std::vector<MotorDescriptor> motors;
+  (void)config().blackboard->get("motor_list", motors);
+
+  for (const auto & m : motors) {
+    if (!m.enabled) continue;
+    if (uart) {
+      MotorFeedback fb;
+      uart->stop(m.id, fb);
+    }
+  }
+  return BT::NodeStatus::SUCCESS;  // best-effort
 }
 
-BT::NodeStatus SetMotorSpeed::tick()
+// ==============================================================================
+// Drive tree actions
+// ==============================================================================
+
+SetAllMotors::SetAllMotors(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+
+BT::NodeStatus SetAllMotors::tick()
 {
   DriveUart * uart = get_uart(config());
   if (!uart) return BT::NodeStatus::FAILURE;
 
-  int motor_id = 0, rpm = 0;
-  getInput("motor_id", motor_id);
-  getInput("rpm",      rpm);
+  auto * store = bb_ptr<DriveCommandStore>(config(), "drive_cmd_store");
+  auto & bb    = config().blackboard;
 
-  MotorFeedback fb;
-  uart->set_speed(static_cast<uint8_t>(motor_id), rpm, fb);
+  const int timeout_ms = bb_get(bb, std::string("command_timeout_ms"), 500);
 
-  auto & bb = config().blackboard;
-  const int left_id = bb_get(bb, std::string("left_motor_id"), 1);
-  const std::string side = (motor_id == left_id) ? "left" : "right";
+  // Build motor_id → commanded RPM map (empty = zero all motors)
+  std::unordered_map<int, int16_t> cmd_map;
+  if (store && store->age_ms() < static_cast<double>(timeout_ms)) {
+    for (const auto & cmd : store->latest()) {
+      cmd_map[cmd.motor_id] = cmd.rpm;
+    }
+  }
 
+  std::vector<MotorDescriptor> motors;
+  (void)bb->get("motor_list", motors);
+
+  std::vector<interfaces::msg::MotorState> states;
   constexpr double kRpmToRads = 2.0 * M_PI / 60.0;
   constexpr double kTickToRad = 2.0 * M_PI / 32767.0;
-  bb->set(side + "_speed_fb", fb.speed_rpm * kRpmToRads);
-  bb->set(side + "_pos_fb",   fb.position  * kTickToRad);
-  bb->set(side + "_fault",    fb.fault_code);
 
+  for (const auto & m : motors) {
+    if (!m.enabled) continue;
+
+    auto it = cmd_map.find(m.id);
+    const int16_t raw_rpm  = (it != cmd_map.end()) ? it->second : 0;
+    // Apply sign: multiplier compensates for physically reversed motor mounting
+    const int16_t send_rpm = static_cast<int16_t>(raw_rpm * m.sign);
+
+    MotorFeedback fb;
+    uart->set_speed(m.id, send_rpm, fb);
+
+    interfaces::msg::MotorState state;
+    state.motor_id      = m.id;
+    state.name          = m.name;
+    // Un-flip sign so reported velocity is in the robot's reference frame
+    state.velocity_rpm  = static_cast<float>(fb.speed_rpm * m.sign);
+    state.velocity_rads = static_cast<float>(fb.speed_rpm * m.sign * kRpmToRads);
+    state.position_rad  = static_cast<float>(fb.position  * kTickToRad);
+    state.current_a     = fb.current;
+    state.temperature_c = fb.temperature;
+    state.fault_code    = static_cast<uint8_t>(fb.fault_code);
+    states.push_back(state);
+  }
+
+  bb->set("motor_states", states);
   return BT::NodeStatus::SUCCESS;
 }
 
 // -------------------------------------------------------------------------------
 
-PublishWheelFeedback::PublishWheelFeedback(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+PublishMotorFeedback::PublishMotorFeedback(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
 
-BT::NodeStatus PublishWheelFeedback::tick()
+BT::NodeStatus PublishMotorFeedback::tick()
 {
-  using WheelFeedback = interfaces::msg::WheelFeedback;
-  using Fn = std::function<void(const WheelFeedback &)>;
+  using DriveMotorFeedback = interfaces::msg::DriveMotorFeedback;
+  using Fn = std::function<void(const DriveMotorFeedback &)>;
 
   Fn pub_fn;
-  if (!config().blackboard->get("publish_wheel_feedback", pub_fn)) {
+  if (!config().blackboard->get("publish_motor_feedback", pub_fn)) {
     return BT::NodeStatus::SUCCESS;
   }
 
-  auto & bb = config().blackboard;
-  WheelFeedback msg;
-  msg.left_velocity  = static_cast<float>(bb_get(bb, std::string("left_speed_fb"),  0.0));
-  msg.right_velocity = static_cast<float>(bb_get(bb, std::string("right_speed_fb"), 0.0));
-  msg.left_position  = static_cast<float>(bb_get(bb, std::string("left_pos_fb"),    0.0));
-  msg.right_position = static_cast<float>(bb_get(bb, std::string("right_pos_fb"),   0.0));
-  pub_fn(msg);
+  std::vector<interfaces::msg::MotorState> states;
+  (void)config().blackboard->get("motor_states", states);
 
+  DriveMotorFeedback msg;
+  msg.motors = states;
+  pub_fn(msg);
   return BT::NodeStatus::SUCCESS;
 }
 

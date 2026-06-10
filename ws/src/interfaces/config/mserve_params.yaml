@@ -18,24 +18,14 @@ mserve_base:
 
 mserve_drivechain:
   ros__parameters:
+    drive:
+      backend: hardware            # "sim" (default) or "hardware"
+      command_timeout_ms: 500      # zero all motors if no motor_commands received within this window
     hardware:
-      wheel_separation: 0.35       # m — measure centre-to-centre on actual chassis
-      wheel_radius: 0.08           # m — DDSM115 tyre radius
+      uart_device: /dev/ttyAMA0
+      motor_count: 2
+      motor_ids: [1, 2]
+      motor_names: [left, right]
+      motor_signs: [1, 1]          # +1 = normal; -1 = physically reversed (flip direction)
+      motor_enabled: [true, true]
     feedback_rate: 20.0            # Hz
-    topic_names:
-      cmd_vel_safe: /mserve/cmd_vel_safe
-      wheel_feedback: /mserve/wheel_feedback
-      drivechain_status: /mserve/drivechain_status
-    qos:
-      commands:
-        reliability: reliable
-        durability: volatile
-        depth: 1
-      feedback:
-        reliability: best_effort
-        durability: volatile
-        depth: 10
-      status:
-        reliability: reliable
-        durability: volatile
-        depth: 10

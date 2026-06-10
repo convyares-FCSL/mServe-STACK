@@ -6,8 +6,6 @@
   <title>mServe — Drivechain</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    /* ── Drivechain-specific styles ─────────────────────────────────────── */
-
     .back-link {
       display: inline-block;
       margin-bottom: 16px;
@@ -17,13 +15,7 @@
     }
     .back-link:hover { text-decoration: underline; }
 
-    /* Service row */
-    .service-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
+    /* Service status badge */
     .service-status {
       padding: 4px 12px;
       border-radius: 999px;
@@ -38,27 +30,7 @@
     .service-status.connected-hw  { background: #22c55e;          color: #0f172a; }
     .service-status.unknown       { background: var(--surface-2); color: var(--text); }
 
-    /* Drive config */
-    .cfg-grid {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px 20px;
-      align-items: center;
-      max-width: 380px;
-    }
-    .cfg-grid label { font-size: 0.85rem; color: #94a3b8; }
-    .cfg-grid input[type="number"] {
-      width: 80px;
-      background: var(--surface-2);
-      border: 1px solid #475569;
-      border-radius: 6px;
-      color: var(--text);
-      padding: 4px 8px;
-      font-size: 0.9rem;
-      text-align: right;
-    }
-
-    /* Motor table */
+    /* Motor config table */
     .motor-table {
       width: 100%;
       border-collapse: collapse;
@@ -75,10 +47,7 @@
       letter-spacing: 0.04em;
       font-size: 0.72rem;
     }
-    .motor-table td {
-      padding: 5px 10px;
-      border-bottom: 1px solid #1e293b;
-    }
+    .motor-table td { padding: 5px 10px; border-bottom: 1px solid #1e293b; }
     .motor-table input[type="number"],
     .motor-table input[type="text"],
     .motor-table select {
@@ -91,107 +60,36 @@
     }
     .motor-table input[type="number"] { width: 58px; }
     .motor-table input[type="text"]   { width: 110px; }
-    .motor-table select               { width: 76px; }
-    .motor-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
-    .motor-table tr:has(.motor-enabled:not(:checked)) td {
-      opacity: 0.4;
+    .motor-table select               { width: 70px; }
+    .motor-table input[type="checkbox"] {
+      width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent);
     }
+    .motor-table tr:has(.motor-enabled:not(:checked)) td { opacity: 0.4; }
 
-    /* Speed sliders */
-    .sliders {
+    /* Per-motor command row */
+    .motor-cmd-row {
       display: grid;
-      grid-template-columns: 120px 1fr 64px;
+      grid-template-columns: 150px 1fr 68px auto auto;
       gap: 10px 14px;
       align-items: center;
-      margin-bottom: 14px;
+      padding: 10px 0;
+      border-bottom: 1px solid #1e293b;
     }
-
-    /* RPM display */
-    .rpm-display {
-      font-size: 0.82rem;
+    .motor-cmd-row:last-child { border-bottom: none; }
+    .motor-cmd-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .motor-id-badge { color: #475569; font-weight: 400; font-size: 0.8rem; }
+    .motor-rpm-val {
+      font-size: 0.85rem;
       color: #94a3b8;
-      text-align: center;
-      margin-bottom: 12px;
+      text-align: right;
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.03em;
     }
+    .motor-cmd-empty { color: #64748b; font-size: 0.85rem; padding: 10px 0; }
 
-    /* Two-column mid row */
-    .mid-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      align-items: start;
-    }
-    @media (max-width: 680px) { .mid-row { grid-template-columns: 1fr; } }
-
-    /* D-pad */
-    .dpad-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .dpad {
-      display: grid;
-      grid-template-columns: repeat(3, 72px);
-      grid-template-rows: repeat(3, 72px);
-      gap: 10px;
-    }
-    .dpad-forward { grid-column: 2; grid-row: 1; }
-    .dpad-left    { grid-column: 1; grid-row: 2; }
-    .dpad-stop    { grid-column: 2; grid-row: 2; }
-    .dpad-right   { grid-column: 3; grid-row: 2; }
-    .dpad-back    { grid-column: 2; grid-row: 3; }
-
-    .dpad button {
-      width: 100%;
-      height: 100%;
-      font-size: 1.5rem;
-      border-radius: 12px;
-      padding: 0;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
-    }
-    .dpad-stop { background: var(--danger); }
-    .dpad button.active { filter: brightness(1.3); transform: scale(0.95); }
-
-    .kbd-hint {
-      font-size: 0.78rem;
-      color: #64748b;
-    }
-
-    /* Log panel */
-    .log-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-    .log-toolbar label { font-size: 0.85rem; color: #94a3b8; cursor: pointer; user-select: none; }
-    #log-box {
-      background: #0f172a;
-      border-radius: 10px;
-      padding: 12px 14px;
-      height: 240px;
-      overflow-y: auto;
-      font-family: 'Courier New', monospace;
-      font-size: 0.78rem;
-      line-height: 1.55;
-      color: #cbd5e1;
-    }
-    .log-info  { color: #cbd5e1; }
-    .log-warn  { color: #fbbf24; }
-    .log-error { color: #f87171; }
-    .log-fatal { color: #f87171; font-weight: 700; }
-    .log-debug { color: #64748b; }
-    .log-ts    { color: #475569; margin-right: 6px; }
-    .log-node  { color: #60a5fa; margin-right: 6px; }
-
-    /* Feedback grid — dynamic cards */
+    /* Feedback grid */
     .feedback-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -215,11 +113,27 @@
       color: var(--accent);
       font-variant-numeric: tabular-nums;
     }
-    .feedback-unit {
-      font-size: 0.8rem;
-      color: #64748b;
-      margin-top: 2px;
+    .feedback-unit { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+
+    /* Log panel */
+    .log-toolbar {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 10px; flex-wrap: wrap;
     }
+    .log-toolbar label { font-size: 0.85rem; color: #94a3b8; cursor: pointer; user-select: none; }
+    #log-box {
+      background: #0f172a; border-radius: 10px;
+      padding: 12px 14px; height: 240px; overflow-y: auto;
+      font-family: 'Courier New', monospace; font-size: 0.78rem;
+      line-height: 1.55; color: #cbd5e1;
+    }
+    .log-info  { color: #cbd5e1; }
+    .log-warn  { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-fatal { color: #f87171; font-weight: 700; }
+    .log-debug { color: #64748b; }
+    .log-ts    { color: #475569; margin-right: 6px; }
+    .log-node  { color: #60a5fa; margin-right: 6px; }
   </style>
 </head>
 <body>
@@ -228,13 +142,13 @@
 
     <header>
       <h1>Drivechain</h1>
-      <p>DDSM115 motor control via DDSM Driver HAT</p>
+      <p>DDSM115 motor driver — direct hardware control</p>
       <div class="status-row">
         <span id="connection-status" class="status disconnected">ROS Disconnected</span>
       </div>
     </header>
 
-    <!-- Lifecycle + connect ─────────────────────────────────────────────── -->
+    <!-- Node lifecycle ──────────────────────────────────────────────────── -->
     <section class="panel">
       <h2>Node</h2>
       <div class="node-state" style="margin-bottom:12px">
@@ -245,34 +159,23 @@
         <button id="btn-activate">Activate</button>
         <button id="btn-deactivate">Deactivate</button>
       </div>
-
-      <div class="service-row">
+      <div class="button-row" style="align-items:center;gap:12px">
         <button id="btn-connect">Connect motors</button>
-        <button id="btn-hw-stop" class="btn-danger">Stop motors</button>
+        <button id="btn-hw-stop" class="btn-danger">Stop &amp; disconnect</button>
         <span id="drive-status" class="service-status unknown">—</span>
       </div>
       <div id="service-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 
-    <!-- Drive config ─────────────────────────────────────────────────────── -->
+    <!-- Motor config ────────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>Drive Config</h2>
-      <div class="cfg-grid">
-        <label for="cfg-separation">Wheel separation (m)</label>
-        <input id="cfg-separation" type="number" min="0.05" max="2.0"  step="0.01"  value="0.35" />
-        <label for="cfg-radius">Wheel radius (m)</label>
-        <input id="cfg-radius"     type="number" min="0.01" max="0.5"  step="0.005" value="0.08" />
-        <label for="cfg-max-rpm">Max RPM</label>
-        <input id="cfg-max-rpm"    type="number" min="1"    max="200"  step="1"     value="200"  />
-      </div>
-
-      <h3 style="margin:16px 0 0;font-size:0.95rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">Motors</h3>
+      <h2>Motor Config</h2>
       <table class="motor-table">
         <thead>
           <tr>
             <th>ID</th>
             <th>Name</th>
-            <th>Side</th>
+            <th>Sign</th>
             <th>Enabled</th>
           </tr>
         </thead>
@@ -281,9 +184,9 @@
             <td><input class="motor-id"      type="number" min="1" max="253" value="1" /></td>
             <td><input class="motor-name"    type="text"   value="left" /></td>
             <td>
-              <select class="motor-side">
-                <option value="left" selected>Left</option>
-                <option value="right">Right</option>
+              <select class="motor-sign">
+                <option value="1"  selected>+1</option>
+                <option value="-1">-1</option>
               </select>
             </td>
             <td><input class="motor-enabled" type="checkbox" checked /></td>
@@ -292,9 +195,9 @@
             <td><input class="motor-id"      type="number" min="1" max="253" value="2" /></td>
             <td><input class="motor-name"    type="text"   value="right" /></td>
             <td>
-              <select class="motor-side">
-                <option value="left">Left</option>
-                <option value="right" selected>Right</option>
+              <select class="motor-sign">
+                <option value="1"  selected>+1</option>
+                <option value="-1">-1</option>
               </select>
             </td>
             <td><input class="motor-enabled" type="checkbox" checked /></td>
@@ -303,9 +206,9 @@
             <td><input class="motor-id"      type="number" min="1" max="253" value="3" /></td>
             <td><input class="motor-name"    type="text"   value="rear_left" /></td>
             <td>
-              <select class="motor-side">
-                <option value="left" selected>Left</option>
-                <option value="right">Right</option>
+              <select class="motor-sign">
+                <option value="1"  selected>+1</option>
+                <option value="-1">-1</option>
               </select>
             </td>
             <td><input class="motor-enabled" type="checkbox" /></td>
@@ -314,55 +217,46 @@
             <td><input class="motor-id"      type="number" min="1" max="253" value="4" /></td>
             <td><input class="motor-name"    type="text"   value="rear_right" /></td>
             <td>
-              <select class="motor-side">
-                <option value="left">Left</option>
-                <option value="right" selected>Right</option>
+              <select class="motor-sign">
+                <option value="1"  selected>+1</option>
+                <option value="-1">-1</option>
               </select>
             </td>
             <td><input class="motor-enabled" type="checkbox" /></td>
           </tr>
         </tbody>
       </table>
+      <div class="button-row" style="margin-top:12px">
+        <button id="btn-apply-config">Apply Config</button>
+      </div>
     </section>
 
-    <!-- Drive + Feedback ── two columns ─────────────────────────────────── -->
-    <div class="mid-row">
+    <!-- Motor commands ──────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Motor Commands</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Send sets all enabled motors. Stop zeros one motor and sends. Live re-publishes every 200 ms.
+      </p>
+      <div id="motor-cmd-rows">
+        <p class="motor-cmd-empty">No enabled motors — apply config first.</p>
+      </div>
+      <div class="button-row" style="margin-top:16px;align-items:center;gap:14px">
+        <label style="font-size:0.85rem;color:#94a3b8;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="chk-live" style="width:16px;height:16px;accent-color:var(--accent)">
+          Live
+        </label>
+        <button id="btn-stop-all" class="btn-danger">Stop All</button>
+      </div>
+    </section>
 
-      <!-- LEFT: Speed + D-pad -->
-      <section class="panel" style="margin:0">
-        <h2>Drive</h2>
-        <div class="sliders">
-          <label for="slider-linear">Linear</label>
-          <input id="slider-linear" type="range" min="0.05" max="0.5" step="0.05" value="0.2" />
-          <span id="val-linear">0.20 m/s</span>
-
-          <label for="slider-angular">Turn rate</label>
-          <input id="slider-angular" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
-          <span id="val-angular">1.00 rad/s</span>
-        </div>
-        <div id="rpm-display" class="rpm-display" style="display:none">
-          <span id="rpm-left">L: 0</span> rpm &nbsp;·&nbsp; <span id="rpm-right">R: 0</span> rpm
-        </div>
-        <div class="dpad-wrap">
-          <div class="dpad">
-            <button class="dpad-forward" id="btn-forward" data-dir="forward">▲</button>
-            <button class="dpad-left"    id="btn-left"    data-dir="left">◄</button>
-            <button class="dpad-stop"    id="btn-stop"    data-dir="stop">■</button>
-            <button class="dpad-right"   id="btn-right"   data-dir="right">►</button>
-            <button class="dpad-back"    id="btn-back"    data-dir="back">▼</button>
-          </div>
-          <span class="kbd-hint">Hold to move · W A S D or arrow keys · Space = stop</span>
-        </div>
-      </section>
-
-      <!-- RIGHT: Motor Feedback (dynamic) -->
-      <section class="panel" style="margin:0">
-        <h2>Feedback</h2>
-        <div id="feedback-grid" class="feedback-grid"></div>
-        <p id="feedback-placeholder" style="color:#64748b;font-size:0.85rem;margin:0">Waiting for motor feedback…</p>
-      </section>
-
-    </div>
+    <!-- Motor feedback ──────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Feedback</h2>
+      <div id="feedback-grid" class="feedback-grid"></div>
+      <p id="feedback-placeholder" style="color:#64748b;font-size:0.85rem;margin:0">
+        Waiting for motor feedback… (Connect motors first)
+      </p>
+    </section>
 
     <!-- Logs ────────────────────────────────────────────────────────────── -->
     <section class="panel">

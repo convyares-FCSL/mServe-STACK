@@ -1,4 +1,4 @@
-// ── ROS connection ────────────────────────────────────────────────────────────
+// ── ROS connection ─────────────────────────────────────────────────────────────
 
 const ros = new ROSLIB.Ros({ url: `ws://${window.location.hostname}:9090` });
 
@@ -15,17 +15,16 @@ ros.on('connection', () => {
 ros.on('error',  () => { elStatus.textContent = 'ROS Error';        elStatus.className = 'status disconnected'; });
 ros.on('close',  () => { elStatus.textContent = 'ROS Disconnected'; elStatus.className = 'status disconnected'; });
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
+// ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 const TRANSITIONS = { configure: 1, activate: 3, deactivate: 4 };
 
 function changeState(transitionId) {
-  const svc = new ROSLIB.Service({
+  new ROSLIB.Service({
     ros,
     name: '/mserve_drivechain/change_state',
     serviceType: 'lifecycle_msgs/srv/ChangeState',
-  });
-  svc.callService(
+  }).callService(
     new ROSLIB.ServiceRequest({ transition: { id: transitionId, label: '' } }),
     () => setTimeout(refreshNodeState, 400),
     (err) => console.error('change_state error', err),
@@ -33,12 +32,11 @@ function changeState(transitionId) {
 }
 
 function refreshNodeState() {
-  const svc = new ROSLIB.Service({
+  new ROSLIB.Service({
     ros,
     name: '/mserve_drivechain/get_state',
     serviceType: 'lifecycle_msgs/srv/GetState',
-  });
-  svc.callService(new ROSLIB.ServiceRequest({}), (res) => {
+  }).callService(new ROSLIB.ServiceRequest({}), (res) => {
     const label = res?.current_state?.label ?? 'unavailable';
     elNodeState.textContent = label;
     elNodeState.className = `state-label state-${label}`;
@@ -52,186 +50,199 @@ document.getElementById('btn-configure').addEventListener('click',  () => change
 document.getElementById('btn-activate').addEventListener('click',   () => changeState(TRANSITIONS.activate));
 document.getElementById('btn-deactivate').addEventListener('click', () => changeState(TRANSITIONS.deactivate));
 
-// ── DriveChain service ────────────────────────────────────────────────────────
+setInterval(refreshNodeState, 4000);
 
-const drivechainSvc = new ROSLIB.Service({
+// ── DriveChain services ────────────────────────────────────────────────────────
+
+const connectSvc = new ROSLIB.Service({
   ros,
-  name: '/mserve_drivechain/drivechain_cmd',
-  serviceType: 'interfaces/srv/DriveChainCmd',
+  name: '/mserve_drivechain/connect',
+  serviceType: 'std_srvs/srv/Trigger',
 });
 
-function callDrivechain(command, motorId = 0, newId = 0) {
+const stopSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/stop',
+  serviceType: 'std_srvs/srv/Trigger',
+});
+
+const driveSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/drive',
+  serviceType: 'interfaces/srv/Drive',
+});
+
+const setMotorIdSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/set_motor_id',
+  serviceType: 'interfaces/srv/SetMotorId',
+});
+
+function callConnect() {
   elServiceMsg.textContent = 'Calling…';
-  drivechainSvc.callService(
-    new ROSLIB.ServiceRequest({ command, motor_id: motorId, new_id: newId }),
+  connectSvc.callService(
+    new ROSLIB.ServiceRequest({}),
     (res) => { elServiceMsg.textContent = res.message; },
     (err) => { elServiceMsg.textContent = `Error: ${err}`; },
   );
 }
 
-document.getElementById('btn-connect').addEventListener('click',  () => callDrivechain(1));
-document.getElementById('btn-hw-stop').addEventListener('click',  () => callDrivechain(2));
+function callStop() {
+  elServiceMsg.textContent = 'Calling…';
+  stopSvc.callService(
+    new ROSLIB.ServiceRequest({}),
+    (res) => { elServiceMsg.textContent = res.message; },
+    (err) => { elServiceMsg.textContent = `Error: ${err}`; },
+  );
+}
 
-// ── Drive status subscription ─────────────────────────────────────────────────
+document.getElementById('btn-connect').addEventListener('click', callConnect);
+document.getElementById('btn-hw-stop').addEventListener('click', callStop);
 
-const statusSub = new ROSLIB.Topic({
+// ── Drive status subscription ──────────────────────────────────────────────────
+
+new ROSLIB.Topic({
   ros,
   name: '/mserve_drivechain/drive_status',
   messageType: 'interfaces/msg/DriveStatus',
-});
-
-statusSub.subscribe((msg) => {
+}).subscribe((msg) => {
   const s = msg.status ?? '—';
   elDriveStatus.textContent = s;
   elDriveStatus.className = `service-status ${s.replace('_', '-')}`;
 });
 
-// ── Drive config helpers ──────────────────────────────────────────────────────
-
-function getWheelConfig() {
-  return {
-    separation: parseFloat(document.getElementById('cfg-separation').value) || 0.35,
-    radius:     parseFloat(document.getElementById('cfg-radius').value)     || 0.08,
-    maxRpm:     parseInt(document.getElementById('cfg-max-rpm').value)      || 200,
-  };
-}
+// ── Motor config ───────────────────────────────────────────────────────────────
 
 function getMotorConfig() {
-  return [...document.querySelectorAll('#motor-table-body tr')].map(row => ({
-    id:      parseInt(row.querySelector('.motor-id').value),
-    name:    row.querySelector('.motor-name').value.trim(),
-    side:    row.querySelector('.motor-side').value,
-    enabled: row.querySelector('.motor-enabled').checked,
-  })).filter(m => m.enabled && m.id >= 1 && m.id <= 253);
+  return [...document.querySelectorAll('#motor-table-body tr')]
+    .map(row => ({
+      id:      parseInt(row.querySelector('.motor-id').value),
+      name:    row.querySelector('.motor-name').value.trim(),
+      sign:    parseInt(row.querySelector('.motor-sign').value),
+      enabled: row.querySelector('.motor-enabled').checked,
+    }))
+    .filter(m => m.enabled && m.id >= 1 && m.id <= 253);
 }
 
-function diffRpm(linear, angular, separation, radius, maxRpm) {
-  const half  = separation / 2;
-  const toRpm = (vel) => Math.max(-maxRpm, Math.min(maxRpm,
-    Math.round(vel / radius * 60 / (2 * Math.PI))));
-  return { left: toRpm(linear - angular * half), right: toRpm(linear + angular * half) };
+// ── Motor commands ─────────────────────────────────────────────────────────────
+
+// Read slider value for a motor by id; returns 0 if row not found.
+function getSliderRpm(motorId) {
+  const row = document.querySelector(`.motor-cmd-row[data-motor-id="${motorId}"]`);
+  return row ? parseInt(row.querySelector('.motor-rpm-slider').value) : 0;
 }
 
-// ── Motor commands publisher ──────────────────────────────────────────────────
-
-const motorCommandsTopic = new ROSLIB.Topic({
-  ros,
-  name: '/mserve_drivechain/motor_commands',
-  messageType: 'interfaces/msg/MotorCommands',
-});
-
-function publishMotorCommands(linear, angular) {
-  const { separation, radius, maxRpm } = getWheelConfig();
-  const rpms     = diffRpm(linear, angular, separation, radius, maxRpm);
-  const commands = getMotorConfig().map(m => ({
+// Send all enabled motors at their current slider values via the ~/drive service.
+function sendAll() {
+  const motor_commands = getMotorConfig().map(m => ({
     motor_id: m.id,
-    rpm: m.side === 'left' ? rpms.left : rpms.right,
+    rpm: getSliderRpm(m.id),
   }));
-
-  motorCommandsTopic.publish(new ROSLIB.Message({ commands }));
-
-  const display = document.getElementById('rpm-display');
-  display.style.display = commands.length ? 'block' : 'none';
-  document.getElementById('rpm-left').textContent  = `L: ${rpms.left}`;
-  document.getElementById('rpm-right').textContent = `R: ${rpms.right}`;
+  driveSvc.callService(
+    new ROSLIB.ServiceRequest({ motor_commands }),
+    () => {},
+    (err) => console.error('drive error', err),
+  );
 }
 
-// ── Speed sliders ─────────────────────────────────────────────────────────────
+// Zero one motor's slider then send all.
+function stopMotor(motorId) {
+  const row = document.querySelector(`.motor-cmd-row[data-motor-id="${motorId}"]`);
+  if (row) {
+    const slider = row.querySelector('.motor-rpm-slider');
+    const display = row.querySelector('.motor-rpm-val');
+    slider.value = '0';
+    display.textContent = '0 rpm';
+  }
+  sendAll();
+}
 
-const sliderLinear  = document.getElementById('slider-linear');
-const sliderAngular = document.getElementById('slider-angular');
-const valLinear     = document.getElementById('val-linear');
-const valAngular    = document.getElementById('val-angular');
+// ── Live mode ──────────────────────────────────────────────────────────────────
 
-sliderLinear.addEventListener('input', () => {
-  valLinear.textContent = `${Number(sliderLinear.value).toFixed(2)} m/s`;
+let liveInterval = null;
+
+document.getElementById('chk-live').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    liveInterval = setInterval(sendAll, 200);
+  } else {
+    if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
+  }
 });
-sliderAngular.addEventListener('input', () => {
-  valAngular.textContent = `${Number(sliderAngular.value).toFixed(2)} rad/s`;
+
+// ── Stop All ───────────────────────────────────────────────────────────────────
+
+document.getElementById('btn-stop-all').addEventListener('click', () => {
+  document.querySelectorAll('.motor-rpm-slider').forEach(s => { s.value = '0'; });
+  document.querySelectorAll('.motor-rpm-val').forEach(d => { d.textContent = '0 rpm'; });
+  sendAll();
 });
 
-function getLinear()  { return parseFloat(sliderLinear.value);  }
-function getAngular() { return parseFloat(sliderAngular.value); }
+// ── Motor command row builder ──────────────────────────────────────────────────
 
-// ── D-pad: hold-to-drive ──────────────────────────────────────────────────────
+function buildMotorControls() {
+  const motors = getMotorConfig();
+  const container = document.getElementById('motor-cmd-rows');
+  container.innerHTML = '';
 
-let driveInterval = null;
-let activeDir = null;
-
-const DIRS = {
-  forward: () => publishMotorCommands( getLinear(), 0),
-  back:    () => publishMotorCommands(-getLinear(), 0),
-  left:    () => publishMotorCommands(0,  getAngular()),
-  right:   () => publishMotorCommands(0, -getAngular()),
-  stop:    () => publishMotorCommands(0, 0),
-};
-
-function startDriving(dir) {
-  if (activeDir === dir) return;
-  stopDriving();
-  activeDir = dir;
-  document.getElementById(`btn-${dir}`)?.classList.add('active');
-
-  if (dir === 'stop') {
-    publishMotorCommands(0, 0);
+  if (motors.length === 0) {
+    container.innerHTML = '<p class="motor-cmd-empty">No enabled motors — check motor config above.</p>';
     return;
   }
-  DIRS[dir]();
-  driveInterval = setInterval(DIRS[dir], 100);
+
+  motors.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'motor-cmd-row';
+    row.dataset.motorId = m.id;
+
+    const label = document.createElement('span');
+    label.className = 'motor-cmd-label';
+    label.innerHTML = `${escHtml(m.name)} <span class="motor-id-badge">#${m.id}</span>`;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'motor-rpm-slider';
+    slider.min = '-200';
+    slider.max = '200';
+    slider.step = '1';
+    slider.value = '0';
+
+    const rpmDisplay = document.createElement('span');
+    rpmDisplay.className = 'motor-rpm-val';
+    rpmDisplay.textContent = '0 rpm';
+
+    slider.addEventListener('input', () => {
+      rpmDisplay.textContent = `${slider.value} rpm`;
+    });
+
+    const btnSend = document.createElement('button');
+    btnSend.textContent = 'Send';
+    btnSend.addEventListener('click', sendAll);
+
+    const btnStop = document.createElement('button');
+    btnStop.textContent = 'Stop';
+    btnStop.className = 'btn-danger';
+    btnStop.style.padding = '6px 12px';
+    btnStop.addEventListener('click', () => stopMotor(m.id));
+
+    row.append(label, slider, rpmDisplay, btnSend, btnStop);
+    container.appendChild(row);
+  });
 }
 
-function stopDriving() {
-  if (driveInterval) { clearInterval(driveInterval); driveInterval = null; }
-  if (activeDir && activeDir !== 'stop') {
-    document.getElementById(`btn-${activeDir}`)?.classList.remove('active');
-    publishMotorCommands(0, 0);
-  }
-  activeDir = null;
-}
+document.getElementById('btn-apply-config').addEventListener('click', buildMotorControls);
 
-// Mouse / touch
-['forward', 'back', 'left', 'right', 'stop'].forEach((dir) => {
-  const btn = document.getElementById(`btn-${dir}`);
-  btn.addEventListener('mousedown',  () => startDriving(dir));
-  btn.addEventListener('touchstart', (e) => { e.preventDefault(); startDriving(dir); }, { passive: false });
-});
+// Build on first load
+buildMotorControls();
 
-document.addEventListener('mouseup',  stopDriving);
-document.addEventListener('touchend', stopDriving);
-
-// Keyboard
-const KEY_MAP = {
-  ArrowUp:    'forward', KeyW: 'forward',
-  ArrowDown:  'back',    KeyS: 'back',
-  ArrowLeft:  'left',    KeyA: 'left',
-  ArrowRight: 'right',   KeyD: 'right',
-  Space:      'stop',
-};
-
-document.addEventListener('keydown', (e) => {
-  const dir = KEY_MAP[e.code];
-  if (!dir) return;
-  e.preventDefault();
-  startDriving(dir);
-});
-
-document.addEventListener('keyup', (e) => {
-  const dir = KEY_MAP[e.code];
-  if (!dir || dir === 'stop') return;
-  stopDriving();
-});
-
-// ── Motor feedback subscription ───────────────────────────────────────────────
-
-const feedbackSub = new ROSLIB.Topic({
-  ros,
-  name: '/mserve_drivechain/motor_feedback',
-  messageType: 'interfaces/msg/DriveMotorFeedback',
-});
+// ── Motor feedback subscription ────────────────────────────────────────────────
 
 const RAD_TO_DEG = 180 / Math.PI;
 
-feedbackSub.subscribe((msg) => {
+new ROSLIB.Topic({
+  ros,
+  name: '/mserve_drivechain/motor_feedback',
+  messageType: 'interfaces/msg/DriveMotorFeedback',
+}).subscribe((msg) => {
   const grid        = document.getElementById('feedback-grid');
   const placeholder = document.getElementById('feedback-placeholder');
   const motors      = msg.motors ?? [];
@@ -251,32 +262,27 @@ feedbackSub.subscribe((msg) => {
       grid.appendChild(card);
     }
 
-    const faultAttr = m.fault_code ? ' style="color:var(--danger)"' : '';
-    const rads      = (m.velocity_rads ?? m.velocity_rpm * 2 * Math.PI / 60).toFixed(2);
-    const deg       = (m.position_rad * RAD_TO_DEG).toFixed(1);
-    const current   = m.current_a     != null ? m.current_a.toFixed(2)     : '—';
-    const temp      = m.temperature_c != null ? m.temperature_c.toFixed(1) : '—';
-    const fault     = m.fault_code
+    const rads    = (m.velocity_rads ?? m.velocity_rpm * 2 * Math.PI / 60).toFixed(2);
+    const deg     = (m.position_rad * RAD_TO_DEG).toFixed(1);
+    const current = m.current_a     != null ? m.current_a.toFixed(2)     : '—';
+    const temp    = m.temperature_c != null ? m.temperature_c.toFixed(1) : '—';
+    const fault   = m.fault_code
       ? ` &nbsp;<span style="color:var(--danger)">FAULT ${m.fault_code}</span>` : '';
+    const valStyle = m.fault_code ? ' style="color:var(--danger)"' : '';
 
     card.innerHTML =
       `<h4>${escHtml(m.name)} <span style="color:#475569">#${m.motor_id}</span></h4>` +
-      `<div class="feedback-value"${faultAttr}>${m.velocity_rpm.toFixed(0)}</div>` +
+      `<div class="feedback-value"${valStyle}>${m.velocity_rpm.toFixed(0)}</div>` +
       `<div class="feedback-unit">rpm &nbsp;·&nbsp; ${rads} rad/s</div>` +
       `<div style="font-size:0.75rem;color:#64748b;margin-top:6px">` +
         `pos ${deg}° &nbsp; ${current} A &nbsp; ${temp} °C${fault}` +
       `</div>`;
   });
 
-  // Remove cards for motors no longer in the message
   [...grid.children].forEach(c => { if (!seen.has(c.id)) grid.removeChild(c); });
 });
 
-// ── Periodic state refresh ────────────────────────────────────────────────────
-
-setInterval(refreshNodeState, 4000);
-
-// ── /rosout log panel ─────────────────────────────────────────────────────────
+// ── /rosout log panel ──────────────────────────────────────────────────────────
 
 const logBox      = document.getElementById('log-box');
 const chkAllNodes = document.getElementById('chk-all-nodes');
@@ -284,15 +290,16 @@ const chkDebug    = document.getElementById('chk-debug');
 
 document.getElementById('btn-log-clear').addEventListener('click', () => { logBox.innerHTML = ''; });
 
-const LOG_LEVELS = { 10: ['DEBUG','log-debug'], 20: ['INFO','log-info'], 30: ['WARN','log-warn'], 40: ['ERROR','log-error'], 50: ['FATAL','log-fatal'] };
+const LOG_LEVELS = {
+  10: ['DEBUG','log-debug'], 20: ['INFO','log-info'],
+  30: ['WARN','log-warn'],   40: ['ERROR','log-error'], 50: ['FATAL','log-fatal'],
+};
 
-const rosoutSub = new ROSLIB.Topic({
+new ROSLIB.Topic({
   ros,
   name: '/rosout',
   messageType: 'rcl_interfaces/msg/Log',
-});
-
-rosoutSub.subscribe((msg) => {
+}).subscribe((msg) => {
   const level = msg.level ?? 20;
   if (level === 10 && !chkDebug.checked) return;
   const nodeName = msg.name ?? '';
@@ -311,12 +318,11 @@ rosoutSub.subscribe((msg) => {
   logBox.appendChild(line);
 
   while (logBox.children.length > 500) logBox.removeChild(logBox.firstChild);
-
   if (logBox.scrollHeight - logBox.scrollTop < logBox.clientHeight + 60) {
     logBox.scrollTop = logBox.scrollHeight;
   }
 });
 
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

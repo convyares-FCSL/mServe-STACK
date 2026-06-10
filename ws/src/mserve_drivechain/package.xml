@@ -1,23 +1,24 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>mserve_drivechain</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>
-    Drivechain node for mServe. Controls two DDSM115 motors via a Waveshare
-    DDSM Driver HAT (A) on Raspberry Pi GPIO UART. Supports a sim backend
-    (default) for Gazebo development and a hardware backend for the real robot.
+    Drivechain node for mServe. Pure hardware driver for up to 4 DDSM115 motors
+    via a Waveshare DDSM Driver HAT (A) on Raspberry Pi GPIO UART. Accepts
+    MotorCommands directly (no kinematics — that belongs in mserve_base).
+    Supports a sim backend (default) for development without the HAT attached.
   </description>
   <maintainer email="cvonayres@fuelcellsystems.co.uk">ecm</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>geometry_msgs</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>behaviortree_cpp</depend>
   <depend>ament_index_cpp</depend>
   <depend>lifecycle_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>interfaces</depend>
   <depend>utils</depend>
 

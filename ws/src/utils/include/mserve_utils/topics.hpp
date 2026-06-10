@@ -29,13 +29,6 @@ inline std::string cmd_vel_safe(rclcpp_lifecycle::LifecycleNode & node)
     "topic_names.cmd_vel_safe", std::string("/mserve/cmd_vel_safe"), "topic");
 }
 
-inline std::string wheel_feedback(rclcpp_lifecycle::LifecycleNode & node)
-{
-  return mserve_utils::get_or_declare_param(
-    *node.get_node_parameters_interface(), node.get_logger(),
-    "topic_names.wheel_feedback", std::string("/mserve/wheel_feedback"), "topic");
-}
-
 inline std::string drivechain_status(rclcpp_lifecycle::LifecycleNode & node)
 {
   return mserve_utils::get_or_declare_param(

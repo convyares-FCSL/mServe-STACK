@@ -1,18 +1,15 @@
 <!--
   stop_tree — triggered by DriveChainCmd::STOP service call or on deactivate.
 
-  Zeros both motors then closes the UART.
-  StopMotor is best-effort — the tree always succeeds even if the motor
-  doesn't echo back (e.g. already powered off).
+  Zeros all enabled motors in motor_list then closes the UART.
+  StopAllMotors is best-effort — the tree always succeeds even if motors
+  don't echo back (e.g. already powered off).
 -->
 <root BTCPP_format="4">
   <BehaviorTree ID="Stop">
     <Sequence name="stop">
-
-      <StopMotor motor_id="{left_motor_id}" />
-      <StopMotor motor_id="{right_motor_id}" />
+      <StopAllMotors />
       <CloseUart />
-
     </Sequence>
   </BehaviorTree>
 </root>

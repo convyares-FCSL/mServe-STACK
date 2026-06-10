@@ -1,50 +1,64 @@
 # mserve_drivechain
 
-Controls two DDSM115 brushless motors via a Waveshare **DDSM Driver HAT (A)** mounted on a Raspberry Pi.
+Controls one or more DDSM115 brushless motors via a Waveshare **DDSM Driver HAT (A)** mounted on a Raspberry Pi.
 
 ## Architecture
 
 ```
 DrivechainNode (lifecycle)
 │
-├── Service  ~/drivechain_cmd  ← CONNECT / STOP / SET_ID
-│     └── BT trees: connect_tree, stop_tree, set_id_tree (run synchronously under uart_mutex)
+├── Service  ~/connect         (std_srvs/Trigger)
+│     └── connect_tree.xml — OpenUart → ConnectAllMotors (BT, under uart_mutex)
 │
-├── Subscription  /cmd_vel  (geometry_msgs/Twist)
-│     └── CmdVelCache — always holds latest Twist + steady_clock timestamp
+├── Service  ~/stop            (std_srvs/Trigger)
+│     └── stop_tree.xml — StopAllMotors → CloseUart (BT, under uart_mutex)
+│
+├── Service  ~/drive           (interfaces/srv/Drive)
+│     └── DriveCommandStore::update() — thread-safe; no BT, no uart_mutex
+│
+├── Service  ~/set_motor_id    (interfaces/srv/SetMotorId)
+│     └── set_id_tree.xml — StopMotor → SetMotorId → PingMotor (BT, under uart_mutex)
 │
 ├── Timer  (feedback_rate Hz, default 10 Hz)
-│     └── drive_tree.xml: UartOpen → ComputeRpm → SetMotorSpeed×2 → Publish×2
-│           ComputeRpm: diff-drive kinematics + cmd_vel watchdog → left_rpm / right_rpm
-│           SetMotorSpeed: UART → motor feedback → blackboard → publishers
+│     └── drive_tree.xml: UartOpen → SetAllMotors → PublishMotorFeedback → PublishDriveStatus
+│           SetAllMotors: reads DriveCommandStore; zeros all motors if store is stale
 │
-├── Publisher  ~/wheel_feedback  (WheelFeedback)
+├── Publisher  ~/motor_feedback  (DriveMotorFeedback)
 └── Publisher  ~/drive_status    (DriveStatus)
 ```
+
+Command flow: the web UI calls `~/drive` on every joystick update, which writes motor
+RPMs to `DriveCommandStore`. The drive timer reads the store on every tick. If no
+command arrives within `drive.command_timeout_ms`, all motors are zeroed.
 
 The **blackboard** is the single source of truth shared between the node and all BT nodes:
 
 | Key | Type | Written by | Read by |
 |---|---|---|---|
 | `uart` | `DriveUart*` | on_configure | BT nodes |
-| `cmd_vel_cache` | `CmdVelCache*` | on_configure | ComputeRpm |
-| `uart_connected` | bool | OpenUart / CloseUart | PublishDriveStatus |
+| `drive_cmd_store` | `DriveCommandStore*` | on_configure | SetAllMotors |
+| `sim_mode` | bool | load_params | BT nodes, service handlers |
 | `uart_device` | string | load_params | OpenUart |
-| `left_motor_id` / `right_motor_id` | int | load_params | BT nodes |
-| `wheel_separation` / `wheel_radius` | double | load_params | ComputeRpm |
-| `max_rpm` / `cmd_vel_timeout_ms` | int | load_params | ComputeRpm |
+| `motor_list` | `vector<MotorDescriptor>` | load_params | ConnectAllMotors, StopAllMotors, SetAllMotors |
+| `command_timeout_ms` | int | load_params | SetAllMotors |
 | `feedback_rate` | double | load_params | on_activate, on_parameters |
-| `left_rpm` / `right_rpm` | int | ComputeRpm | SetMotorSpeed |
-| `left_speed_fb` / `right_speed_fb` | double (rad/s) | SetMotorSpeed | PublishWheelFeedback |
-| `left_pos_fb` / `right_pos_fb` | double (rad) | SetMotorSpeed | PublishWheelFeedback |
-| `left_fault` / `right_fault` | int | SetMotorSpeed | MotorHealthy condition |
-| `target_motor_id` / `new_motor_id` | int | service handler | set_id_tree |
-| `publish_wheel_feedback` | `std::function` | on_configure | PublishWheelFeedback |
+| `uart_connected` | bool | OpenUart / CloseUart | PublishDriveStatus |
+| `motor_states` | `vector<MotorState>` | SetAllMotors | PublishMotorFeedback |
+| `target_motor_id` / `new_motor_id` | int | on_set_id handler | SetMotorId BT node |
+| `publish_motor_feedback` | `std::function` | on_configure | PublishMotorFeedback |
 | `publish_drive_status` | `std::function` | on_configure | PublishDriveStatus |
 
-`PublishDriveStatus` also calls `uart->board_alive()` directly (not a
-blackboard key) to populate `DriveStatus.board_alive` — see
-[Liveness heartbeat](#liveness-heartbeat-esp32--pi).
+### Key source files
+
+| File | Purpose |
+|---|---|
+| `include/mserve_drivechain/drivechain_node.hpp` | Node public API |
+| `src/drivechain_node.cpp` | Lifecycle + BT runner + service handlers |
+| `src/drivechain_params.cpp` | Parameter declaration, loading, hot-change |
+| `src/drivechain_bt_nodes.cpp` | All BT node implementations |
+| `src/include/drivechain_types.hpp` | `MotorFeedback`, `MotorDescriptor`, `DriveCommandStore` |
+| `src/include/drivechain_uart.hpp` / `.cpp` | UART protocol layer (JSON over RS-485) |
+| `src/trees/*.xml` | BT tree definitions |
 
 ## Hardware: DDSM Driver HAT (A) on Raspberry Pi
 
@@ -106,14 +120,18 @@ If `hardware.uart_device=/dev/ttyAMA0` produces no traffic, check:
 
 ### Motor IDs
 
-Each DDSM115 on the RS-485 bus needs a unique ID. Factory default is ID=1 for both motors, so assign them before first use. Connect **one motor at a time** and use the SET_ID command:
+Each DDSM115 on the RS-485 bus needs a unique ID. Factory default is ID=1 for both motors, so assign them before first use. Connect **one motor at a time** and use the `~/set_motor_id` service:
 
 ```bash
-# With only the left motor connected — confirm it's ID 1 (factory default)
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 3, motor_id: 1, new_id: 1}"
+source install/setup.bash
 
-# Swap to the right motor — reassign from ID 1 → ID 2
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 3, motor_id: 1, new_id: 2}"
+# Node must be configured, activated, and connected first.
+
+# Confirm the single motor is ID 1 (factory default) — change to itself is a no-op
+ros2 service call /mserve_drivechain/set_motor_id interfaces/srv/SetMotorId "{motor_id: 1, new_id: 1}"
+
+# Swap to the second motor — reassign from ID 1 → ID 2
+ros2 service call /mserve_drivechain/set_motor_id interfaces/srv/SetMotorId "{motor_id: 1, new_id: 2}"
 ```
 
 ## Liveness heartbeat (ESP32 ↔ Pi)
@@ -149,7 +167,6 @@ for, so no dedicated polling is needed.
 ```bash
 ros2 topic echo /mserve_drivechain/drive_status
 # status: connected_hw
-# battery_level: 0.0
 # board_alive: true
 ```
 
@@ -163,27 +180,28 @@ power, resets, or is unplugged while the port itself stays open.
 |---|---|---|
 | `drive.backend` | `"sim"` | `"sim"` = no hardware; `"hardware"` = real HAT |
 | `hardware.uart_device` | `"/dev/ttyAMA0"` | UART device path (Pi 5 GPIO header UART) |
-| `hardware.left_motor_id` | `1` | DDSM115 bus ID for left wheel |
-| `hardware.right_motor_id` | `2` | DDSM115 bus ID for right wheel |
-| `hardware.wheel_separation` | `0.35` | Centre-to-centre distance (m) |
-| `hardware.wheel_radius` | `0.08` | Wheel radius (m) |
-| `drive.max_rpm` | `200` | Max speed — DDSM115 ceiling is 200 RPM |
-| `drive.cmd_vel_timeout_ms` | `500` | Zero motors if no cmd_vel received for this long |
+| `hardware.motor_count` | `2` | Number of motors (1–4) |
+| `hardware.motor_ids` | `[1, 2]` | DDSM115 bus IDs |
+| `hardware.motor_names` | `["left", "right"]` | Human-readable labels (used in logs) |
+| `hardware.motor_signs` | `[1, 1]` | `+1` = shaft forward = robot forward; `-1` = physically reversed |
+| `hardware.motor_enabled` | `[true, true]` | Per-motor enable; disabled motors are skipped |
+| `drive.command_timeout_ms` | `500` | Zero all motors if no `~/drive` call within this window |
 | `feedback_rate` | `10.0` | Drive loop / publish rate (Hz) |
 
-Hardware params (`drive.backend`, `hardware.*`, `drive.max_rpm`) can only be changed in `UNCONFIGURED` state.
-`feedback_rate` and `drive.cmd_vel_timeout_ms` are hot-changeable at runtime.
+Hardware params (`drive.backend`, `hardware.*`) can only be changed in `UNCONFIGURED` state.
+`feedback_rate` and `drive.command_timeout_ms` are hot-changeable at runtime.
 
 ## Build
 
 ```bash
-colcon build --packages-select mserve_interfaces mserve_drivechain
+cd ~/ai-workspace/projects/mServe-STACK/ws
+colcon build --packages-select interfaces mserve_drivechain
 source install/setup.bash
 ```
 
 ## Web UI
 
-A browser-based control panel is in `web/` at the repo root. It connects to ROS via rosbridge and provides lifecycle controls, motor connect/stop, a D-pad with speed sliders, and live wheel feedback.
+A browser-based control panel is in `web/` at the repo root. It connects to ROS via rosbridge and provides lifecycle controls, motor connect/stop, a D-pad with speed sliders, and live motor feedback.
 
 ```
 web/
@@ -193,6 +211,15 @@ web/
 ├── run_drivechain_hw.sh — one-command stack launcher (sim or hardware)
 └── roslib.min.js
 ```
+
+The web UI talks to four ROS services directly — no topic publisher, no DDS discovery delay:
+
+| UI action | ROS service | Type |
+|---|---|---|
+| Connect motors | `~/connect` | `std_srvs/Trigger` |
+| Stop motors | `~/stop` | `std_srvs/Trigger` |
+| D-pad / joystick | `~/drive` | `interfaces/srv/Drive` |
+| (Motor ID setup) | `~/set_motor_id` | `interfaces/srv/SetMotorId` |
 
 ### Quick launch (recommended)
 
@@ -262,11 +289,11 @@ The web server always runs natively (Python is always available on Debian), so t
 | Control | Action |
 |---|---|
 | Configure / Activate / Deactivate | Lifecycle transitions |
-| **Connect motors** | Calls CONNECT service — opens UART, pings motors, sets speed mode |
-| **Stop motors** | Calls STOP service — zeros motors, closes UART |
-| Linear / Turn rate sliders | Sets max speed for D-pad buttons |
+| **Connect motors** | Calls `~/connect` — opens UART, pings motors, sets speed mode |
+| **Stop motors** | Calls `~/stop` — zeros motors, closes UART |
+| Linear / Turn rate sliders | Sets max RPM for D-pad buttons |
 | ▲ ▼ ◄ ► | Hold to drive in that direction; release to stop |
-| ■ | Immediate stop (zero cmd_vel) |
+| ■ | Immediate stop (zero all motors) |
 | W / A / S / D or arrow keys | Same as D-pad, hold to move |
 | Space | Stop |
 
@@ -277,7 +304,6 @@ The drive status badge updates live: `idle_sim`, `connected_sim`, `idle_hw`, `co
 ## Run (manual / CLI)
 
 > **Every new terminal must source the workspace before using `ros2 service call`.**
-> The lifecycle commands work without sourcing but the service type lookup does not.
 > ```bash
 > source install/setup.bash
 > ```
@@ -300,13 +326,14 @@ ros2 lifecycle set /mserve_drivechain configure
 ros2 lifecycle set /mserve_drivechain activate
 
 # Connect (sim: always succeeds immediately)
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 1}"
+ros2 service call /mserve_drivechain/connect std_srvs/srv/Trigger
 
-# Drive forward at 0.2 m/s
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.0}}"
+# Drive motor 1 at +100 RPM, motor 2 at +100 RPM
+ros2 service call /mserve_drivechain/drive interfaces/srv/Drive \
+  "{motor_commands: [{motor_id: 1, rpm: 100}, {motor_id: 2, rpm: 100}]}"
 
 # Stop and close
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 2}"
+ros2 service call /mserve_drivechain/stop std_srvs/srv/Trigger
 ```
 
 ---
@@ -331,13 +358,14 @@ ros2 lifecycle set /mserve_drivechain configure
 ros2 lifecycle set /mserve_drivechain activate
 
 # Connect — opens UART, pings both motors, sets speed-loop mode
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 1}"
+ros2 service call /mserve_drivechain/connect std_srvs/srv/Trigger
 
-# Drive forward at 0.2 m/s
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.0}}"
+# Drive forward (both motors at 100 RPM)
+ros2 service call /mserve_drivechain/drive interfaces/srv/Drive \
+  "{motor_commands: [{motor_id: 1, rpm: 100}, {motor_id: 2, rpm: 100}]}"
 
 # Stop and close UART
-ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 2}"
+ros2 service call /mserve_drivechain/stop std_srvs/srv/Trigger
 ```
 
 ---
@@ -347,41 +375,41 @@ ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveC
 ```bash
 source install/setup.bash
 
-# Wheel velocity and position feedback
-ros2 topic echo /mserve_drivechain/wheel_feedback
+# Per-motor feedback (mode, speed_rpm, position, fault_code, current, temperature)
+ros2 topic echo /mserve_drivechain/motor_feedback
 
-# Connection state (idle_sim / connected_sim / idle_hw / connected_hw)
-# + board_alive (ESP32 liveness heartbeat — see Liveness heartbeat below)
+# Connection state (idle_sim / connected_sim / idle_hw / connected_hw) + board_alive
 ros2 topic echo /mserve_drivechain/drive_status
 
 # Check drive loop is ticking at the configured rate
-ros2 topic hz /mserve_drivechain/wheel_feedback
-```
+ros2 topic hz /mserve_drivechain/motor_feedback
 
-Expected feedback at `linear.x: 0.2 m/s` (default geometry: sep=0.35 m, radius=0.08 m):
-- `left_velocity` ≈ `right_velocity` ≈ **2.5 rad/s**
-- No angular component → both wheels at equal speed
+# Enable drive command debug logging (shows every ~/drive call)
+# Launch with: --ros-args --log-level mserve_drivechain:=DEBUG
+```
 
 ## Service reference
 
-Service: `~/drivechain_cmd` (`mserve_interfaces/srv/DriveChainCmd`)
-
-| command | value | extra fields | effect |
+| Service | Type | Request fields | Effect |
 |---|---|---|---|
-| `CONNECT` | 1 | — | Open UART, ping motors, set speed mode |
-| `STOP` | 2 | — | Zero motors, close UART |
-| `SET_ID` | 3 | `motor_id`, `new_id` | Change motor hardware ID (one motor on bus only) |
+| `~/connect` | `std_srvs/srv/Trigger` | — | Open UART, ping all motors, set speed mode |
+| `~/stop` | `std_srvs/srv/Trigger` | — | Zero all motors, close UART |
+| `~/drive` | `interfaces/srv/Drive` | `motor_commands[]` (`motor_id`, `rpm`) | Update `DriveCommandStore`; applied on next timer tick |
+| `~/set_motor_id` | `interfaces/srv/SetMotorId` | `motor_id`, `new_id` | Change motor hardware ID (one motor on bus only) |
+
+All handlers check `drive_active_` (node must be in ACTIVE state) and return
+`success=false` with a message if not.
 
 ## BT trees
 
 | Tree | File | Triggered by |
 |---|---|---|
-| Connect | `connect_tree.xml` | CONNECT service call |
-| Stop | `stop_tree.xml` | STOP service call or on_deactivate |
-| Set ID | `set_id_tree.xml` | SET_ID service call |
+| Connect | `connect_tree.xml` | `~/connect` service call |
+| Stop | `stop_tree.xml` | `~/stop` service call or on_deactivate |
+| Set ID | `set_id_tree.xml` | `~/set_motor_id` service call |
 | Drive | `drive_tree.xml` | Timer tick (every 1/feedback_rate seconds) |
 
-The drive tree short-circuits silently when not connected (`UartOpen` returns FAILURE), so cmd_vel commands are safely ignored until CONNECT has been called.
+The drive tree short-circuits silently when not connected (`UartOpen` returns FAILURE), so drive commands are safely ignored until `~/connect` has been called.
 
 ## Tests
 

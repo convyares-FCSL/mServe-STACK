@@ -1,0 +1,4 @@
+interfaces/MotorCommand[] motor_commands
+---
+bool   success
+string message

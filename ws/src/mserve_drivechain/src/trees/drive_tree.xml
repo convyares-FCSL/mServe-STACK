@@ -4,14 +4,12 @@
     <!--
       Runs every tick timer period (default 100 ms / configured via feedback_rate param).
       UartOpen is a ConditionNode — fails silently if not yet connected (stops motors via watchdog).
-      ComputeRpm reads cmd_vel cache; writes 0/0 if stale.
+      SetAllMotors reads motor_commands cache; sends 0 RPM to all motors if cache is stale.
     -->
     <Sequence name="drive_cycle">
       <UartOpen />
-      <ComputeRpm />
-      <SetMotorSpeed motor_id="{left_motor_id}"  rpm="{left_rpm}" />
-      <SetMotorSpeed motor_id="{right_motor_id}" rpm="{right_rpm}" />
-      <PublishWheelFeedback />
+      <SetAllMotors />
+      <PublishMotorFeedback />
       <PublishDriveStatus />
     </Sequence>
   </BehaviorTree>

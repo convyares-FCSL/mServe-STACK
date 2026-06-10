@@ -1,5 +1,6 @@
 #include "mserve_drivechain/drivechain_node.hpp"
 #include "mserve_drivechain/drivechain_limits.hpp"
+#include "include/drivechain_types.hpp"
 #include "mserve_utils/utils.hpp"
 
 #include <lifecycle_msgs/msg/state.hpp>
@@ -8,33 +9,23 @@ namespace mserve_drivechain {
 
 void DrivechainNode::declare_params()
 {
-  // Backend switch: "sim" or "hardware".
-  // Default is "sim" so the node works with Gazebo / without the HAT attached.
   this->declare_parameter<std::string>("drive.backend", "sim");
 
-  // Hardware UART device — only used when backend="hardware".
-  // /dev/ttyAMA0 is the GPIO14/15 header UART on Raspberry Pi 5 (BCM2712's
-  // own PL011). /dev/serial0 is NOT this UART on Pi 5 — see README.md.
   this->declare_parameter<std::string>("hardware.uart_device", "/dev/ttyAMA0");
 
-  const auto motor_id_desc = mserve_utils::make_int_range_descriptor(
-    "DDSM115 motor hardware ID (1–253)", kMotorIdMin, kMotorIdMax);
-  this->declare_parameter("hardware.left_motor_id",  1, motor_id_desc);
-  this->declare_parameter("hardware.right_motor_id", 2, motor_id_desc);
+  this->declare_parameter<int64_t>("hardware.motor_count", 2,
+    mserve_utils::make_int_range_descriptor("Number of motors (1–4)", kMotorCountMin, kMotorCountMax));
 
-  this->declare_parameter("hardware.wheel_separation", 0.35,
-    mserve_utils::make_double_range_descriptor("Wheel centre-to-centre distance (m)", kWheelSepMin, kWheelSepMax));
-  this->declare_parameter("hardware.wheel_radius", 0.08,
-    mserve_utils::make_double_range_descriptor("Wheel radius (m)", kWheelRadiusMin, kWheelRadiusMax));
+  this->declare_parameter<std::vector<int64_t>>("hardware.motor_ids", {1, 2});
+  this->declare_parameter<std::vector<std::string>>("hardware.motor_names", {"left", "right"});
+  // +1 = motor shaft direction matches robot forward; -1 = physically reversed
+  this->declare_parameter<std::vector<int64_t>>("hardware.motor_signs", {1, 1});
+  this->declare_parameter<std::vector<bool>>("hardware.motor_enabled", {true, true});
 
-  const auto rpm_desc = mserve_utils::make_int_range_descriptor(
-    "Maximum wheel speed (RPM). DDSM115 ceiling is 200.", 1, kMaxRpm);
-  this->declare_parameter("drive.max_rpm", 200, rpm_desc);
-
-  const auto timeout_desc = mserve_utils::make_int_range_descriptor(
-    "cmd_vel watchdog — zero motors after this many ms with no command.",
-    kCmdVelTimeoutMin, kCmdVelTimeoutMax);
-  this->declare_parameter("drive.cmd_vel_timeout_ms", 500, timeout_desc);
+  this->declare_parameter<int64_t>("drive.command_timeout_ms", 500,
+    mserve_utils::make_int_range_descriptor(
+      "Zero motors after this many ms with no motor_commands message.",
+      kCommandTimeoutMin, kCommandTimeoutMax));
 
   this->declare_parameter("feedback_rate", 10.0,
     mserve_utils::make_double_range_descriptor("Drive loop publish rate (Hz)", kFeedbackRateMin, kFeedbackRateMax));
@@ -42,19 +33,30 @@ void DrivechainNode::declare_params()
 
 void DrivechainNode::load_params()
 {
-  // Everything goes to the blackboard. BT nodes read directly from there.
   const std::string backend = get_parameter("drive.backend").as_string();
   const bool sim_mode = (backend != "hardware");
 
   blackboard_->set("sim_mode",           sim_mode);
   blackboard_->set("uart_device",        get_parameter("hardware.uart_device").as_string());
-  blackboard_->set("left_motor_id",      static_cast<int>(get_parameter("hardware.left_motor_id").as_int()));
-  blackboard_->set("right_motor_id",     static_cast<int>(get_parameter("hardware.right_motor_id").as_int()));
-  blackboard_->set("wheel_separation",   get_parameter("hardware.wheel_separation").as_double());
-  blackboard_->set("wheel_radius",       get_parameter("hardware.wheel_radius").as_double());
-  blackboard_->set("max_rpm",            static_cast<int>(get_parameter("drive.max_rpm").as_int()));
-  blackboard_->set("cmd_vel_timeout_ms", static_cast<int>(get_parameter("drive.cmd_vel_timeout_ms").as_int()));
+  blackboard_->set("command_timeout_ms", static_cast<int>(get_parameter("drive.command_timeout_ms").as_int()));
   blackboard_->set("feedback_rate",      get_parameter("feedback_rate").as_double());
+
+  const int   count   = static_cast<int>(get_parameter("hardware.motor_count").as_int());
+  const auto  ids     = get_parameter("hardware.motor_ids").as_integer_array();
+  const auto  names   = get_parameter("hardware.motor_names").as_string_array();
+  const auto  signs   = get_parameter("hardware.motor_signs").as_integer_array();
+  const auto  enabled = get_parameter("hardware.motor_enabled").as_bool_array();
+
+  std::vector<MotorDescriptor> motors;
+  for (int i = 0; i < count && i < static_cast<int>(ids.size()); ++i) {
+    MotorDescriptor m;
+    m.id      = static_cast<uint8_t>(ids[i]);
+    m.name    = (i < static_cast<int>(names.size()))   ? names[i]           : "motor_" + std::to_string(i + 1);
+    m.sign    = (i < static_cast<int>(signs.size()))   ? (signs[i] < 0 ? -1 : 1) : 1;
+    m.enabled = (i < static_cast<int>(enabled.size())) ? enabled[i]         : true;
+    motors.push_back(m);
+  }
+  blackboard_->set("motor_list", motors);
 }
 
 rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
@@ -68,14 +70,16 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
 
   for (const auto & p : params) {
     const auto & name = p.get_name();
+
+    // Hardware params locked to UNCONFIGURED
     const bool is_hw_param =
-      name == "drive.backend"              ||
-      name == "hardware.uart_device"       ||
-      name == "hardware.left_motor_id"     ||
-      name == "hardware.right_motor_id"    ||
-      name == "hardware.wheel_separation"  ||
-      name == "hardware.wheel_radius"      ||
-      name == "drive.max_rpm";
+      name == "drive.backend"             ||
+      name == "hardware.uart_device"      ||
+      name == "hardware.motor_count"      ||
+      name == "hardware.motor_ids"        ||
+      name == "hardware.motor_names"      ||
+      name == "hardware.motor_signs"      ||
+      name == "hardware.motor_enabled";
 
     if (is_hw_param && !is_unconfigured) {
       result.successful = false;
@@ -83,7 +87,18 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
       return result;
     }
 
-    // Hot-changeable: write to blackboard immediately.
+    // Validate motor_signs elements are ±1
+    if (name == "hardware.motor_signs") {
+      for (const auto & s : p.as_integer_array()) {
+        if (s != 1 && s != -1) {
+          result.successful = false;
+          result.reason = "hardware.motor_signs elements must be +1 or -1";
+          return result;
+        }
+      }
+    }
+
+    // Hot-changeable params
     if (name == "feedback_rate" && blackboard_) {
       const double rate = p.as_double();
       blackboard_->set("feedback_rate", rate);
@@ -94,8 +109,8 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
           [this]() { tick_drive_tree(); });
       }
     }
-    if (name == "drive.cmd_vel_timeout_ms" && blackboard_) {
-      blackboard_->set("cmd_vel_timeout_ms", static_cast<int>(p.as_int()));
+    if (name == "drive.command_timeout_ms" && blackboard_) {
+      blackboard_->set("command_timeout_ms", static_cast<int>(p.as_int()));
     }
   }
   return result;

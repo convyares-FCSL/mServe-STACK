@@ -8,40 +8,32 @@
 //   One-shot hardware / publish op       → BT::SyncActionNode
 //   Multi-step / retry op                → BT::StatefulActionNode
 //
-// All nodes read shared objects from the blackboard:
-//   "uart"              DriveUart*
-//   "cmd_vel_cache"     CmdVelCache*
+// Shared objects on the blackboard:
+//   "uart"            DriveUart*
+//   "drive_cmd_store" DriveCommandStore*
 //
-// Config scalars on the blackboard (written by load_params):
-//   "left_motor_id"      int
-//   "right_motor_id"     int
-//   "max_rpm"            int
-//   "cmd_vel_timeout_ms" int
-//   "wheel_separation"   double  (m)
-//   "wheel_radius"       double  (m)
+// Config written by load_params:
+//   "motor_list"         std::vector<MotorDescriptor>
+//   "command_timeout_ms" int    — zero all motors if no command received within this window
+//   "feedback_rate"      double — drive loop rate (Hz)
 //
-// Runtime state on the blackboard (written by drive loop nodes):
-//   "uart_connected"    bool
-//   "left_rpm"          int     ← written by ComputeRpm
-//   "right_rpm"         int     ← written by ComputeRpm
-//   "left_speed_fb"     double  ← written by SetMotorSpeed (rad/s)
-//   "right_speed_fb"    double  ← written by SetMotorSpeed (rad/s)
-//   "left_pos_fb"       double  ← written by SetMotorSpeed (rad)
-//   "right_pos_fb"      double  ← written by SetMotorSpeed (rad)
-//   "left_fault"        int     ← written by SetMotorSpeed
-//   "right_fault"       int     ← written by SetMotorSpeed
+// Runtime state written by drive loop nodes:
+//   "uart_connected"     bool
+//   "motor_states"       std::vector<interfaces::msg::MotorState>  ← written by SetAllMotors
 //
 // Publisher functions on the blackboard (set in on_configure):
-//   "publish_wheel_feedback"   std::function<void(const WheelFeedback&)>
+//   "publish_motor_feedback"   std::function<void(const DriveMotorFeedback&)>
 //   "publish_drive_status"     std::function<void(const DriveStatus&)>
 // ==============================================================================
 
-#include <behaviortree_cpp/bt_factory.h>
-#include <interfaces/msg/drive_status.hpp>
-#include <interfaces/msg/wheel_feedback.hpp>
+#include <unordered_map>
 
+#include <behaviortree_cpp/bt_factory.h>
+#include <interfaces/msg/drive_motor_feedback.hpp>
+#include <interfaces/msg/drive_status.hpp>
+
+#include "drivechain_types.hpp"
 #include "drivechain_uart.hpp"
-#include "drivechain_cmd_vel_cache.hpp"
 
 namespace mserve_drivechain {
 
@@ -55,7 +47,7 @@ public:
   BT::NodeStatus tick() override;
 };
 
-// SUCCESS if last feedback fault_code == 0 for motor_id.
+// SUCCESS if motor_id has fault_code == 0 in motor_states.
 class MotorHealthy : public BT::ConditionNode {
 public:
   MotorHealthy(const std::string & name, const BT::NodeConfig & cfg);
@@ -81,7 +73,7 @@ public:
   BT::NodeStatus tick() override;
 };
 
-// Send stop to motor_id and verify echo — confirms motor is alive.
+// Ping a single motor by ID (used by set_id_tree).
 class PingMotor : public BT::SyncActionNode {
 public:
   PingMotor(const std::string & name, const BT::NodeConfig & cfg);
@@ -97,7 +89,7 @@ public:
   BT::NodeStatus tick() override;
 };
 
-// Zero a motor (best-effort, always SUCCESS).
+// Zero a single motor (used by set_id_tree; best-effort, always SUCCESS).
 class StopMotor : public BT::SyncActionNode {
 public:
   StopMotor(const std::string & name, const BT::NodeConfig & cfg);
@@ -117,31 +109,41 @@ private:
   bool result_ = false;
 };
 
-// --- Drive tree actions -------------------------------------------------------
+// --- N-motor connect / stop ---------------------------------------------------
 
-// Read cmd_vel cache → apply diff-drive + max_rpm clamp → write left_rpm / right_rpm.
-// If cache is stale (age > cmd_vel_timeout_ms), writes 0/0 instead.
-// Always SUCCESS.
-class ComputeRpm : public BT::SyncActionNode {
+// Ping + set_mode(2) for every enabled motor in motor_list (3 ping attempts each).
+class ConnectAllMotors : public BT::SyncActionNode {
 public:
-  ComputeRpm(const std::string & name, const BT::NodeConfig & cfg);
+  ConnectAllMotors(const std::string & name, const BT::NodeConfig & cfg);
   static BT::PortsList providedPorts() { return {}; }
   BT::NodeStatus tick() override;
 };
 
-// Command a motor at {rpm}, read back feedback, write speed/pos/fault to blackboard.
-// motor_id determines whether "left_*" or "right_*" keys are written.
-class SetMotorSpeed : public BT::SyncActionNode {
+// Zero every enabled motor in motor_list (best-effort, always SUCCESS).
+class StopAllMotors : public BT::SyncActionNode {
 public:
-  SetMotorSpeed(const std::string & name, const BT::NodeConfig & cfg);
-  static BT::PortsList providedPorts();
+  StopAllMotors(const std::string & name, const BT::NodeConfig & cfg);
+  static BT::PortsList providedPorts() { return {}; }
   BT::NodeStatus tick() override;
 };
 
-// Read left/right speed + position from blackboard, call publish_wheel_feedback fn.
-class PublishWheelFeedback : public BT::SyncActionNode {
+// --- Drive tree actions -------------------------------------------------------
+
+// Read motor_commands cache → apply per-motor sign → set_speed on each enabled
+// motor → write motor_states to blackboard.
+// If cache is stale (age > command_timeout_ms), sends 0 RPM to all motors.
+// Always SUCCESS.
+class SetAllMotors : public BT::SyncActionNode {
 public:
-  PublishWheelFeedback(const std::string & name, const BT::NodeConfig & cfg);
+  SetAllMotors(const std::string & name, const BT::NodeConfig & cfg);
+  static BT::PortsList providedPorts() { return {}; }
+  BT::NodeStatus tick() override;
+};
+
+// Read motor_states from blackboard and call publish_motor_feedback fn.
+class PublishMotorFeedback : public BT::SyncActionNode {
+public:
+  PublishMotorFeedback(const std::string & name, const BT::NodeConfig & cfg);
   static BT::PortsList providedPorts() { return {}; }
   BT::NodeStatus tick() override;
 };

@@ -13,12 +13,12 @@ endif()
 # ==============================================================================
 
 find_package(ament_cmake REQUIRED)
-find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(interfaces REQUIRED)
 find_package(utils REQUIRED)
 
@@ -31,6 +31,7 @@ target_include_directories(drivechain_uart PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
+ament_target_dependencies(drivechain_uart interfaces)
 
 # ==============================================================================
 # Main node library
@@ -51,12 +52,12 @@ target_include_directories(drivechain_node_lib
 )
 
 ament_target_dependencies(drivechain_node_lib
-  geometry_msgs
   rclcpp
   rclcpp_lifecycle
   behaviortree_cpp
   ament_index_cpp
   lifecycle_msgs
+  std_srvs
   interfaces
   utils
 )
@@ -105,6 +106,7 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_packet_codec test/test_packet_codec.cpp src/drivechain_uart.cpp)
   target_include_directories(test_packet_codec PRIVATE src include)
+  ament_target_dependencies(test_packet_codec interfaces)
 endif()
 
 ament_package()

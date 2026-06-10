@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "mserve_drivechain/motor_feedback.hpp"
+#include "drivechain_types.hpp"
 
 namespace mserve_drivechain {
 

@@ -1,6 +1,4 @@
 interfaces:
   drive_status: /mserve/drive_status
-  wheel_command: /mserve/wheel_command
-  wheel_feedback: /mserve/wheel_feedback
   display_status: /mserve/display_status
   esp32_status: /mserve/esp32_status
