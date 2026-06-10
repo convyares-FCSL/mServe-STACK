@@ -38,13 +38,82 @@
     .service-status.connected-hw  { background: #22c55e;          color: #0f172a; }
     .service-status.unknown       { background: var(--surface-2); color: var(--text); }
 
+    /* Drive config */
+    .cfg-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 20px;
+      align-items: center;
+      max-width: 380px;
+    }
+    .cfg-grid label { font-size: 0.85rem; color: #94a3b8; }
+    .cfg-grid input[type="number"] {
+      width: 80px;
+      background: var(--surface-2);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    /* Motor table */
+    .motor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+    .motor-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-bottom: 1px solid #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .motor-table td {
+      padding: 5px 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .motor-table input[type="number"],
+    .motor-table input[type="text"],
+    .motor-table select {
+      background: var(--surface-2);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 0.85rem;
+    }
+    .motor-table input[type="number"] { width: 58px; }
+    .motor-table input[type="text"]   { width: 110px; }
+    .motor-table select               { width: 76px; }
+    .motor-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+    .motor-table tr:has(.motor-enabled:not(:checked)) td {
+      opacity: 0.4;
+    }
+
     /* Speed sliders */
     .sliders {
       display: grid;
-      grid-template-columns: 120px 1fr 52px;
+      grid-template-columns: 120px 1fr 64px;
       gap: 10px 14px;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
+    }
+
+    /* RPM display */
+    .rpm-display {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 12px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
     }
 
     /* Two-column mid row */
@@ -61,7 +130,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
     }
 
     .dpad {
@@ -122,7 +191,7 @@
     .log-ts    { color: #475569; margin-right: 6px; }
     .log-node  { color: #60a5fa; margin-right: 6px; }
 
-    /* Feedback table */
+    /* Feedback grid — dynamic cards */
     .feedback-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -149,7 +218,7 @@
     .feedback-unit {
       font-size: 0.8rem;
       color: #64748b;
-      margin-left: 4px;
+      margin-top: 2px;
     }
   </style>
 </head>
@@ -185,6 +254,77 @@
       <div id="service-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 
+    <!-- Drive config ─────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Drive Config</h2>
+      <div class="cfg-grid">
+        <label for="cfg-separation">Wheel separation (m)</label>
+        <input id="cfg-separation" type="number" min="0.05" max="2.0"  step="0.01"  value="0.35" />
+        <label for="cfg-radius">Wheel radius (m)</label>
+        <input id="cfg-radius"     type="number" min="0.01" max="0.5"  step="0.005" value="0.08" />
+        <label for="cfg-max-rpm">Max RPM</label>
+        <input id="cfg-max-rpm"    type="number" min="1"    max="200"  step="1"     value="200"  />
+      </div>
+
+      <h3 style="margin:16px 0 0;font-size:0.95rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">Motors</h3>
+      <table class="motor-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Side</th>
+            <th>Enabled</th>
+          </tr>
+        </thead>
+        <tbody id="motor-table-body">
+          <tr>
+            <td><input class="motor-id"      type="number" min="1" max="253" value="1" /></td>
+            <td><input class="motor-name"    type="text"   value="left" /></td>
+            <td>
+              <select class="motor-side">
+                <option value="left" selected>Left</option>
+                <option value="right">Right</option>
+              </select>
+            </td>
+            <td><input class="motor-enabled" type="checkbox" checked /></td>
+          </tr>
+          <tr>
+            <td><input class="motor-id"      type="number" min="1" max="253" value="2" /></td>
+            <td><input class="motor-name"    type="text"   value="right" /></td>
+            <td>
+              <select class="motor-side">
+                <option value="left">Left</option>
+                <option value="right" selected>Right</option>
+              </select>
+            </td>
+            <td><input class="motor-enabled" type="checkbox" checked /></td>
+          </tr>
+          <tr>
+            <td><input class="motor-id"      type="number" min="1" max="253" value="3" /></td>
+            <td><input class="motor-name"    type="text"   value="rear_left" /></td>
+            <td>
+              <select class="motor-side">
+                <option value="left" selected>Left</option>
+                <option value="right">Right</option>
+              </select>
+            </td>
+            <td><input class="motor-enabled" type="checkbox" /></td>
+          </tr>
+          <tr>
+            <td><input class="motor-id"      type="number" min="1" max="253" value="4" /></td>
+            <td><input class="motor-name"    type="text"   value="rear_right" /></td>
+            <td>
+              <select class="motor-side">
+                <option value="left">Left</option>
+                <option value="right" selected>Right</option>
+              </select>
+            </td>
+            <td><input class="motor-enabled" type="checkbox" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- Drive + Feedback ── two columns ─────────────────────────────────── -->
     <div class="mid-row">
 
@@ -200,6 +340,9 @@
           <input id="slider-angular" type="range" min="0.2" max="2.0" step="0.1" value="1.0" />
           <span id="val-angular">1.00 rad/s</span>
         </div>
+        <div id="rpm-display" class="rpm-display" style="display:none">
+          <span id="rpm-left">L: 0</span> rpm &nbsp;·&nbsp; <span id="rpm-right">R: 0</span> rpm
+        </div>
         <div class="dpad-wrap">
           <div class="dpad">
             <button class="dpad-forward" id="btn-forward" data-dir="forward">▲</button>
@@ -212,27 +355,11 @@
         </div>
       </section>
 
-      <!-- RIGHT: Wheel Feedback -->
+      <!-- RIGHT: Motor Feedback (dynamic) -->
       <section class="panel" style="margin:0">
         <h2>Feedback</h2>
-        <div class="feedback-grid">
-          <div class="feedback-card">
-            <h4>Left velocity</h4>
-            <span class="feedback-value" id="fb-left-vel">—</span><span class="feedback-unit">rad/s</span>
-          </div>
-          <div class="feedback-card">
-            <h4>Right velocity</h4>
-            <span class="feedback-value" id="fb-right-vel">—</span><span class="feedback-unit">rad/s</span>
-          </div>
-          <div class="feedback-card">
-            <h4>Left position</h4>
-            <span class="feedback-value" id="fb-left-pos">—</span><span class="feedback-unit">°</span>
-          </div>
-          <div class="feedback-card">
-            <h4>Right position</h4>
-            <span class="feedback-value" id="fb-right-pos">—</span><span class="feedback-unit">°</span>
-          </div>
-        </div>
+        <div id="feedback-grid" class="feedback-grid"></div>
+        <p id="feedback-placeholder" style="color:#64748b;font-size:0.85rem;margin:0">Waiting for motor feedback…</p>
       </section>
 
     </div>

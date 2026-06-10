@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>mserve_interfaces</name>
+  <name>interfaces</name>
   <version>0.1.0</version>
   <description>Shared interfaces and configuration for the mServe stack.</description>
   <maintainer email="ecm@example.com">ecm</maintainer>

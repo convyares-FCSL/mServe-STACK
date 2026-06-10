@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>mserve_utils</name>
+  <name>utils</name>
   <version>0.1.0</version>
   <description>Utility helpers for the mServe ROS 2 stack.</description>
   <maintainer email="ecm@example.com">ecm</maintainer>

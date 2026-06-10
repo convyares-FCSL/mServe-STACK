@@ -8,7 +8,8 @@
       "Bash(stty -F /dev/ttyAMA10 -a)",
       "Bash(cat /tmp/serial_listen2.log; echo \"---END---\")",
       "Read(//tmp/**)",
-      "Bash(fuser -v /dev/ttyAMA0)"
+      "Bash(fuser -v /dev/ttyAMA0)",
+      "Bash(git mv *)"
     ]
   }
 }

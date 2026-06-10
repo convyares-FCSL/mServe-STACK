@@ -2,8 +2,8 @@
 
 const ros = new ROSLIB.Ros({ url: `ws://${window.location.hostname}:9090` });
 
-const elStatus   = document.getElementById('connection-status');
-const elNodeState = document.getElementById('node-state');
+const elStatus      = document.getElementById('connection-status');
+const elNodeState   = document.getElementById('node-state');
 const elDriveStatus = document.getElementById('drive-status');
 const elServiceMsg  = document.getElementById('service-msg');
 
@@ -57,7 +57,7 @@ document.getElementById('btn-deactivate').addEventListener('click', () => change
 const drivechainSvc = new ROSLIB.Service({
   ros,
   name: '/mserve_drivechain/drivechain_cmd',
-  serviceType: 'mserve_interfaces/srv/DriveChainCmd',
+  serviceType: 'interfaces/srv/DriveChainCmd',
 });
 
 function callDrivechain(command, motorId = 0, newId = 0) {
@@ -77,7 +77,7 @@ document.getElementById('btn-hw-stop').addEventListener('click',  () => callDriv
 const statusSub = new ROSLIB.Topic({
   ros,
   name: '/mserve_drivechain/drive_status',
-  messageType: 'mserve_interfaces/msg/DriveStatus',
+  messageType: 'interfaces/msg/DriveStatus',
 });
 
 statusSub.subscribe((msg) => {
@@ -86,36 +86,54 @@ statusSub.subscribe((msg) => {
   elDriveStatus.className = `service-status ${s.replace('_', '-')}`;
 });
 
-// ── Wheel feedback subscription ───────────────────────────────────────────────
+// ── Drive config helpers ──────────────────────────────────────────────────────
 
-const feedbackSub = new ROSLIB.Topic({
+function getWheelConfig() {
+  return {
+    separation: parseFloat(document.getElementById('cfg-separation').value) || 0.35,
+    radius:     parseFloat(document.getElementById('cfg-radius').value)     || 0.08,
+    maxRpm:     parseInt(document.getElementById('cfg-max-rpm').value)      || 200,
+  };
+}
+
+function getMotorConfig() {
+  return [...document.querySelectorAll('#motor-table-body tr')].map(row => ({
+    id:      parseInt(row.querySelector('.motor-id').value),
+    name:    row.querySelector('.motor-name').value.trim(),
+    side:    row.querySelector('.motor-side').value,
+    enabled: row.querySelector('.motor-enabled').checked,
+  })).filter(m => m.enabled && m.id >= 1 && m.id <= 253);
+}
+
+function diffRpm(linear, angular, separation, radius, maxRpm) {
+  const half  = separation / 2;
+  const toRpm = (vel) => Math.max(-maxRpm, Math.min(maxRpm,
+    Math.round(vel / radius * 60 / (2 * Math.PI))));
+  return { left: toRpm(linear - angular * half), right: toRpm(linear + angular * half) };
+}
+
+// ── Motor commands publisher ──────────────────────────────────────────────────
+
+const motorCommandsTopic = new ROSLIB.Topic({
   ros,
-  name: '/mserve_drivechain/wheel_feedback',
-  messageType: 'mserve_interfaces/msg/WheelFeedback',
+  name: '/mserve_drivechain/motor_commands',
+  messageType: 'interfaces/msg/MotorCommands',
 });
 
-const RAD_TO_DEG = 180 / Math.PI;
-
-feedbackSub.subscribe((msg) => {
-  document.getElementById('fb-left-vel').textContent  = msg.left_velocity.toFixed(2);
-  document.getElementById('fb-right-vel').textContent = msg.right_velocity.toFixed(2);
-  document.getElementById('fb-left-pos').textContent  = (msg.left_position  * RAD_TO_DEG).toFixed(1);
-  document.getElementById('fb-right-pos').textContent = (msg.right_position * RAD_TO_DEG).toFixed(1);
-});
-
-// ── cmd_vel publisher ─────────────────────────────────────────────────────────
-
-const cmdVelTopic = new ROSLIB.Topic({
-  ros,
-  name: '/cmd_vel',
-  messageType: 'geometry_msgs/msg/Twist',
-});
-
-function publishTwist(linear, angular) {
-  cmdVelTopic.publish(new ROSLIB.Message({
-    linear:  { x: linear,  y: 0, z: 0 },
-    angular: { x: 0,       y: 0, z: angular },
+function publishMotorCommands(linear, angular) {
+  const { separation, radius, maxRpm } = getWheelConfig();
+  const rpms     = diffRpm(linear, angular, separation, radius, maxRpm);
+  const commands = getMotorConfig().map(m => ({
+    motor_id: m.id,
+    rpm: m.side === 'left' ? rpms.left : rpms.right,
   }));
+
+  motorCommandsTopic.publish(new ROSLIB.Message({ commands }));
+
+  const display = document.getElementById('rpm-display');
+  display.style.display = commands.length ? 'block' : 'none';
+  document.getElementById('rpm-left').textContent  = `L: ${rpms.left}`;
+  document.getElementById('rpm-right').textContent = `R: ${rpms.right}`;
 }
 
 // ── Speed sliders ─────────────────────────────────────────────────────────────
@@ -141,11 +159,11 @@ let driveInterval = null;
 let activeDir = null;
 
 const DIRS = {
-  forward: () => publishTwist( getLinear(), 0),
-  back:    () => publishTwist(-getLinear(), 0),
-  left:    () => publishTwist(0,  getAngular()),
-  right:   () => publishTwist(0, -getAngular()),
-  stop:    () => publishTwist(0, 0),
+  forward: () => publishMotorCommands( getLinear(), 0),
+  back:    () => publishMotorCommands(-getLinear(), 0),
+  left:    () => publishMotorCommands(0,  getAngular()),
+  right:   () => publishMotorCommands(0, -getAngular()),
+  stop:    () => publishMotorCommands(0, 0),
 };
 
 function startDriving(dir) {
@@ -155,7 +173,7 @@ function startDriving(dir) {
   document.getElementById(`btn-${dir}`)?.classList.add('active');
 
   if (dir === 'stop') {
-    publishTwist(0, 0);
+    publishMotorCommands(0, 0);
     return;
   }
   DIRS[dir]();
@@ -166,7 +184,7 @@ function stopDriving() {
   if (driveInterval) { clearInterval(driveInterval); driveInterval = null; }
   if (activeDir && activeDir !== 'stop') {
     document.getElementById(`btn-${activeDir}`)?.classList.remove('active');
-    publishTwist(0, 0);
+    publishMotorCommands(0, 0);
   }
   activeDir = null;
 }
@@ -203,15 +221,66 @@ document.addEventListener('keyup', (e) => {
   stopDriving();
 });
 
+// ── Motor feedback subscription ───────────────────────────────────────────────
+
+const feedbackSub = new ROSLIB.Topic({
+  ros,
+  name: '/mserve_drivechain/motor_feedback',
+  messageType: 'interfaces/msg/DriveMotorFeedback',
+});
+
+const RAD_TO_DEG = 180 / Math.PI;
+
+feedbackSub.subscribe((msg) => {
+  const grid        = document.getElementById('feedback-grid');
+  const placeholder = document.getElementById('feedback-placeholder');
+  const motors      = msg.motors ?? [];
+
+  placeholder.style.display = motors.length ? 'none' : 'block';
+
+  const seen = new Set();
+  motors.forEach(m => {
+    const cardId = `fb-motor-${m.motor_id}`;
+    seen.add(cardId);
+
+    let card = document.getElementById(cardId);
+    if (!card) {
+      card = document.createElement('div');
+      card.id = cardId;
+      card.className = 'feedback-card';
+      grid.appendChild(card);
+    }
+
+    const faultAttr = m.fault_code ? ' style="color:var(--danger)"' : '';
+    const rads      = (m.velocity_rads ?? m.velocity_rpm * 2 * Math.PI / 60).toFixed(2);
+    const deg       = (m.position_rad * RAD_TO_DEG).toFixed(1);
+    const current   = m.current_a     != null ? m.current_a.toFixed(2)     : '—';
+    const temp      = m.temperature_c != null ? m.temperature_c.toFixed(1) : '—';
+    const fault     = m.fault_code
+      ? ` &nbsp;<span style="color:var(--danger)">FAULT ${m.fault_code}</span>` : '';
+
+    card.innerHTML =
+      `<h4>${escHtml(m.name)} <span style="color:#475569">#${m.motor_id}</span></h4>` +
+      `<div class="feedback-value"${faultAttr}>${m.velocity_rpm.toFixed(0)}</div>` +
+      `<div class="feedback-unit">rpm &nbsp;·&nbsp; ${rads} rad/s</div>` +
+      `<div style="font-size:0.75rem;color:#64748b;margin-top:6px">` +
+        `pos ${deg}° &nbsp; ${current} A &nbsp; ${temp} °C${fault}` +
+      `</div>`;
+  });
+
+  // Remove cards for motors no longer in the message
+  [...grid.children].forEach(c => { if (!seen.has(c.id)) grid.removeChild(c); });
+});
+
 // ── Periodic state refresh ────────────────────────────────────────────────────
 
 setInterval(refreshNodeState, 4000);
 
 // ── /rosout log panel ─────────────────────────────────────────────────────────
 
-const logBox       = document.getElementById('log-box');
-const chkAllNodes  = document.getElementById('chk-all-nodes');
-const chkDebug     = document.getElementById('chk-debug');
+const logBox      = document.getElementById('log-box');
+const chkAllNodes = document.getElementById('chk-all-nodes');
+const chkDebug    = document.getElementById('chk-debug');
 
 document.getElementById('btn-log-clear').addEventListener('click', () => { logBox.innerHTML = ''; });
 
@@ -230,7 +299,7 @@ rosoutSub.subscribe((msg) => {
   if (!chkAllNodes.checked && !nodeName.includes('mserve_drivechain')) return;
 
   const [levelLabel, levelClass] = LOG_LEVELS[level] ?? ['?', 'log-info'];
-  const d = new Date();
+  const d  = new Date();
   const ts = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 
   const line = document.createElement('div');
@@ -241,10 +310,8 @@ rosoutSub.subscribe((msg) => {
     `<span>[${levelLabel}] ${escHtml(msg.msg ?? '')}</span>`;
   logBox.appendChild(line);
 
-  // keep max 500 lines
   while (logBox.children.length > 500) logBox.removeChild(logBox.firstChild);
 
-  // auto-scroll if already near the bottom
   if (logBox.scrollHeight - logBox.scrollTop < logBox.clientHeight + 60) {
     logBox.scrollTop = logBox.scrollHeight;
   }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(mserve_interfaces)
+project(interfaces)
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -21,6 +21,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/WheelFeedback.msg"
   "msg/DisplayStatus.msg"
   "msg/Esp32Status.msg"
+
+  # Drivechain v2 — per-motor command + feedback
+  "msg/MotorCommand.msg"
+  "msg/MotorCommands.msg"
+  "msg/MotorState.msg"
+  "msg/DriveMotorFeedback.msg"
 
   "srv/BoosterCmd.srv"
   "srv/CompressorCmd.srv"

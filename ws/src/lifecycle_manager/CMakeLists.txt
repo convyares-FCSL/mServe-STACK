@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-project(mserve_lifecycle_manager)
+project(lifecycle_manager)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -9,7 +9,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake  REQUIRED)
-find_package(mserve_utils REQUIRED)
+find_package(utils REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
@@ -27,7 +27,7 @@ ament_target_dependencies(
   ament_index_cpp
   lifecycle_msgs
   behaviortree_ros2
-  mserve_utils
+  utils
 )
 
 # include_directories(include)
