@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -)",
+      "Bash(pinctrl set *)",
+      "Bash(timeout 12 python3 serial_simple_ctrl.py /dev/serial0 --boot-wait 6)",
+      "Bash(fuser /dev/ttyAMA10)",
+      "Bash(stty -F /dev/ttyAMA10 -a)",
+      "Bash(cat /tmp/serial_listen2.log; echo \"---END---\")",
+      "Read(//tmp/**)",
+      "Bash(fuser -v /dev/ttyAMA0)"
+    ]
+  }
+}

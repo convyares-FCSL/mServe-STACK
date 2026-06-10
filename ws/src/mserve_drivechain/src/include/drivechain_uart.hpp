@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -18,6 +19,11 @@ namespace mserve_drivechain {
 // and feedback echoes commanded speed.
 class DriveUart {
 public:
+  // The ESP32 sends a {"T":20020,"hb":N,"up":millis} liveness heartbeat
+  // roughly every 1000 ms. board_alive() reports stale after this long
+  // without a fresh one.
+  static constexpr int kHeartbeatTimeoutMs = 3000;
+
   explicit DriveUart(bool sim_mode);
   ~DriveUart();
 
@@ -55,6 +61,12 @@ public:
   // Change motor ID. Sends the 5× change-id sequence then calls ping(new_id).
   bool change_id(uint8_t current_id, uint8_t new_id);
 
+  // True if the ESP32's liveness heartbeat ({"T":20020,...}) has been seen
+  // within timeout_ms. Always true in sim_mode. Heartbeat lines are detected
+  // transparently inside read_line(), so any UART traffic (set_speed,
+  // set_mode, ...) keeps this fresh — no dedicated polling needed.
+  bool board_alive(int timeout_ms = kHeartbeatTimeoutMs) const;
+
   // CRC-8/MAXIM — kept for unit-test compatibility (not used in JSON protocol).
   static uint8_t crc8(const uint8_t * data, size_t len);
 
@@ -69,6 +81,9 @@ private:
 
   // Sim state: track commanded RPM per motor so feedback echoes it.
   std::unordered_map<uint8_t, int> sim_cmds_;
+
+  // Last time a {"T":20020,...} heartbeat line was seen on the wire.
+  std::chrono::steady_clock::time_point last_heartbeat_{};
 };
 
 }  // namespace mserve_drivechain

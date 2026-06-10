@@ -54,6 +54,12 @@ static float json_float(const std::string & s, const char * key, float def = 0.0
   catch (...) { return def; }
 }
 
+// {"T":20020,"hb":N,"up":millis} — periodic ESP32 liveness heartbeat.
+static bool is_heartbeat_line(const std::string & s)
+{
+  return json_int(s, "T") == 20020;
+}
+
 bool DriveUart::send_json(const std::string & cmd)
 {
   if (fd_ < 0) return false;
@@ -85,7 +91,14 @@ bool DriveUart::read_line(std::string & out, int timeout_ms)
 
     char c;
     if (read(fd_, &c, 1) <= 0) return false;
-    if (c == '\n') return !out.empty();
+    if (c == '\n') {
+      if (is_heartbeat_line(out)) {
+        last_heartbeat_ = std::chrono::steady_clock::now();
+        out.clear();
+        continue;  // keep waiting for a real line until the deadline
+      }
+      return !out.empty();
+    }
     if (c != '\r') out += c;  // skip CR in CRLF
   }
 }
@@ -158,11 +171,19 @@ void DriveUart::close()
 {
   if (fd_ >= 0) { ::close(fd_); fd_ = -1; }
   sim_cmds_.clear();
+  last_heartbeat_ = {};
 }
 
 bool DriveUart::is_open() const
 {
   return sim_mode_ || (fd_ >= 0);
+}
+
+bool DriveUart::board_alive(int timeout_ms) const
+{
+  if (sim_mode_) return true;
+  if (last_heartbeat_ == std::chrono::steady_clock::time_point{}) return false;
+  return std::chrono::steady_clock::now() - last_heartbeat_ < std::chrono::milliseconds(timeout_ms);
 }
 
 // ==============================================================================

@@ -18,7 +18,8 @@ services:
       - ./web:/web
     working_dir: /ws
     devices:
-      - /dev/serial0:/dev/serial0
+      # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md
+      - /dev/ttyAMA0:/dev/ttyAMA0
     group_add:
       - dialout
     command:

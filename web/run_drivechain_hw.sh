@@ -10,8 +10,8 @@
 #
 # Examples:
 #   ./web/run_drivechain_hw.sh --sim             # sim, no hardware needed
-#   ./web/run_drivechain_hw.sh                   # hardware, /dev/serial0
-#   ./web/run_drivechain_hw.sh /dev/ttyAMA0      # hardware, custom device
+#   ./web/run_drivechain_hw.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+#   ./web/run_drivechain_hw.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
@@ -25,7 +25,7 @@ if [[ "${1:-}" == "--sim" ]]; then
   SIM_MODE=true
   shift
 fi
-UART_DEVICE="${1:-/dev/serial0}"
+UART_DEVICE="${1:-/dev/ttyAMA0}"
 
 # ── Detect native vs Docker ───────────────────────────────────────────────────
 if command -v ros2 >/dev/null 2>&1; then

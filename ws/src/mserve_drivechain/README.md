@@ -42,9 +42,27 @@ The **blackboard** is the single source of truth shared between the node and all
 | `publish_wheel_feedback` | `std::function` | on_configure | PublishWheelFeedback |
 | `publish_drive_status` | `std::function` | on_configure | PublishDriveStatus |
 
+`PublishDriveStatus` also calls `uart->board_alive()` directly (not a
+blackboard key) to populate `DriveStatus.board_alive` — see
+[Liveness heartbeat](#liveness-heartbeat-esp32--pi).
+
 ## Hardware: DDSM Driver HAT (A) on Raspberry Pi
 
 The HAT sits on the 40-pin GPIO header and communicates over the Pi's **hardware UART** — no USB required.
+
+### Physical switch: "Serial Port Control Switch"
+
+The HAT has a small slide switch that selects which interface reaches the
+onboard ESP32's UART0:
+
+| Switch position | ESP32 UART0 connected to |
+|---|---|
+| **ESP32** | Pi GPIO14/15 (header pins 8/10) — required for `mserve_drivechain` |
+| **USB** | The HAT's USB-C port (CH343/CH9102 USB-UART bridge → `/dev/ttyACM0` on the Pi) |
+
+Set it to **ESP32** for normal operation. Only use **USB** for flashing
+firmware or debugging directly over USB-C — in that position the GPIO header
+UART is disconnected and `mserve_drivechain` will see no traffic at all.
 
 ### One-time Pi setup
 
@@ -56,7 +74,35 @@ sudo raspi-config
 sudo reboot
 ```
 
-After reboot the UART is available at `/dev/serial0` (symlink to `/dev/ttyAMA0` on Pi 4).
+### UART device path — Raspberry Pi 5 vs Pi 4
+
+> **The single most important thing to get right on a Pi 5.**
+
+On a **Pi 4**, `/dev/serial0` symlinks to `/dev/ttyAMA0`, the PL011 UART
+wired to GPIO14/15 — the commonly-documented setup works as-is.
+
+On a **Pi 5**, `/dev/serial0` instead symlinks to `/dev/ttyAMA10`, which is
+**RP1's** UART0 (`rp1/serial@30000`, MMIO `0x107d001000`) — **not connected
+to the 40-pin header**. Confusingly, `pinctrl funcs 14 15` still reports
+alt-function `a4` ("TXD0"/"RXD0") for GPIO14/15, which looks like
+confirmation that `/dev/serial0` is correct — it isn't. That alt-function
+belongs to BCM2712's *own* PL011 UART, exposed separately as
+**`/dev/ttyAMA0`** (MMIO `0x1f00030000`).
+
+| Pi model | GPIO14/15 header UART | `/dev/serial0` symlink target |
+|---|---|---|
+| Pi 4 | `/dev/ttyAMA0` | → `/dev/ttyAMA0` (correct) |
+| Pi 5 | `/dev/ttyAMA0` | → `/dev/ttyAMA10` (RP1 UART0 — **not the header**) |
+
+**On Pi 5, the GPIO14/15 header UART is `/dev/ttyAMA0`.** This is now the
+default for `hardware.uart_device`.
+
+If `hardware.uart_device=/dev/ttyAMA0` produces no traffic, check:
+1. The "Serial Port Control Switch" is in the **ESP32** position (above).
+2. Nothing else has `/dev/ttyAMA0` open (e.g. another `uart_diag.py` or
+   `drivechain_node` instance — only one process can hold the port).
+3. `python3 ws/src/mserve_drivechain/scripts/uart_diag.py` reports a
+   heartbeat (see [Liveness heartbeat](#liveness-heartbeat-esp32--pi)).
 
 ### Motor IDs
 
@@ -70,12 +116,53 @@ ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveC
 ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveChainCmd "{command: 3, motor_id: 1, new_id: 2}"
 ```
 
+## Liveness heartbeat (ESP32 ↔ Pi)
+
+The `ddsm_example` firmware (`drive_firmware/ddsm_active/`) sends a
+periodic "I'm alive" message over UART, independent of any command/response
+traffic:
+
+```json
+{"T":20020,"hb":<count>,"up":<millis_since_boot>}
+```
+
+- Sent unconditionally roughly every 1000 ms (`HEARTBEAT_INTERVAL_MS` in
+  `ddsm_example.ino`, emitted by `uartHeartbeat()` in `uart_ctrl.h`).
+- T-code `20020` (`FB_HEARTBEAT` in `json_cmd.h`) — distinct from
+  `CMD_HEARTBEAT_TIME` (`11001`), which is the unrelated DDSM motor-stop
+  watchdog (`heartbeat_ctrl()` — stops the motors if no command arrives).
+
+On the Pi side, `DriveUart::read_line()` filters these lines out
+transparently: any read (motor feedback, mode-change drain, id-check, ...)
+records the heartbeat timestamp regardless of what it was actually waiting
+for, so no dedicated polling is needed.
+
+`DriveUart::board_alive(timeout_ms = 3000)`:
+- always `true` in sim mode,
+- `false` until the first heartbeat is seen in hardware mode,
+- otherwise `true` if a heartbeat arrived within the last 3 seconds (≈3
+  missed beats).
+
+`PublishDriveStatus` reads this every drive-tree tick and publishes it as
+`board_alive` on `~/drive_status`:
+
+```bash
+ros2 topic echo /mserve_drivechain/drive_status
+# status: connected_hw
+# battery_level: 0.0
+# board_alive: true
+```
+
+This separates "the UART port is open" (`uart_connected`) from "the ESP32 on
+the other end is actually running" (`board_alive`) — useful if the HAT loses
+power, resets, or is unplugged while the port itself stays open.
+
 ## Parameters
 
 | Parameter | Default | Notes |
 |---|---|---|
 | `drive.backend` | `"sim"` | `"sim"` = no hardware; `"hardware"` = real HAT |
-| `hardware.uart_device` | `"/dev/serial0"` | UART device path |
+| `hardware.uart_device` | `"/dev/ttyAMA0"` | UART device path (Pi 5 GPIO header UART) |
 | `hardware.left_motor_id` | `1` | DDSM115 bus ID for left wheel |
 | `hardware.right_motor_id` | `2` | DDSM115 bus ID for right wheel |
 | `hardware.wheel_separation` | `0.35` | Centre-to-centre distance (m) |
@@ -127,11 +214,11 @@ cd ~/ai-workspace/projects/mServe-STACK
 ./web/run_drivechain_hw.sh
 # Open: http://<pi-ip>:8080/drivechain.html
 
-# Custom UART device:
-./web/run_drivechain_hw.sh /dev/ttyAMA0
+# Custom UART device (e.g. USB instead of the GPIO header):
+./web/run_drivechain_hw.sh /dev/ttyACM0
 ```
 
-The browser banner shows `[sim]` or `[hardware (/dev/serial0)]` so you can tell at a glance which mode is running.
+The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell at a glance which mode is running.
 
 ### Running on a Raspberry Pi (Debian / no native ROS)
 
@@ -168,7 +255,7 @@ On the Pi, `run_drivechain_hw.sh` automatically:
 
 The web server always runs natively (Python is always available on Debian), so the browser URL is simply `http://<pi-ip>:8080/drivechain.html` from any machine on the same network.
 
-> **Serial device passthrough**: `docker-compose.yml` maps `/dev/serial0` into the container and adds the `dialout` group. If your Pi uses a different device (e.g., `/dev/ttyAMA0`), pass it as an argument: `./web/run_drivechain_hw.sh /dev/ttyAMA0` — but also update `docker-compose.yml` devices accordingly.
+> **Serial device passthrough**: `docker-compose.yml` maps `/dev/ttyAMA0` (the Pi 5 GPIO header UART, see [UART device path](#uart-device-path--raspberry-pi-5-vs-pi-4)) into the container and adds the `dialout` group. If your setup uses a different device (e.g., `/dev/ttyACM0` over USB), pass it as an argument: `./web/run_drivechain_hw.sh /dev/ttyACM0` — but also update `docker-compose.yml` devices accordingly.
 
 ### Web UI controls
 
@@ -226,14 +313,14 @@ ros2 service call /mserve_drivechain/drivechain_cmd mserve_interfaces/srv/DriveC
 
 ### Real hardware (DDSM Driver HAT on Raspberry Pi)
 
-Ensure the Pi UART is configured (see [One-time Pi setup](#one-time-pi-setup)) and both motors are assigned unique IDs (see [Motor IDs](#motor-ids)).
+Ensure the Pi UART is configured (see [One-time Pi setup](#one-time-pi-setup)), the "Serial Port Control Switch" is in the **ESP32** position, and both motors are assigned unique IDs (see [Motor IDs](#motor-ids)).
 
 **Terminal 1 — node:**
 ```bash
 source install/setup.bash
 ros2 run mserve_drivechain drivechain_node --ros-args \
   -p drive.backend:=hardware \
-  -p hardware.uart_device:=/dev/serial0
+  -p hardware.uart_device:=/dev/ttyAMA0   # default — only needed to override
 ```
 
 **Terminal 2 — lifecycle + control:**
@@ -264,6 +351,7 @@ source install/setup.bash
 ros2 topic echo /mserve_drivechain/wheel_feedback
 
 # Connection state (idle_sim / connected_sim / idle_hw / connected_hw)
+# + board_alive (ESP32 liveness heartbeat — see Liveness heartbeat below)
 ros2 topic echo /mserve_drivechain/drive_status
 
 # Check drive loop is ticking at the configured rate
@@ -311,3 +399,5 @@ colcon test --packages-select mserve_drivechain --event-handlers console_direct+
 - Feedback: mode, torque, speed_rpm, position (0–32767 = 0–360°), fault_code
 - Mode change quirk: byte[9] = mode value directly, not a CRC
 - ID change: send 5× with 4 ms gaps, then verify with ping
+- Liveness heartbeat: `{"T":20020,"hb":N,"up":millis}` every ~1s, unrelated
+  to the DDSM packets above — see [Liveness heartbeat](#liveness-heartbeat-esp32--pi)

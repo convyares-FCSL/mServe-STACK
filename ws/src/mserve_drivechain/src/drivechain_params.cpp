@@ -13,7 +13,9 @@ void DrivechainNode::declare_params()
   this->declare_parameter<std::string>("drive.backend", "sim");
 
   // Hardware UART device — only used when backend="hardware".
-  this->declare_parameter<std::string>("hardware.uart_device", "/dev/serial0");
+  // /dev/ttyAMA0 is the GPIO14/15 header UART on Raspberry Pi 5 (BCM2712's
+  // own PL011). /dev/serial0 is NOT this UART on Pi 5 — see README.md.
+  this->declare_parameter<std::string>("hardware.uart_device", "/dev/ttyAMA0");
 
   const auto motor_id_desc = mserve_utils::make_int_range_descriptor(
     "DDSM115 motor hardware ID (1–253)", kMotorIdMin, kMotorIdMax);

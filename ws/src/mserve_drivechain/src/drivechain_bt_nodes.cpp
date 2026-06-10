@@ -87,7 +87,7 @@ BT::NodeStatus OpenUart::tick()
   DriveUart * uart = get_uart(config());
   if (!uart) return BT::NodeStatus::FAILURE;
 
-  std::string device = "/dev/serial0";
+  std::string device = "/dev/ttyAMA0";
   int baud = 115200;
   getInput("device", device);
   getInput("baud",   baud);
@@ -325,6 +325,7 @@ BT::NodeStatus PublishDriveStatus::tick()
     return BT::NodeStatus::SUCCESS;
   }
 
+  DriveUart * uart = get_uart(config());
   auto & bb = config().blackboard;
   const bool connected = bb_get(bb, std::string("uart_connected"), false);
   const bool sim_mode  = bb_get(bb, std::string("sim_mode"),       true);
@@ -334,6 +335,7 @@ BT::NodeStatus PublishDriveStatus::tick()
     ? (sim_mode ? "connected_sim" : "connected_hw")
     : (sim_mode ? "idle_sim"      : "idle_hw");
   msg.battery_level = 0.0f;
+  msg.board_alive = uart ? uart->board_alive() : false;
   pub_fn(msg);
 
   return BT::NodeStatus::SUCCESS;
