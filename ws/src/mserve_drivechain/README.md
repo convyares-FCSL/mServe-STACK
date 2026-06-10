@@ -185,6 +185,7 @@ power, resets, or is unplugged while the port itself stays open.
 | `hardware.motor_names` | `["left", "right"]` | Human-readable labels (used in logs) |
 | `hardware.motor_signs` | `[1, 1]` | `+1` = shaft forward = robot forward; `-1` = physically reversed |
 | `hardware.motor_enabled` | `[true, true]` | Per-motor enable; disabled motors are skipped |
+| `hardware.motor_accel` | `5` | DDSM115 `act` ramp byte (0-255), applied to all motors; `0` = instant |
 | `drive.command_timeout_ms` | `500` | Zero all motors if no `~/drive` call within this window |
 | `feedback_rate` | `10.0` | Drive loop / publish rate (Hz) |
 

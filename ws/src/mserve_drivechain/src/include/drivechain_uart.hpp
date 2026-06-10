@@ -40,7 +40,8 @@ public:
 
   // Send speed command and read back motor feedback.
   // rpm is clamped to [−200, +200] internally.
-  bool set_speed(uint8_t id, int rpm, MotorFeedback & fb);
+  // accel is the DDSM115 'act' ramp byte (0-255); 0 = instant.
+  bool set_speed(uint8_t id, int rpm, MotorFeedback & fb, uint8_t accel = 0);
 
   // set_speed(id, 0) — convenience stop.
   bool stop(uint8_t id, MotorFeedback & fb);

@@ -190,7 +190,7 @@ bool DriveUart::board_alive(int timeout_ms) const
 // Motor commands
 // ==============================================================================
 
-bool DriveUart::set_speed(uint8_t id, int rpm, MotorFeedback & fb)
+bool DriveUart::set_speed(uint8_t id, int rpm, MotorFeedback & fb, uint8_t accel)
 {
   rpm = std::clamp(rpm, -200, 200);
 
@@ -206,7 +206,7 @@ bool DriveUart::set_speed(uint8_t id, int rpm, MotorFeedback & fb)
 
   char buf[64];
   std::snprintf(buf, sizeof(buf),
-    "{\"T\":10010,\"id\":%d,\"cmd\":%d,\"act\":0}", id, rpm);
+    "{\"T\":10010,\"id\":%d,\"cmd\":%d,\"act\":%d}", id, rpm, static_cast<int>(accel));
 
   if (!send_json(buf)) return false;
 

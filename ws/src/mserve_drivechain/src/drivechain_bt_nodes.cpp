@@ -307,6 +307,8 @@ BT::NodeStatus SetAllMotors::tick()
   std::vector<MotorDescriptor> motors;
   (void)bb->get("motor_list", motors);
 
+  const uint8_t accel = static_cast<uint8_t>(bb_get(bb, std::string("motor_accel"), 5));
+
   std::vector<interfaces::msg::MotorState> states;
   constexpr double kRpmToRads = 2.0 * M_PI / 60.0;
   constexpr double kTickToRad = 2.0 * M_PI / 32767.0;
@@ -320,7 +322,7 @@ BT::NodeStatus SetAllMotors::tick()
     const int16_t send_rpm = static_cast<int16_t>(raw_rpm * m.sign);
 
     MotorFeedback fb;
-    uart->set_speed(m.id, send_rpm, fb);
+    uart->set_speed(m.id, send_rpm, fb, accel);
 
     interfaces::msg::MotorState state;
     state.motor_id      = m.id;

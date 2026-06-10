@@ -145,15 +145,12 @@ function sendAll() {
   );
 }
 
-// Zero one motor's slider then send all.
+// Zero all sliders then send all — per-motor Stop is a full Stop All,
+// since ~/drive replaces the whole motor_commands vector each call.
 function stopMotor(motorId) {
-  const row = document.querySelector(`.motor-cmd-row[data-motor-id="${motorId}"]`);
-  if (row) {
-    const slider = row.querySelector('.motor-rpm-slider');
-    const display = row.querySelector('.motor-rpm-val');
-    slider.value = '0';
-    display.textContent = '0 rpm';
-  }
+  void motorId;
+  document.querySelectorAll('.motor-rpm-slider').forEach(s => { s.value = '0'; });
+  document.querySelectorAll('.motor-rpm-val').forEach(d => { d.textContent = '0 rpm'; });
   sendAll();
 }
 

@@ -22,6 +22,11 @@ void DrivechainNode::declare_params()
   this->declare_parameter<std::vector<int64_t>>("hardware.motor_signs", {1, 1});
   this->declare_parameter<std::vector<bool>>("hardware.motor_enabled", {true, true});
 
+  // DDSM115 'act' ramp byte (0-255); 0 = instant, higher = slower ramp to target speed.
+  // Single value applied to all motors.
+  this->declare_parameter<int64_t>("hardware.motor_accel", 5,
+    mserve_utils::make_int_range_descriptor("DDSM115 acceleration ramp byte (0-255)", kMotorAccelMin, kMotorAccelMax));
+
   this->declare_parameter<int64_t>("drive.command_timeout_ms", 500,
     mserve_utils::make_int_range_descriptor(
       "Zero motors after this many ms with no motor_commands message.",
@@ -57,6 +62,7 @@ void DrivechainNode::load_params()
     motors.push_back(m);
   }
   blackboard_->set("motor_list", motors);
+  blackboard_->set("motor_accel", static_cast<int>(get_parameter("hardware.motor_accel").as_int()));
 }
 
 rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
@@ -79,6 +85,7 @@ rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
       name == "hardware.motor_ids"        ||
       name == "hardware.motor_names"      ||
       name == "hardware.motor_signs"      ||
+      name == "hardware.motor_accel"      ||
       name == "hardware.motor_enabled";
 
     if (is_hw_param && !is_unconfigured) {

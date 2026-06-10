@@ -24,8 +24,9 @@ mserve_drivechain:
     hardware:
       uart_device: /dev/ttyAMA0
       motor_count: 2
-      motor_ids: [1, 2]
+      motor_ids: [2, 1]
       motor_names: [left, right]
       motor_signs: [1, 1]          # +1 = normal; -1 = physically reversed (flip direction)
       motor_enabled: [true, true]
+      motor_accel: 5               # DDSM115 'act' ramp byte (0-255); 0 = instant, applies to all motors
     feedback_rate: 20.0            # Hz
