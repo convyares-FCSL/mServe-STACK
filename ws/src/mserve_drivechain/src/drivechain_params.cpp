@@ -13,31 +13,24 @@ void DrivechainNode::declare_params()
 
   this->declare_parameter<std::string>("hardware.uart_device", "/dev/ttyAMA0");
 
-  this->declare_parameter<int64_t>("hardware.motor_count", 2,
-    mserve_utils::make_int_range_descriptor("Number of motors (1–4)", kMotorCountMin, kMotorCountMax));
+  this->declare_parameter<int64_t>("hardware.motor_count", 2, mserve_utils::make_int_range_descriptor("Number of motors (1–4)", kMotorCountMin, kMotorCountMax));
 
   this->declare_parameter<std::vector<int64_t>>("hardware.motor_ids", {1, 2});
   this->declare_parameter<std::vector<std::string>>("hardware.motor_names", {"left", "right"});
-  // +1 = motor shaft direction matches robot forward; -1 = physically reversed
-  this->declare_parameter<std::vector<int64_t>>("hardware.motor_signs", {1, 1});
+  
+  this->declare_parameter<std::vector<int64_t>>("hardware.motor_signs", {-1, 1});  //1 for std, -1 for reverse
   this->declare_parameter<std::vector<bool>>("hardware.motor_enabled", {true, true});
 
-  // DDSM115 'act' ramp byte (0-255); 0 = instant, higher = slower ramp to target speed.
-  // Single value applied to all motors.
-  this->declare_parameter<int64_t>("hardware.motor_accel", 5,
-    mserve_utils::make_int_range_descriptor("DDSM115 acceleration ramp byte (0-255)", kMotorAccelMin, kMotorAccelMax));
 
-  this->declare_parameter<int64_t>("drive.command_timeout_ms", 500,
-    mserve_utils::make_int_range_descriptor(
-      "Zero motors after this many ms with no motor_commands message.",
-      kCommandTimeoutMin, kCommandTimeoutMax));
+  this->declare_parameter<int64_t>("hardware.motor_accel", 5,  mserve_utils::make_int_range_descriptor("DDSM115 acceleration ramp byte (0-255)", kMotorAccelMin, kMotorAccelMax));
 
-  this->declare_parameter("feedback_rate", 10.0,
-    mserve_utils::make_double_range_descriptor("Drive loop publish rate (Hz)", kFeedbackRateMin, kFeedbackRateMax));
+  this->declare_parameter<int64_t>("drive.command_timeout_ms", 500, mserve_utils::make_int_range_descriptor(
+      "Zero motors after this many ms with no motor_commands message.", kCommandTimeoutMin, kCommandTimeoutMax));
+
+  this->declare_parameter("feedback_rate", 10.0, mserve_utils::make_double_range_descriptor("Drive loop publish rate (Hz)", kFeedbackRateMin, kFeedbackRateMax));
 }
 
-void DrivechainNode::load_params()
-{
+void DrivechainNode::load_params() {
   const std::string backend = get_parameter("drive.backend").as_string();
   const bool sim_mode = (backend != "hardware");
 
@@ -65,9 +58,7 @@ void DrivechainNode::load_params()
   blackboard_->set("motor_accel", static_cast<int>(get_parameter("hardware.motor_accel").as_int()));
 }
 
-rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(
-  const std::vector<rclcpp::Parameter> & params)
-{
+rcl_interfaces::msg::SetParametersResult DrivechainNode::on_parameters(const std::vector<rclcpp::Parameter> & params) {
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
 

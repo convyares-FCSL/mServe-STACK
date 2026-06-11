@@ -70,8 +70,12 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   if [[ "$USE_DOCKER" == true ]]; then
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
-      "pkill -f drivechain_node || true; pkill -f base_node || true; pkill -f rosbridge_websocket || true" 2>/dev/null || true
+    # Each pkill must be its own `exec` — chaining them in one `bash -lc "a; b; c"`
+    # lets `pkill -f a` match the wrapper shell itself (its cmdline contains
+    # "a; b; c"), killing it before b/c ever run.
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
   else
     # `ros2 run` does not always exec-replace itself, so $! may only be the
     # wrapper PID — pkill the actual node binaries by name as well.
@@ -140,8 +144,16 @@ fi
 
 # ── Kill any stale ROS processes from previous run ───────────────────────────
 if [[ "$USE_DOCKER" == true ]]; then
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc \
-    "pkill -f rosbridge_websocket 2>/dev/null; pkill -f drivechain_node 2>/dev/null; pkill -f base_node 2>/dev/null; sleep 1; true" 2>/dev/null || true
+  # See note in cleanup() — one exec per pkill so each pattern actually runs.
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
+  sleep 1
+  # Force-kill any survivors so the new nodes don't end up with duplicate
+  # /mserve_base or /mserve_drivechain registrations.
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
 else
   pkill -f rosbridge_websocket  2>/dev/null || true
   pkill -f drivechain_node      2>/dev/null || true

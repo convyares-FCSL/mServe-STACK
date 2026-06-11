@@ -2,6 +2,8 @@
 
 ROS 2 Jazzy C++ robot stack for the mServe differential-drive robot, running on a Raspberry Pi 5 inside Docker.
 
+The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
+
 The design philosophy is learning-first: every control boundary, kinematic calculation, and hardware protocol is written by hand before reaching for frameworks like `ros2_control`. Each layer should be readable on its own.
 
 ## Hardware
@@ -39,7 +41,7 @@ ws/src/
 - `docker-compose.yml`: ROS container with ports 5002, 8080, 9090.
 - `docs/`: design notes, milestones, session log, task tracker.
 - `scripts/`: helper scripts by phase.
-- `web/`: debug browser UI (lifecycle control + cmd_vel publisher).
+- `web/`: debug browser UI (lifecycle control + cmd_vel publisher) and `run_drivechain_hw.sh`, the main entry point for the hardware stack.
 - `ws/`: ROS 2 workspace, mounted at `/ws` in the container.
 
 ## Docs
@@ -54,21 +56,33 @@ ws/src/
 
 ## Normal flow
 
+The drive stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) starts automatically on boot (see [Running on boot](#running-on-boot-systemd)). To run it manually — e.g. after a reboot of the script itself, or for development — use:
+
 ```bash
-# 1. Build and start the container image
-docker compose up -d --build robot-mserve
-
-# 2. Build the ROS workspace inside Docker
-scripts/05_utils/docker_build_workspace.sh
-
-# 3. Launch ROS nodes (base + drivechain)
-scripts/05_utils/docker_launch_mserve.sh
-
-# 4. Start rosbridge and the web UI
-scripts/05_utils/docker_webbridge.sh both
+./web/run_drivechain_hw.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+./web/run_drivechain_hw.sh --sim        # simulated backend, no hardware needed
+./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
-Then open `http://localhost:8080` — the UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing.
+This builds the workspace (native if ROS 2 is installed, otherwise inside the `robot-mserve` Docker container), starts rosbridge, configures + activates both lifecycle nodes, and serves the debug UI. Then open:
+
+- `http://<pi-ip>:6240/drivechain.html`
+- `http://<pi-ip>:6240/base.html`
+
+The UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing. Press Ctrl+C to stop everything — this deactivates both nodes and tears down rosbridge/web server cleanly.
+
+## Running on boot (systemd)
+
+`mserve-drivechain.service` runs `./web/run_drivechain_hw.sh` automatically once Docker is up, so the robot comes up ready on power-on.
+
+```bash
+sudo systemctl status mserve-drivechain      # check it's running
+sudo journalctl -u mserve-drivechain -f      # live logs
+sudo systemctl restart mserve-drivechain     # restart the stack
+sudo systemctl stop mserve-drivechain        # stop everything (runs cleanup)
+```
+
+`stop`/`restart` send SIGTERM to the script, triggering the same cleanup as Ctrl+C.
 
 ## Build
 
@@ -107,6 +121,10 @@ ros2 param describe /mserve_base limits.max_linear_speed
 ```
 
 ## Stop / remove
+
+To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_drivechain_hw.sh` manually) — see [Running on boot](#running-on-boot-systemd).
+
+The commands below stop/remove the underlying `robot-mserve` container itself. Don't run `docker compose down` while `mserve-drivechain.service` is enabled — it brings the container back up (`docker compose up -d robot-mserve`) on every start/restart.
 
 ```bash
 docker compose stop robot-mserve   # stop, keep container
