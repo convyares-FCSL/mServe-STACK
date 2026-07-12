@@ -38,7 +38,7 @@ export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 # directly using whatever locator they advertised — often a loopback address
 # on the Pi, unreachable from here. "client" mode never gossips or attempts
 # direct peer links; it only ever talks through the router.
-export ZENOH_CONFIG_OVERRIDE="mode=client;connect/endpoints=[\"tcp/$PI_IP:7447\"]"
+export ZENOH_CONFIG_OVERRIDE="mode=\"client\";connect/endpoints=[\"tcp/$PI_IP:7447\"]"
 
 echo "ROS 2 Network Configuration:"
 echo "  RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"

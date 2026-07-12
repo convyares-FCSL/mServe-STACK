@@ -172,7 +172,7 @@ fi
 if [[ "$USE_DOCKER" == false ]] && pgrep -f rmw_zenohd >/dev/null 2>&1; then
   echo "Zenoh router detected — joining it (RMW_IMPLEMENTATION=rmw_zenoh_cpp, mode=client)"
   export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-  export ZENOH_CONFIG_OVERRIDE="mode=client"
+  export ZENOH_CONFIG_OVERRIDE="mode=\"client\""
   ros2 daemon stop >/dev/null 2>&1 || true
   ros2 daemon start >/dev/null 2>&1 || true
 fi
