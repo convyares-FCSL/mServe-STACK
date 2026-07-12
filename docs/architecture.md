@@ -111,6 +111,12 @@ Hardware-facing nodes should be lifecycle nodes:
 
 This mirrors Lesson 06 and makes startup/shutdown explicit.
 
+**As implemented:** this gating is driven by `ws/src/lifecycle_manager/`, a
+BehaviorTree.CPP node that configures/activates `mserve_drivechain` then
+`mserve_base` on bringup, and runs a shutdown tree (deactivate → shutdown)
+on SIGINT/SIGTERM — rather than each node/launch file managing its own
+transitions by hand. See `ws/src/lifecycle_manager/README.md`.
+
 ## Simulation Rules
 
 Simulation should teach the same boundaries as hardware:

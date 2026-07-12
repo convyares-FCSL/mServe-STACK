@@ -1,5 +1,9 @@
 # mserve_lifecycle_manager
 
+(ROS package name is `lifecycle_manager` — the `mserve_` prefix only survives
+in the C++ include path/namespace, same as `utils`/`mserve_utils`. Use
+`lifecycle_manager` in `colcon build`/`ros2 run`/`find_package()`.)
+
 BehaviorTree.CPP lifecycle manager for mServe using `behaviortree_ros2`.
 Automatically configures and activates managed nodes in order, idempotently and with retries.
 
@@ -7,9 +11,13 @@ Automatically configures and activates managed nodes in order, idempotently and 
 
 - Loads `trees/bringup.xml` at startup — no C++ changes needed to add nodes
 - Checks current lifecycle state before each transition — safe to re-run
-- Drives `mserve_base` and `mserve_drivechain` through configure → activate
+- Drives `mserve_drivechain` then `mserve_base` through configure → activate
 - Retries failed transitions up to 3 times before giving up
 - Non-blocking 100ms timer tick alongside live ROS executor
+- On SIGINT/SIGTERM, runs `trees/shutdown.xml` (deactivate/shutdown both
+  nodes) while the ROS context is still valid, then exits itself — see
+  `docs/todo.md`'s "Shutdown ordering" entry for why this isn't just the
+  default `rclcpp::on_shutdown()` hook
 
 ## Package structure
 
@@ -18,32 +26,40 @@ include/mserve_lifecycle_manager/
   lifecycle_manager.hpp     Class declaration
 src/
   lifecycle_manager.cpp     LifecycleManager, IsInState, ChangeStateNode
-  main.cpp                  Entry point
+  main.cpp                  Entry point, signal handling
   trees/
-    bringup.xml             Tree definition — edit to change bringup order
+    bringup.xml             Bringup tree — edit to change bringup order
+    shutdown.xml             Shutdown tree — edit to change teardown order
+    node_models.xml          Generated at startup, for Groot2's palette
 docs/
     lesson_plan.md              Concept notes from learning sessions
-    todo.md                     Remaining work and phase roadmap
+    todo.md                     Remaining work and known limitations
 ```
 
 ## System setup — fresh machine
 
-```bash
-# BT.CPP core
-sudo apt install ros-jazzy-behaviortree-cpp
+`behaviortree_ros2` is vendored (not apt-installed) at `ws/src/BehaviorTree.ROS2/`
+(gitignored, `humble` branch — the apt-packaged `behaviortree_cpp` core is
+new enough that this branch builds fine against it). `btcpp_ros2_samples`
+inside that clone carries a `COLCON_IGNORE` — it's not needed.
 
-# behaviortree_ros2 build dep
-sudo apt install ros-jazzy-generate-parameter-library
+```bash
+# BT.CPP core (apt)
+sudo apt install ros-lyrical-behaviortree-cpp
+
+# behaviortree_ros2 build deps (apt)
+sudo apt install libboost-dev ros-lyrical-generate-parameter-library
 
 # behaviortree_ros2 source build
 cd ~/mServe-STACK/ws/src
-git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+git clone --branch humble https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+touch BehaviorTree.ROS2/btcpp_ros2_samples/COLCON_IGNORE
 
 # Build in order
 cd ~/mServe-STACK/ws
-colcon build --packages-select btcpp_ros2_interfaces
-colcon build --packages-select behaviortree_ros2
-colcon build --packages-select mserve_lifecycle_manager --symlink-install
+colcon build --packages-select btcpp_ros2_interfaces --cmake-args -DBUILD_TESTING=OFF --symlink-install
+colcon build --packages-select behaviortree_ros2 --cmake-args -DBUILD_TESTING=OFF --symlink-install
+colcon build --packages-select lifecycle_manager --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
 ## Running via launch (recommended)
@@ -51,8 +67,11 @@ colcon build --packages-select mserve_lifecycle_manager --symlink-install
 ```bash
 cd ~/mServe-STACK/ws
 source install/setup.bash
-ros2 launch mserve_launch mserve_min.launch.py
+ros2 launch launch mserve_min.launch.py
 ```
+
+`web/run_drivechain_hw.sh` is the normal entry point (it invokes this launch
+file and picks `backend`/`uart_device` for you) — see the top-level readme.
 
 ## Running manually
 
@@ -66,7 +85,7 @@ ros2 run mserve_base base_node
 ros2 run mserve_drivechain drivechain_node
 
 # Terminal 3
-ros2 run mserve_lifecycle_manager lifecycle_manager
+ros2 run lifecycle_manager lifecycle_manager
 ```
 
 ## How to add a managed node (XML only, no C++ needed)
@@ -82,7 +101,9 @@ ros2 run mserve_lifecycle_manager lifecycle_manager
         </RetryUntilSuccessful>
     </Fallback>
     <Fallback name="activate_my_node">
-        <IsInState name="check_active" node_name="my_node" state="active"/>
+        <Inverter>
+            <IsInState name="check_active" node_name="my_node" state="inactive"/>
+        </Inverter>
         <RetryUntilSuccessful num_attempts="3">
             <ChangeStateNode name="activate" node_name="my_node" transition="activate"/>
         </RetryUntilSuccessful>
@@ -90,22 +111,30 @@ ros2 run mserve_lifecycle_manager lifecycle_manager
 </Sequence>
 ```
 
+For a shutdown-tree entry, use one of the `shutdown_*` transitions below —
+`transition="shutdown"` on its own is not a recognized name and will fail
+`ChangeStateNode`'s lookup.
+
 ## Lifecycle transitions
 
-| Name       | From         | To           |
-|------------|-------------|-------------|
-| configure  | unconfigured | inactive    |
-| activate   | inactive     | active      |
-| deactivate | active       | inactive    |
-| cleanup    | inactive     | unconfigured|
-| shutdown   | any          | finalized   |
+| Name                 | From         | To           |
+|----------------------|--------------|--------------|
+| configure            | unconfigured | inactive     |
+| activate             | inactive     | active       |
+| deactivate           | active       | inactive     |
+| cleanup              | inactive     | unconfigured |
+| shutdown_unconfigured| unconfigured | finalized    |
+| shutdown_inactive    | inactive     | finalized    |
+| shutdown_active      | active       | finalized    |
+
+(names come from `mserve_utils::lifecycle::transitionIdFromName`, `ws/src/utils/include/mserve_utils/lifecycle.hpp`)
 
 ## Dependencies
 
-- `behaviortree_cpp` — `ros-jazzy-behaviortree-cpp` (apt)
-- `behaviortree_ros2` — source build (BehaviorTree/BehaviorTree.ROS2)
-- `btcpp_ros2_interfaces` — source build (same repo)
-- `mserve_utils` — transition name lookup (`lifecycle.hpp`)
+- `behaviortree_cpp` — `ros-lyrical-behaviortree-cpp` (apt)
+- `behaviortree_ros2` — vendored source build (`ws/src/BehaviorTree.ROS2/`, `humble` branch)
+- `btcpp_ros2_interfaces` — vendored source build (same repo)
+- `utils` — transition name lookup (`mserve_utils/lifecycle.hpp`)
 - `lifecycle_msgs`, `ament_index_cpp`, `rclcpp`
 
 ## Learning snapshots

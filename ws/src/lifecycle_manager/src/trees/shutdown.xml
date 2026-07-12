@@ -2,47 +2,32 @@
     <BehaviorTree ID="Shutdown">
         <Sequence name="main">
 
-            <Sequence name="compression_sequence">
-            <Fallback name="shutdown_compression_fallback">
+        <Sequence name="base_sequence">
+            <Fallback name="shutdown_base_fallback">
                 <IsInState
-                    name="is_compression_finalized"
-                    node_name="hyfleet_compression"
+                    name="is_base_finalized"
+                    node_name="mserve_base"
                     state="finalized"
                 />
                 <ChangeStateNode
-                    name="shutdown_compression"
-                    node_name="hyfleet_compression"
-                    transition="shutdown"
+                    name="shutdown_base"
+                    node_name="mserve_base"
+                    transition="shutdown_active"
                 />
             </Fallback>
         </Sequence>
 
-        <Sequence name="high_booster_sequence">
-            <Fallback name="shutdown_high_booster_fallback">
+        <Sequence name="drivechain_sequence">
+            <Fallback name="shutdown_drivechain_fallback">
                 <IsInState
-                    name="is_high_booster_finalized"
-                    node_name="high_booster"
+                    name="is_drivechain_finalized"
+                    node_name="mserve_drivechain"
                     state="finalized"
                 />
                 <ChangeStateNode
-                    name="shutdown_high_booster"
-                    node_name="high_booster"
-                    transition="shutdown"
-                />
-            </Fallback>
-        </Sequence>
-
-        <Sequence name="low_booster_sequence">
-            <Fallback name="shutdown_low_booster_fallback">
-                <IsInState
-                    name="is_low_booster_finalized"
-                    node_name="low_booster"
-                    state="finalized"
-                />
-                <ChangeStateNode
-                    name="shutdown_low_booster"
-                    node_name="low_booster"
-                    transition="shutdown"
+                    name="shutdown_drivechain"
+                    node_name="mserve_drivechain"
+                    transition="shutdown_active"
                 />
             </Fallback>
         </Sequence>

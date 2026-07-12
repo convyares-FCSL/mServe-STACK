@@ -2,97 +2,67 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="Main">
     <Sequence name="main">
-      <Sequence name="low_booster_sequence">
-        <Fallback name="low_booster_fallback">
+      <Sequence name="drivechain_sequence">
+        <Fallback name="configure_drivechain_fallback">
           <Inverter>
-            <IsInState name="is_low_booster_inactive"
-                       node_name="low_booster"
+            <IsInState name="is_drivechain_inactive"
+                       node_name="mserve_drivechain"
                        state="unconfigured"
                        service_name=""/>
           </Inverter>
           <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="configure_low_booster"
-                             node_name="low_booster"
+            <ChangeStateNode name="configure_drivechain"
+                             node_name="mserve_drivechain"
                              transition="configure"
                              service_name=""/>
           </RetryUntilSuccessful>
         </Fallback>
-        <Fallback name="activate_low_booster_fallback">
+        <Fallback name="activate_drivechain_fallback">
           <Inverter>
-            <IsInState name="is_low_booster_active"
-                       node_name="low_booster"
+            <IsInState name="is_drivechain_active"
+                       node_name="mserve_drivechain"
                        state="inactive"
                        service_name=""/>
           </Inverter>
           <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="activate_low_booster"
-                             node_name="low_booster"
+            <ChangeStateNode name="activate_drivechain"
+                             node_name="mserve_drivechain"
                              transition="activate"
                              service_name=""/>
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
-      <Sequence name="high_booster_sequence">
-        <Fallback name="high_booster_fallback">
+      <Sequence name="base_sequence">
+        <Fallback name="configure_base_fallback">
           <Inverter>
-            <IsInState name="is_high_booster_inactive"
-                       node_name="high_booster"
+            <IsInState name="is_base_inactive"
+                       node_name="mserve_base"
                        state="unconfigured"
                        service_name=""/>
           </Inverter>
           <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="configure_high_booster"
-                             node_name="high_booster"
+            <ChangeStateNode name="configure_base"
+                             node_name="mserve_base"
                              transition="configure"
                              service_name=""/>
           </RetryUntilSuccessful>
         </Fallback>
-        <Fallback name="activate_high_booster_fallback">
+        <Fallback name="activate_base_fallback">
           <Inverter>
-            <IsInState name="is_high_booster_active"
-                       node_name="high_booster"
+            <IsInState name="is_base_active"
+                       node_name="mserve_base"
                        state="inactive"
                        service_name=""/>
           </Inverter>
           <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="activate_high_booster"
-                             node_name="high_booster"
+            <ChangeStateNode name="activate_base"
+                             node_name="mserve_base"
                              transition="activate"
                              service_name=""/>
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
-      <Sequence name="compression_sequence">
-        <Fallback name="config_compression_fallback">
-          <Inverter>
-            <IsInState name="is_compression_inactive"
-                       node_name="hyfleet_compression"
-                       state="unconfigured"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="configure_compression"
-                             node_name="hyfleet_compression"
-                             transition="configure"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-        <Fallback name="activate_compression_fallback">
-          <Inverter>
-            <IsInState name="is_compression_active"
-                       node_name="hyfleet_compression"
-                       state="inactive"
-                       service_name=""/>
-          </Inverter>
-          <RetryUntilSuccessful num_attempts="3">
-            <ChangeStateNode name="activate_compression"
-                             node_name="hyfleet_compression"
-                             transition="activate"
-                             service_name=""/>
-          </RetryUntilSuccessful>
-        </Fallback>
-      </Sequence>
-    </Sequence> 
+    </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->

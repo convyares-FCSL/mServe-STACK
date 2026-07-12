@@ -8,6 +8,8 @@
 - [x] Scaffold `mserve_drivechain` lifecycle node in dry-run mode.
 - [x] Scaffold `launch` (planned as `mserve_bringup`) minimal launch.
 - [x] Decide first ESP32 transport: **UART** (`/dev/ttyAMA0`, Pi 5 GPIO header), JSON protocol. Implemented in `mserve_drivechain/src/drivechain_uart.cpp`, not a separate transport-agnostic layer.
+- [x] Scaffold `lifecycle_manager` (BT.CPP + `behaviortree_ros2`, vendored at `ws/src/BehaviorTree.ROS2/`) to drive `mserve_drivechain` + `mserve_base` through configure/activate on bringup and a graceful shutdown tree on SIGINT/SIGTERM. Wired into `launch/mserve_min.launch.py`; `run_drivechain_hw.sh` no longer drives lifecycle transitions itself. See `ws/src/lifecycle_manager/README.md` + `docs/todo.md`.
+- [x] Remove leftover `hyfleet_subsystem`-derived scaffolding not used by mserve: `mserve_base_archive/`, and the booster/compression msgs+srvs (`ControlBooster`, `ControlCompressor`, `SystemState`, `BoosterCmd`, `CompressorCmd`, `DispenserCmd`, `GasRouterCmd`, `SetMode`, `Cmd`) from `interfaces/`.
 - [ ] Decide whether first robot model is plain URDF or minimal Xacro.
 
 ## Next

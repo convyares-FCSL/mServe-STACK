@@ -21,7 +21,9 @@ ws/src/
   mserve_base/           command arbiter and safety clamp
   mserve_drivechain/     diff-drive kinematics + JSON/UART protocol to the ESP32 motor controller
   mserve_description/    URDF robot model
+  lifecycle_manager/     BehaviorTree.CPP-driven configure/activate/shutdown of drivechain + base
   launch/                launch files
+  BehaviorTree.ROS2/     vendored dependency for lifecycle_manager (gitignored, see Build)
 ```
 
 (Folder names dropped the `mserve_` prefix on `interfaces`/`utils`/`launch` at some point — the docs below still use the old prefixed names in places; treat the folder names above as current.)
@@ -35,7 +37,8 @@ ws/src/
 | `mserve_base` | Subscribes `/cmd_vel`, clamps to speed limits, publishes `/mserve/cmd_vel_safe` |
 | `mserve_drivechain` | Subscribes `/mserve/cmd_vel_safe`, runs diff-drive kinematics, owns the JSON-over-UART link to the onboard ESP32 (Waveshare DDSM Driver HAT) — the ESP32 itself handles the raw DDSM115 protocol |
 | `mserve_description` | URDF robot description |
-| `launch` | `mserve_min.launch.py` — starts base + drivechain |
+| `lifecycle_manager` | BT-driven configure/activate on bringup, deactivate/shutdown on SIGINT — see `ws/src/lifecycle_manager/README.md` |
+| `launch` | `mserve_min.launch.py` — starts drivechain + base + `lifecycle_manager` together |
 
 ## Files
 
@@ -75,9 +78,9 @@ To run it manually instead — e.g. after stopping the service, or for developme
 ./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
-This builds the workspace natively (falls back to the legacy `robot-mserve` Docker container only if `ros2` isn't found on PATH), starts rosbridge, configures + activates both lifecycle nodes, and serves the debug UI at the same URLs above.
+This expects the workspace already built (falls back to the legacy `robot-mserve` Docker container only if `ros2` isn't found on PATH), starts rosbridge, then launches `mserve_drivechain` + `mserve_base` + `lifecycle_manager` together via `ws/src/launch/launch/mserve_min.launch.py` — `lifecycle_manager` is the one driving configure/activate now, not the script itself — and serves the debug UI at the same URLs above once both nodes report `active`.
 
-The UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing. Click **Connect** before driving — activation alone doesn't open the UART port, `~/connect` does. Press Ctrl+C to stop everything if running manually — this deactivates both nodes and tears down rosbridge/web server cleanly.
+The UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing. Click **Connect** before driving — activation alone doesn't open the UART port, `~/connect` does. Press Ctrl+C to stop everything if running manually — this runs `lifecycle_manager`'s shutdown tree (deactivates both nodes) before tearing down rosbridge/web server cleanly.
 
 ## Running on boot (systemd)
 
@@ -94,20 +97,33 @@ sudo systemctl stop mserve-drivechain        # stop everything (runs cleanup)
 
 ## Build
 
-From `/home/ecm/mServe-STACK/ws`, natively (no Docker):
+`lifecycle_manager` depends on `behaviortree_ros2`/`btcpp_ros2_interfaces`,
+which are vendored (not apt-installed) — clone them once before the first
+build:
+
+```bash
+cd /home/ecm/mServe-STACK/ws/src
+git clone --branch humble https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+touch BehaviorTree.ROS2/btcpp_ros2_samples/COLCON_IGNORE  # not needed
+sudo apt install ros-lyrical-behaviortree-cpp libboost-dev ros-lyrical-generate-parameter-library
+```
+
+Then, from `/home/ecm/mServe-STACK/ws`, natively (no Docker):
 
 ```bash
 source /opt/ros/lyrical/setup.bash
-colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
+colcon build \
+  --packages-select interfaces utils mserve_drivechain mserve_base lifecycle_manager launch \
+    btcpp_ros2_interfaces behaviortree_ros2 \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
 **CMake note (Jazzy → Lyrical):** `ament_target_dependencies()` was removed
 entirely in ROS 2 Lyrical (not just deprecated — the macro doesn't exist).
-The CMakeLists for `utils`, `mserve_drivechain`, and `mserve_base` were
-updated to use `target_link_libraries()` with modern imported targets
-instead (`rclcpp::rclcpp`, `interfaces::interfaces`, etc. — message packages
-export a `<pkg>::<pkg>` aggregate target automatically via
+The CMakeLists for `utils`, `mserve_drivechain`, `mserve_base`, and
+`lifecycle_manager` were updated to use `target_link_libraries()` with modern
+imported targets instead (`rclcpp::rclcpp`, `interfaces::interfaces`, etc. —
+message packages export a `<pkg>::<pkg>` aggregate target automatically via
 `rosidl_cmake_aggregate_target-extras.cmake`, no extra `find_package` needed).
 If you're building this from scratch on an even newer distro and hit
 `Unknown CMake command "ament_target_dependencies"`, this is why.

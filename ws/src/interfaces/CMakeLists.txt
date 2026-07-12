@@ -6,11 +6,8 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/ControlBooster.action"
-  "action/ControlCompressor.action"
   "action/Dock.action"
 
-  "msg/SystemState.msg"
   "msg/DriveStatus.msg"
   "msg/DisplayStatus.msg"
   "msg/Esp32Status.msg"
@@ -20,13 +17,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorState.msg"
   "msg/DriveMotorFeedback.msg"
 
-  "srv/BoosterCmd.srv"
-  "srv/CompressorCmd.srv"
-  "srv/DispenserCmd.srv"
   "srv/Drive.srv"
-  "srv/GasRouterCmd.srv"
   "srv/SetDisplayMode.srv"
-  "srv/SetMode.srv"
   "srv/SetMotorId.srv"
 )
 

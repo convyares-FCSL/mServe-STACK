@@ -6,6 +6,8 @@
 
 namespace lifecyclemanager {
 
+std::atomic<bool> LifecycleManager::shutdown_requested_{false};
+
 namespace {
 BT::RosNodeParams lifecycleRosParams(const std::shared_ptr<rclcpp::Node>& node) {
     BT::RosNodeParams params(node);
@@ -167,17 +169,34 @@ void LifecycleManager::build() {
     // Execute the tree
     RCLCPP_INFO(this->get_logger(), "Starting behavior tree execution...");
 
+    // A signal handler just flips shutdown_requested_ (see main.cpp) — the
+    // actual shutdown tree runs here, from this timer, while the ROS context
+    // is still valid. rclcpp::on_shutdown() fires too late for that: by then
+    // the context is already torn down and RosServiceNode calls silently fail,
+    // leaving mserve_drivechain/mserve_base stuck active. Once the shutdown
+    // tree finishes, this callback calls rclcpp::shutdown() itself.
     tick_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
-        auto status = tree_.tickOnce();
-        if (status != BT::NodeStatus::RUNNING) {
-            tick_timer_->cancel();
-            RCLCPP_INFO(get_logger(), "All nodes successfully activated.");
+        if (shutdown_requested_.load()) {
+            if (!shutting_down_) {
+                shutting_down_ = true;
+                RCLCPP_INFO(get_logger(), "Shutdown signal received, running shutdown tree...");
+            }
+            auto status = shutdown_tree_.tickOnce();
+            if (status != BT::NodeStatus::RUNNING) {
+                RCLCPP_INFO(get_logger(), "Shutdown tree complete.");
+                tick_timer_->cancel();
+                rclcpp::shutdown();
+            }
+            return;
         }
-    });
 
-    rclcpp::on_shutdown([this]() {
-        RCLCPP_INFO(get_logger(), "Shutdown signal received, running shutdown tree...");
-        shutdown_tree_.tickWhileRunning();
+        if (!bringup_complete_) {
+            auto status = tree_.tickOnce();
+            if (status != BT::NodeStatus::RUNNING) {
+                bringup_complete_ = true;
+                RCLCPP_INFO(get_logger(), "All nodes successfully activated.");
+            }
+        }
     });
 }
 

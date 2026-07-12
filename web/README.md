@@ -12,40 +12,35 @@ The web UI connects to ROS 2 through `rosbridge_server` and uses `roslibjs`.
 
 ## Run
 
-1. Start the ROS environment and build the workspace:
+The normal entry point is `run_drivechain_hw.sh`, which builds nothing itself
+but expects the workspace already built (see the top-level readme's Build
+section — `interfaces utils mserve_drivechain mserve_base lifecycle_manager`
+plus the vendored `btcpp_ros2_interfaces`/`behaviortree_ros2`), then starts
+rosbridge, launches `mserve_drivechain` + `mserve_base` + `lifecycle_manager`
+via `launch/mserve_min.launch.py`, waits for both nodes to reach `active`,
+and serves this folder on port 6240:
 
 ```bash
 cd /home/ecm/mServe-STACK
-./scripts/01_setup/env_setup.sh
-cd ws
-colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_esp32 mserve_bringup
-source install/setup.bash
+./web/run_drivechain_hw.sh              # hardware, /dev/ttyAMA0
+./web/run_drivechain_hw.sh --sim        # sim backend, no hardware needed
+./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device
 ```
 
-2. Launch the mServe nodes:
+Then open:
 
-```bash
-ros2 launch mserve_bringup mserve_min.launch.py
-```
+- `http://<pi-ip>:6240/drivechain.html`
+- `http://<pi-ip>:6240/base.html`
 
-3. Start rosbridge:
+Press Ctrl+C to stop everything — this runs `lifecycle_manager`'s shutdown
+tree (deactivates both nodes) before tearing down rosbridge/web server.
 
-```bash
-ros2 run rosbridge_server rosbridge_websocket --port 9090
-```
-
-4. Start the static web server:
-
-```bash
-cd /home/ecm/mServe-STACK/web
-./run.sh
-```
-
-5. Open the browser:
-
-`http://localhost:6240`
+`run.sh` (serves this folder only, no ROS nodes/rosbridge) and
+`run_rosbridge.sh` are standalone helpers for when you already have the
+drive stack running some other way — most of the time you want
+`run_drivechain_hw.sh` instead.
 
 ## Notes
 
 - This web UI is development-only.
-- If `rosbridge_server` is not installed, install it in your ROS 2 environment first.
+- If `rosbridge_server` is not installed: `sudo apt install ros-lyrical-rosbridge-server`.

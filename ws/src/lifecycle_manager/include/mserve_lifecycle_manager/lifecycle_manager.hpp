@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "rclcpp/rclcpp.hpp"
 #include "lifecycle_msgs/srv/change_state.hpp"
 #include "lifecycle_msgs/srv/get_state.hpp"
@@ -62,11 +64,21 @@ class LifecycleManager : public rclcpp::Node {
 
         void build() ;
 
+        // Called from a signal handler (SIGINT/SIGTERM) — the ROS context is
+        // still valid at this point, unlike rclcpp::on_shutdown(), which fires
+        // after the context is torn down and can no longer make service calls.
+        // See lifecycle_manager.cpp build() for how this flag is consumed.
+        static void requestShutdown() { shutdown_requested_.store(true); }
+
     private:
     // The behavior tree instance
     BT::Tree tree_;
     BT::Tree shutdown_tree_;
     rclcpp::TimerBase::SharedPtr tick_timer_;
+    bool bringup_complete_ = false;
+    bool shutting_down_ = false;
+
+    static std::atomic<bool> shutdown_requested_;
 
     // Publisher for visualizing the tree in Groot2
     std::unique_ptr<BT::Groot2Publisher> groot2_publisher_;

@@ -66,36 +66,52 @@ NATIVE_PIDS=()
 cleanup() {
   echo ""
   echo "Shutting down…"
+  # Signal lifecycle_manager directly (SIGINT) so its shutdown tree can
+  # gracefully deactivate mserve_drivechain/mserve_base via change_state
+  # calls before anything is force-killed. Relying on `ros2 launch`'s own
+  # SIGINT cascade to its children proved unreliable when the signal is sent
+  # programmatically from this script's trap rather than an interactive
+  # shell, so target lifecycle_manager's process directly instead — it exits
+  # on its own once the shutdown tree completes.
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -INT -f lifecycle_manager 2>/dev/null || true
+  else
+    pkill -INT -f lifecycle_manager 2>/dev/null || true
+  fi
+  sleep 2
+
   for pid in "${NATIVE_PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
   if [[ "$USE_DOCKER" == true ]]; then
-    # Each pkill must be its own `exec` — chaining them in one `bash -lc "a; b; c"`
-    # lets `pkill -f a` match the wrapper shell itself (its cmdline contains
-    # "a; b; c"), killing it before b/c ever run.
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
   else
-    # `ros2 run` does not always exec-replace itself, so $! may only be the
-    # wrapper PID — pkill the actual node binaries by name as well.
-    pkill -f drivechain_node     2>/dev/null || true
-    pkill -f base_node           2>/dev/null || true
     pkill -f rosbridge_websocket 2>/dev/null || true
     pkill -f "http.server 6240"  2>/dev/null || true
   fi
-  # rosbridge can get stuck in rclpy shutdown; force-kill after 2s
-  sleep 2
+
+  # Give everything a moment to settle before force-killing survivors.
+  sleep 1
+
+  if [[ "$USE_DOCKER" == true ]]; then
+    # Each pkill must be its own `exec` — chaining them in one `bash -lc "a; b; c"`
+    # lets `pkill -f a` match the wrapper shell itself (its cmdline contains
+    # "a; b; c"), killing it before b/c ever run.
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
+  else
+    pkill -9 -f drivechain_node     2>/dev/null || true
+    pkill -9 -f base_node           2>/dev/null || true
+    pkill -9 -f lifecycle_manager   2>/dev/null || true
+    pkill -9 -f rosbridge_websocket 2>/dev/null || true
+  fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
       kill -9 "$pid" 2>/dev/null || true
     fi
   done
-  if [[ "$USE_DOCKER" != true ]]; then
-    pkill -9 -f drivechain_node     2>/dev/null || true
-    pkill -9 -f base_node           2>/dev/null || true
-    pkill -9 -f rosbridge_websocket 2>/dev/null || true
-  fi
   wait 2>/dev/null || true
   echo "Done."
 }
@@ -148,16 +164,19 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager   2>/dev/null || true
   sleep 1
   # Force-kill any survivors so the new nodes don't end up with duplicate
   # /mserve_base or /mserve_drivechain registrations.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
 else
   pkill -f rosbridge_websocket  2>/dev/null || true
   pkill -f drivechain_node      2>/dev/null || true
   pkill -f base_node            2>/dev/null || true
+  pkill -f lifecycle_manager    2>/dev/null || true
   pkill -f "http.server 6240"   2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting
 fi
@@ -178,45 +197,28 @@ else
 fi
 sleep 1
 
-# ── Start drivechain node ─────────────────────────────────────────────────────
-if [[ "$SIM_MODE" == true ]]; then
-  echo "Starting drivechain node (sim)…"
-  NODE_ARGS="--ros-args -p drive.backend:=sim --log-level mserve_drivechain:=debug"
-else
-  echo "Starting drivechain node (hardware, $UART_DEVICE)…"
-  NODE_ARGS="--ros-args -p drive.backend:=hardware -p hardware.uart_device:=$UART_DEVICE --log-level mserve_drivechain:=debug"
-fi
+# ── Launch drivechain + base + lifecycle_manager ─────────────────────────────
+# All node startup and lifecycle configure/activate is owned by
+# mserve_min.launch.py + lifecycle_manager — this script only picks the
+# backend/uart_device launch args and waits for the result.
+BACKEND=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware")
+echo "Launching drivechain + base + lifecycle_manager (backend=$BACKEND)…"
+LAUNCH_ARGS="backend:=$BACKEND uart_device:=$UART_DEVICE"
 
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
     source /opt/ros/jazzy/setup.bash
     source /ws/install/setup.bash
-    ros2 run mserve_drivechain drivechain_node $NODE_ARGS
+    ros2 launch launch mserve_min.launch.py $LAUNCH_ARGS
   "
 else
-  ros2 run mserve_drivechain drivechain_node $NODE_ARGS &
+  ros2 launch launch mserve_min.launch.py $LAUNCH_ARGS > /tmp/mserve_launch.log 2>&1 &
   NATIVE_PIDS+=($!)
 fi
 
-# ── Start base node ────────────────────────────────────────────────────────────
-echo "Starting base node…"
-BASE_NODE_ARGS="--ros-args --log-level mserve_base:=debug"
-
-if [[ "$USE_DOCKER" == true ]]; then
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
-    source /opt/ros/jazzy/setup.bash
-    source /ws/install/setup.bash
-    ros2 run mserve_base base_node $BASE_NODE_ARGS
-  "
-else
-  ros2 run mserve_base base_node $BASE_NODE_ARGS &
-  NATIVE_PIDS+=($!)
-fi
-
-# ── Wait for a lifecycle node to appear ──────────────────────────────────────
-wait_for_lifecycle_node() {
+# ── Wait for both nodes to reach 'active' ────────────────────────────────────
+wait_for_active() {
   local node_name="$1"
-  local up=false
   for i in $(seq 1 30); do
     if [[ "$USE_DOCKER" == true ]]; then
       CHECK=$(docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
@@ -227,42 +229,21 @@ wait_for_lifecycle_node() {
     else
       CHECK=$(ros2 lifecycle get "$node_name" 2>/dev/null || true)
     fi
-    if [[ "$CHECK" == *"unconfigured"* ]]; then
-      up=true
-      break
+    if [[ "$CHECK" == *"active"* ]]; then
+      return 0
     fi
-    echo "  ($i/30) $node_name not ready yet…"
+    echo "  ($i/30) $node_name not active yet…"
     sleep 1
   done
-  if [[ "$up" == false ]]; then
-    echo "ERROR: $node_name did not appear after 30 s. Check logs."
-    exit 1
-  fi
+  echo "ERROR: $node_name did not reach 'active' after 30 s. Check logs (/tmp/mserve_launch.log)."
+  exit 1
 }
 
-echo "Waiting for drivechain node…"
-wait_for_lifecycle_node /mserve_drivechain
+echo "Waiting for drivechain node to activate…"
+wait_for_active /mserve_drivechain
 
-echo "Waiting for base node…"
-wait_for_lifecycle_node /mserve_base
-
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
-echo "Configuring drivechain + base nodes…"
-if [[ "$USE_DOCKER" == true ]]; then
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
-    source /opt/ros/jazzy/setup.bash
-    source /ws/install/setup.bash
-    ros2 lifecycle set /mserve_drivechain configure
-    ros2 lifecycle set /mserve_drivechain activate
-    ros2 lifecycle set /mserve_base configure
-    ros2 lifecycle set /mserve_base activate
-  "
-else
-  ros2 lifecycle set /mserve_drivechain configure
-  ros2 lifecycle set /mserve_drivechain activate
-  ros2 lifecycle set /mserve_base configure
-  ros2 lifecycle set /mserve_base activate
-fi
+echo "Waiting for base node to activate…"
+wait_for_active /mserve_base
 
 # ── Web server (always native — Python is always available) ───────────────────
 echo "Starting web server on http://localhost:6240…"

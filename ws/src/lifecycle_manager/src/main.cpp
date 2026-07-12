@@ -1,3 +1,4 @@
+#include <csignal>
 #include <cstdlib>
 #include <cstdio>
 
@@ -5,11 +6,19 @@
 #include "mserve_lifecycle_manager/lifecycle_manager.hpp"
 
 // ==============================================================================
-// Main entry point for the BaseNode.
+// Main entry point for the LifecycleManager.
 // ==============================================================================
 
 int main(int argc, char ** argv) {
-  rclcpp::init(argc, argv);
+  // Disable rclcpp's default SIGINT/SIGTERM handling — it calls
+  // rclcpp::shutdown() directly from the signal handler, which invalidates
+  // the ROS context before LifecycleManager gets a chance to run its
+  // shutdown tree. Our handler just raises a flag; LifecycleManager::build()
+  // runs the shutdown tree while the context is still valid, then shuts
+  // down itself once that tree completes.
+  rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  std::signal(SIGINT, [](int) { lifecyclemanager::LifecycleManager::requestShutdown(); });
+  std::signal(SIGTERM, [](int) { lifecyclemanager::LifecycleManager::requestShutdown(); });
 
   try {
     auto node = std::make_shared<lifecyclemanager::LifecycleManager>();
@@ -19,10 +28,10 @@ int main(int argc, char ** argv) {
     executor.spin();
   } catch (const std::exception & e) {
     std::fprintf(stderr, "Fatal error: %s\n", e.what());
-    rclcpp::shutdown();
+    if (rclcpp::ok()) rclcpp::shutdown();
     return EXIT_FAILURE;
   }
 
-  rclcpp::shutdown();
+  if (rclcpp::ok()) rclcpp::shutdown();
   return EXIT_SUCCESS;
 }

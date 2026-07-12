@@ -16,18 +16,15 @@ find_package(behaviortree_ros2 REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 
-# include_directories(include)
 add_executable(lifecycle_manager  src/main.cpp src/lifecycle_manager.cpp)
 
-# add_executable(lifecycle_managersrc/main.cpp src/bringup_bt.cpp)
-ament_target_dependencies(
-  lifecycle_manager
-  rclcpp
-  behaviortree_cpp
-  ament_index_cpp
-  lifecycle_msgs
-  behaviortree_ros2
-  utils
+target_link_libraries(lifecycle_manager
+  rclcpp::rclcpp
+  behaviortree_cpp::behaviortree_cpp
+  ament_index_cpp::ament_index_cpp
+  lifecycle_msgs::lifecycle_msgs
+  behaviortree_ros2::behaviortree_ros2
+  utils::utils
 )
 
 # include_directories(include)

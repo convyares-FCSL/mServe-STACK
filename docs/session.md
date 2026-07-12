@@ -99,3 +99,78 @@ Web UI fixes:
   package layout (`mserve_interfaces`, `mserve_bringup`, per-package folders
   prefixed `mserve_`) that doesn't match current `ws/src/` folder names
   (`interfaces`, `utils`, `launch`).
+
+## 2026-07-12 — lifecycle_manager wired to real nodes, shutdown bug fixed
+
+### What was done
+
+- Removed leftover `hyfleet_subsystem`-derived scaffolding not used by
+  mserve: deleted `mserve_base_archive/` and the booster/compression
+  msgs+srvs (`ControlBooster`, `ControlCompressor`, `SystemState`,
+  `BoosterCmd`, `CompressorCmd`, `DispenserCmd`, `GasRouterCmd`, `SetMode`,
+  `Cmd`) from `interfaces/` — `interfaces/CMakeLists.txt` still listed the
+  deleted files in `rosidl_generate_interfaces()`, which broke a full
+  `colcon build`; fixed.
+- Vendored `behaviortree_ros2`/`btcpp_ros2_interfaces` at
+  `ws/src/BehaviorTree.ROS2/` (gitignored, `humble` branch) — `lifecycle_manager`
+  depended on these but the directory was an empty, never-populated stub.
+  Installed the two missing system deps (`libboost-dev`,
+  `ros-lyrical-generate-parameter-library`).
+- Fixed `lifecycle_manager`'s CMakeLists (same removed-`ament_target_dependencies()`
+  issue as the July SD-card migration, just not caught yet since it carried
+  no `COLCON_IGNORE` and was never built standalone).
+- `bringup.xml`/`shutdown.xml` still referenced the old `hyfleet_subsystem`
+  node names (`low_booster`, `high_booster`, `hyfleet_compression`) — retargeted
+  to the real `mserve_drivechain`/`mserve_base` nodes. Also fixed
+  `shutdown.xml`'s `transition="shutdown"`, which isn't a recognized
+  transition name (only `shutdown_unconfigured`/`_inactive`/`_active` are,
+  per `mserve_utils::lifecycle::transitionIdFromName`) — every shutdown
+  attempt would have failed that lookup.
+- **Found and fixed a real shutdown bug via testing**: `rclcpp::on_shutdown()`
+  fired after the ROS context was already invalidated, so the shutdown
+  tree's service calls silently failed and both nodes were left stuck
+  `active` on every SIGINT. Fixed with the standard pattern: `main.cpp`
+  disables rclcpp's default signal handling and installs a plain
+  `std::signal` handler that flags `shutdown_requested_`; the existing
+  100ms tick timer runs the shutdown tree while the context is still valid,
+  then calls `rclcpp::shutdown()` itself once it completes.
+- `mserve_min.launch.py` didn't launch `mserve_base` at all, and had two more
+  bugs: wrong executable name (`mserve_drivechain` instead of
+  `drivechain_node`), and a `name='drivechain'` override that would have
+  renamed the running node away from what `lifecycle_manager`'s tree
+  targets (`mserve_drivechain`) — silently breaking the whole integration.
+  Fixed, and added `backend`/`uart_device` launch args.
+- `run_drivechain_hw.sh` simplified per request: no longer spawns nodes or
+  calls `ros2 lifecycle set` itself — it launches `mserve_min.launch.py` and
+  waits for both nodes to reach `active`. Its `cleanup()` signals
+  `lifecycle_manager` directly (SIGINT) rather than relying on `ros2
+  launch`'s own signal cascade to children, which proved unreliable when
+  sent programmatically from a script's trap handler (worked fine sent
+  interactively to the `ros2 launch` process directly, but not when the
+  script did the same thing on its own SIGINT).
+- Verified end-to-end in `--sim` mode, repeatedly: bringup drives both
+  nodes `unconfigured → inactive → active` in order (drivechain then base),
+  and Ctrl+C now cleanly runs the shutdown tree (`mserve_base shut down` →
+  `mserve_drivechain Shutdown`) with zero leftover processes and no
+  force-kills needed.
+- Updated docs to match: this file, `readme.md`, `docs/TODO.md`,
+  `ws/src/lifecycle_manager/README.md` + `docs/todo.md`, `ws/src/launch/README.md`,
+  `web/README.md`.
+- Brought the four early-planning docs (`docs/architecture.md`,
+  `docs/packages.md`, `docs/milestones.md`, `docs/plan.md`) current too —
+  they'd drifted since the 05-31 planning session (`mserve_interfaces` →
+  `interfaces`, `mserve_bringup` → `launch`, no separate `mserve_esp32`,
+  `WheelCommand`/`WheelFeedback` → `MotorCommand`/`MotorState`/
+  `DriveMotorFeedback`, `lifecycle_manager` not in the plan at all,
+  `docs/milestones.md` checkmarks not matching actual test/description/sim
+  completion state). Kept the actual design content (control philosophy,
+  lifecycle rules, package responsibilities) unchanged — this pass only
+  corrected names/status against current `ws/src/`, not the decisions
+  themselves.
+
+### Not done yet
+
+- Only tested in `--sim`; hardware backend (`/dev/ttyAMA0`) not re-verified
+  against this session's changes.
+- Camera/lidar bring-up (see `docs/continue.md`) — no camera or lidar
+  hardware was detected connected to the Pi when checked this session.
