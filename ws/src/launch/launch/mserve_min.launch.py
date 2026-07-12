@@ -15,6 +15,7 @@ def generate_launch_description():
         'backend', default_value='hardware',
         description="mserve_drivechain backend: 'hardware' or 'sim'"
     )
+    
     uart_device_arg = DeclareLaunchArgument(
         'uart_device', default_value='/dev/ttyAMA0',
         description='UART device used by the hardware backend'
@@ -39,6 +40,14 @@ def generate_launch_description():
         parameters=[params_file]
     )
 
+    camera = Node(
+        package='mserve_camera',
+        executable='camera_node',
+        name='mserve_camera',
+        output='screen',
+        parameters=[params_file]
+    )
+
     lifecycle_manager = Node(
         package='lifecycle_manager',
         executable='lifecycle_manager',
@@ -51,5 +60,6 @@ def generate_launch_description():
         uart_device_arg,
         drivechain,
         base,
+        camera,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])

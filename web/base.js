@@ -114,6 +114,28 @@ document.getElementById('btn-stop').addEventListener('click', stopDrive);
 // Safety: stop driving if the page loses focus while a button is held.
 window.addEventListener('blur', stopDrive);
 
+// ── Image (via web_video_server MJPEG transcode) ──────────────────────────────
+
+const elCameraImage    = document.getElementById('camera-image');
+const elCameraPlaceholder = document.getElementById('camera-image-placeholder');
+
+const STREAM_URL = `http://${window.location.hostname}:8080/stream?topic=/camera/image_raw&type=mjpeg`;
+
+elCameraImage.addEventListener('error', () => {
+  elCameraImage.style.display = 'none';
+  elCameraPlaceholder.style.display = 'block';
+  setTimeout(startImageStream, 3000);
+});
+elCameraImage.addEventListener('load', () => {
+  elCameraImage.style.display = 'block';
+  elCameraPlaceholder.style.display = 'none';
+});
+
+function startImageStream() {
+  elCameraImage.src = `${STREAM_URL}&_ts=${Date.now()}`;
+}
+startImageStream();
+
 // ── Status subscriptions ─────────────────────────────────────────────────────
 
 new ROSLIB.Topic({

@@ -62,6 +62,36 @@
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
+      <Sequence name="camera_sequence">
+        <Fallback name="configure_camera_fallback">
+          <Inverter>
+            <IsInState name="is_camera_inactive"
+                       node_name="mserve_camera"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_camera"
+                             node_name="mserve_camera"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_camera_fallback">
+          <Inverter>
+            <IsInState name="is_camera_active"
+                       node_name="mserve_camera"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_camera"
+                             node_name="mserve_camera"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
     </Sequence>
   </BehaviorTree>
 

@@ -85,8 +85,10 @@ cleanup() {
   done
   if [[ "$USE_DOCKER" == true ]]; then
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
   else
     pkill -f rosbridge_websocket 2>/dev/null || true
+    pkill -f web_video_server    2>/dev/null || true
     pkill -f "http.server 6240"  2>/dev/null || true
   fi
 
@@ -99,13 +101,17 @@ cleanup() {
     # "a; b; c"), killing it before b/c ever run.
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node         2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server    2>/dev/null || true
   else
     pkill -9 -f drivechain_node     2>/dev/null || true
     pkill -9 -f base_node           2>/dev/null || true
+    pkill -9 -f camera_node         2>/dev/null || true
     pkill -9 -f lifecycle_manager   2>/dev/null || true
     pkill -9 -f rosbridge_websocket 2>/dev/null || true
+    pkill -9 -f web_video_server    2>/dev/null || true
   fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
@@ -162,20 +168,26 @@ fi
 if [[ "$USE_DOCKER" == true ]]; then
   # See note in cleanup() — one exec per pkill so each pattern actually runs.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node         2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager   2>/dev/null || true
   sleep 1
   # Force-kill any survivors so the new nodes don't end up with duplicate
   # /mserve_base or /mserve_drivechain registrations.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server    2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node         2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
 else
   pkill -f rosbridge_websocket  2>/dev/null || true
+  pkill -f web_video_server     2>/dev/null || true
   pkill -f drivechain_node      2>/dev/null || true
   pkill -f base_node            2>/dev/null || true
+  pkill -f camera_node          2>/dev/null || true
   pkill -f lifecycle_manager    2>/dev/null || true
   pkill -f "http.server 6240"   2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting
@@ -193,6 +205,22 @@ else
   # rosbridge throws a known rclpy/Tornado traceback on SIGINT shutdown (Jazzy
   # bug) — redirect to a log file so it doesn't spam the terminal on Ctrl+C.
   ros2 run rosbridge_server rosbridge_websocket --port 9090 > /tmp/rosbridge.log 2>&1 &
+  NATIVE_PIDS+=($!)
+fi
+sleep 1
+
+# ── Start web_video_server ────────────────────────────────────────────────────
+# Transcodes camera/image_raw (raw YUYV, not browser-decodable) to MJPEG over
+# plain HTTP on port 8080 — camera.html/base.html <img> tags point here.
+echo "Starting web_video_server on http://localhost:8080…"
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 run web_video_server web_video_server
+  "
+else
+  ros2 run web_video_server web_video_server > /tmp/web_video_server.log 2>&1 &
   NATIVE_PIDS+=($!)
 fi
 sleep 1

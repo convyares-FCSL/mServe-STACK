@@ -12,7 +12,8 @@
       <h1>mServe Debug Bridge</h1>
       <p>Connects to ROS via rosbridge and controls lifecycle + cmd_vel.
          &nbsp;|&nbsp; <a href="base.html" style="color:var(--accent)">Base →</a>
-         &nbsp;|&nbsp; <a href="drivechain.html" style="color:var(--accent)">Drivechain →</a></p>
+         &nbsp;|&nbsp; <a href="drivechain.html" style="color:var(--accent)">Drivechain →</a>
+         &nbsp;|&nbsp; <a href="camera.html" style="color:var(--accent)">Camera →</a></p>
       <div class="status-row">
         <span id="connection-status" class="status disconnected">Disconnected</span>
       </div>
@@ -42,6 +43,18 @@
             <button id="drivechain-deactivate">Deactivate</button>
             <button id="drivechain-cleanup">Cleanup</button>
             <button id="drivechain-shutdown" class="btn-danger">Shutdown</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>mserve_camera</h3>
+          <div class="node-state">State: <span id="camera-state" class="state-label">?</span></div>
+          <div class="button-row">
+            <button id="camera-configure">Configure</button>
+            <button id="camera-activate">Activate</button>
+            <button id="camera-deactivate">Deactivate</button>
+            <button id="camera-cleanup">Cleanup</button>
+            <button id="camera-shutdown" class="btn-danger">Shutdown</button>
           </div>
         </div>
       </div>

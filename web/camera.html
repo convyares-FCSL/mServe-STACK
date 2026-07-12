@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>mServe — Base</title>
+  <title>mServe — Camera</title>
   <link rel="stylesheet" href="style.css" />
   <style>
     .back-link {
@@ -15,35 +15,37 @@
     }
     .back-link:hover { text-decoration: underline; }
 
-    /* D-pad drive controls */
-    .dpad {
-      display: grid;
-      grid-template-columns: repeat(3, 84px);
-      grid-template-rows: repeat(3, 84px);
-      gap: 10px;
-      justify-content: center;
-      margin: 18px 0;
+    /* Parameters table (reused from drivechain) */
+    #params-table .param-name { font-family: 'Courier New', monospace; font-size: 0.8rem; }
+    #params-table input.param-input[type="text"] { width: 260px; }
+    .motor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
     }
-    .dpad-fwd   { grid-column: 2; grid-row: 1; }
-    .dpad-left  { grid-column: 1; grid-row: 2; }
-    .dpad-stop  { grid-column: 2; grid-row: 2; }
-    .dpad-right { grid-column: 3; grid-row: 2; }
-    .dpad-back  { grid-column: 2; grid-row: 3; }
-    .dpad-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      font-size: 1.6rem;
-      line-height: 1;
-      border-radius: 14px;
-      user-select: none;
-      touch-action: none;
+    .motor-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-bottom: 1px solid #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
     }
-    .dpad-btn .dpad-label { font-size: 0.7rem; }
+    .motor-table td { padding: 5px 10px; border-bottom: 1px solid #1e293b; }
+    .motor-table input[type="text"] {
+      background: var(--surface-2);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 0.85rem;
+    }
+    .motor-cmd-empty { color: #64748b; font-size: 0.85rem; padding: 10px 0; }
 
-    /* Image preview (reused from camera page) */
+    /* Image preview */
     #camera-image-wrap {
       background: #000;
       border-radius: 12px;
@@ -51,12 +53,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 200px;
+      min-height: 240px;
     }
     #camera-image { width: 100%; display: block; }
-    #camera-image-placeholder { color: #64748b; font-size: 0.85rem; padding: 30px 0; }
+    #camera-image-placeholder { color: #64748b; font-size: 0.85rem; padding: 40px 0; }
 
-    /* Feedback grid (reused from drivechain) */
+    /* Camera info grid (reused pattern from drivechain feedback-grid) */
     .feedback-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -108,8 +110,8 @@
     <a class="back-link" href="index.html">← mServe Debug Bridge</a>
 
     <header>
-      <h1>Base</h1>
-      <p>Command arbiter &amp; safety gate — /cmd_vel → wheel kinematics</p>
+      <h1>Camera</h1>
+      <p>USB webcam — V4L2 device wrapped as a lifecycle node</p>
       <div class="status-row">
         <span id="connection-status" class="status disconnected">ROS Disconnected</span>
       </div>
@@ -129,63 +131,59 @@
       </div>
     </section>
 
-    <!-- Drive controls ──────────────────────────────────────────────────── -->
+    <!-- Parameters ──────────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>Drive</h2>
-      <div class="form-grid">
-        <label for="speed-linear">Linear speed</label>
-        <input id="speed-linear" type="range" min="0" max="1.0" step="0.05" value="0.3" />
-        <span id="speed-linear-val">0.30 m/s</span>
-
-        <label for="speed-angular">Angular speed</label>
-        <input id="speed-angular" type="range" min="0" max="1.5" step="0.05" value="0.6" />
-        <span id="speed-angular-val">0.60 rad/s</span>
-      </div>
-
-      <div class="dpad">
-        <button id="btn-fwd"   class="dpad-btn dpad-fwd">▲<span class="dpad-label">Forward</span></button>
-        <button id="btn-left"  class="dpad-btn dpad-left">◀<span class="dpad-label">Left</span></button>
-        <button id="btn-stop"  class="dpad-btn dpad-stop btn-danger">■<span class="dpad-label">Stop</span></button>
-        <button id="btn-right" class="dpad-btn dpad-right">▶<span class="dpad-label">Right</span></button>
-        <button id="btn-back"  class="dpad-btn dpad-back">▼<span class="dpad-label">Backward</span></button>
-      </div>
-
-      <p style="font-size:0.8rem;color:#64748b;margin:0">
-        Press and hold a direction to drive at the selected speed; release to stop.
-        Publishes <code>/cmd_vel</code> at 10 Hz while held.
+      <h2>Parameters</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        <code>device</code>/<code>width</code>/<code>height</code> require the node to be
+        <strong>unconfigured</strong> to take effect.
       </p>
+      <div class="button-row" style="margin-bottom:12px">
+        <button id="btn-params-refresh">Refresh</button>
+        <button id="btn-params-apply">Apply Changes</button>
+      </div>
+      <table class="motor-table" id="params-table">
+        <thead>
+          <tr><th>Parameter</th><th>Value</th></tr>
+        </thead>
+        <tbody id="params-table-body">
+          <tr><td colspan="2" class="motor-cmd-empty">Click Refresh to load parameters.</td></tr>
+        </tbody>
+      </table>
+      <div id="params-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 
-    <!-- Image ──────────────────────────────────────────────────────────── -->
+    <!-- Image ───────────────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>Camera</h2>
+      <h2>Image</h2>
       <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
-        Live feed while driving — see <a href="camera.html" style="color:var(--accent)">Camera page →</a>
-        for lifecycle/parameter controls.
+        Served by <code>web_video_server</code> (port 8080) — raw YUYV can't be
+        decoded directly in a browser, so it transcodes to MJPEG server-side.
       </p>
       <div id="camera-image-wrap">
         <img id="camera-image" alt="camera stream" />
-        <div id="camera-image-placeholder">No stream — activate mserve_camera first.</div>
+        <div id="camera-image-placeholder">Activate the node to see a live image.</div>
       </div>
     </section>
 
-    <!-- Status ──────────────────────────────────────────────────────────── -->
+    <!-- Camera info ─────────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>Status</h2>
+      <h2>Camera Info</h2>
       <div class="feedback-grid">
         <div class="feedback-card">
-          <h4>Safe Twist (clamped)</h4>
-          <div class="feedback-value" id="safe-linear">0.00</div>
-          <div class="feedback-unit">linear.x m/s</div>
-          <div class="feedback-value" id="safe-angular" style="margin-top:8px">0.00</div>
-          <div class="feedback-unit">angular.z rad/s</div>
+          <h4>Resolution</h4>
+          <div class="feedback-value" id="info-resolution">—</div>
+          <div class="feedback-unit">width × height (px)</div>
         </div>
         <div class="feedback-card">
-          <h4>Bridge status</h4>
-          <div class="feedback-value" id="bridge-status">—</div>
-          <div class="feedback-unit" id="bridge-detail">—</div>
+          <h4>Frame</h4>
+          <div class="feedback-value" id="info-frame-id" style="font-size:1.1rem">—</div>
+          <div class="feedback-unit" id="info-distortion">—</div>
         </div>
       </div>
+      <p id="info-placeholder" style="color:#64748b;font-size:0.85rem;margin:12px 0 0">
+        Waiting for camera_info… (Activate the node first)
+      </p>
     </section>
 
     <!-- Logs ────────────────────────────────────────────────────────────── -->
@@ -201,6 +199,6 @@
   </div>
 
   <script src="roslib.min.js"></script>
-  <script src="base.js"></script>
+  <script src="camera.js"></script>
 </body>
 </html>

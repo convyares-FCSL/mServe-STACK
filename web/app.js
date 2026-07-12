@@ -79,13 +79,11 @@ function applyState(prefix, nodeName, state) {
 }
 
 function refreshStates() {
-  getState('mserve_base')
-    .then((state) => applyState('base', 'mserve_base', state))
-    .catch(() => applyState('base', 'mserve_base', null));
-
-  getState('mserve_drivechain')
-    .then((state) => applyState('drivechain', 'mserve_drivechain', state))
-    .catch(() => applyState('drivechain', 'mserve_drivechain', null));
+  Object.entries(nodePrefix).forEach(([prefix, nodeName]) => {
+    getState(nodeName)
+      .then((state) => applyState(prefix, nodeName, state))
+      .catch(() => applyState(prefix, nodeName, null));
+  });
 }
 
 const transitions = {
@@ -97,11 +95,11 @@ const transitions = {
 
 const shutdownIds = { unconfigured: 5, inactive: 6, active: 7 };
 
-const nodeStates = { mserve_base: null, mserve_drivechain: null };
+const nodeStates = { mserve_base: null, mserve_drivechain: null, mserve_camera: null };
 
-const nodePrefix = { base: 'mserve_base', drivechain: 'mserve_drivechain' };
+const nodePrefix = { base: 'mserve_base', drivechain: 'mserve_drivechain', camera: 'mserve_camera' };
 
-['base', 'drivechain'].forEach((prefix) => {
+Object.keys(nodePrefix).forEach((prefix) => {
   ['configure', 'activate', 'deactivate', 'cleanup'].forEach((action) => {
     document.getElementById(`${prefix}-${action}`).addEventListener('click', () => {
       changeState(nodePrefix[prefix], transitions[action]);

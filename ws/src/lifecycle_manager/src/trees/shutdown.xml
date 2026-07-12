@@ -32,6 +32,21 @@
             </Fallback>
         </Sequence>
 
+        <Sequence name="camera_sequence">
+            <Fallback name="shutdown_camera_fallback">
+                <IsInState
+                    name="is_camera_finalized"
+                    node_name="mserve_camera"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_camera"
+                    node_name="mserve_camera"
+                    transition="shutdown_active"
+                />
+            </Fallback>
+        </Sequence>
+
         </Sequence>
     </BehaviorTree>
 </root>

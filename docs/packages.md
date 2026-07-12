@@ -24,8 +24,8 @@ mServe-STACK/
         ├── mserve_base/
         ├── mserve_drivechain/       (folds in the planned mserve_esp32 boundary)
         ├── lifecycle_manager/       (not in the original plan — see its own section)
+        ├── mserve_camera/           done — see its own section (not "planned" below anymore)
         ├── mserve_lidar/            planned
-        ├── mserve_camera/           planned
         ├── mserve_display/         planned
         ├── mserve_sim/              planned
         ├── mserve_navigation/       planned
@@ -232,17 +232,23 @@ transitions by hand. See `ws/src/lifecycle_manager/README.md` for the full
 package layout, the transition-name table, and how to add a new managed
 node to the tree (XML only, no C++ changes needed).
 
+## `mserve_camera`
+
+Not in the original plan either — added the same session as `lifecycle_manager`.
+Lifecycle node wrapping `v4l2_camera`'s `V4l2CameraDevice` class directly
+(same "wrap the class, not someone else's node" pattern `lifecycle_manager`
+established), publishing standard `sensor_msgs/Image`/`CameraInfo` so any
+ROS node — RViz, a future AI package — can consume it without knowing
+mServe exists. See `ws/src/mserve_camera/README.md` for pixel-format
+reasoning, parameters, and known gaps (frame rate, no calibration, mic
+deferred).
+
 ## Later Packages
 
 `mserve_lidar`:
 
 - Wrap or adapt the chosen lidar driver.
 - Keep filtering/health logic testable.
-
-`mserve_camera`:
-
-- Wrap or adapt camera source.
-- Reserve image topics for future AI.
 
 `mserve_display`:
 

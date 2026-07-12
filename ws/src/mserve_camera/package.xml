@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_camera</name>
+  <version>0.1.0</version>
+  <description>
+    Lifecycle-managed camera node for mServe. Wraps v4l2_camera's
+    V4l2CameraDevice (raw V4L2 device access, not the whole v4l2_camera_node)
+    so bringup/shutdown is gated the same way as mserve_drivechain/mserve_base
+    via lifecycle_manager. Publishes standard sensor_msgs/Image + CameraInfo.
+  </description>
+  <maintainer email="ca99896@gmail.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>sensor_msgs</depend>
+  <depend>v4l2_camera</depend>
+  <depend>utils</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -73,7 +73,10 @@ e.g. on this Pi (static Wi-Fi IP): `http://172.16.68.73:6240/drivechain.html` /
 To run it manually instead — e.g. after stopping the service, or for development — use:
 
 ```bash
+source /opt/ros/lyrical/setup.bash
 ./web/run_drivechain_hw.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+
+
 ./web/run_drivechain_hw.sh --sim        # simulated backend, no hardware needed
 ./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
