@@ -43,10 +43,10 @@ ws/src/
 ## Files
 
 - `.env`: local runtime settings (gitignored).
-- `Dockerfile` / `docker-compose.yml`: legacy — the stack ran in Docker before the July 2026 migration to the Ubuntu 26.04 SD card. Left in place for reference but unused; `run_drivechain_hw.sh` only falls back to them if it can't find `ros2` on PATH.
+- `Dockerfile` / `docker-compose.yml`: legacy — the stack ran in Docker before the July 2026 migration to the Ubuntu 26.04 SD card. Left in place for reference but unused; `run_stack.sh` only falls back to them if it can't find `ros2` on PATH.
 - `docs/`: design notes, milestones, session log, task tracker.
-- `scripts/`: helper scripts by phase.
-- `web/`: debug browser UI (lifecycle control + cmd_vel publisher) and `run_drivechain_hw.sh`, the main entry point for the hardware stack.
+- `scripts/`: all helper scripts, flat and topic-named (`scripts/README.md` has the full list).
+- `web/`: debug browser UI (lifecycle control + cmd_vel publisher), served by `scripts/run_stack.sh`.
 - `ws/`: ROS 2 workspace (`ws/src/`), built natively with `colcon`.
 
 ## Docs
@@ -74,11 +74,11 @@ To run it manually instead — e.g. after stopping the service, or for developme
 
 ```bash
 source /opt/ros/lyrical/setup.bash
-./web/run_drivechain_hw.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+./scripts/run_stack.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
 
 
-./web/run_drivechain_hw.sh --sim        # simulated backend, no hardware needed
-./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
+./scripts/run_stack.sh --sim        # simulated backend, no hardware needed
+./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
 This expects the workspace already built (falls back to the legacy `robot-mserve` Docker container only if `ros2` isn't found on PATH), starts rosbridge, then launches `mserve_drivechain` + `mserve_base` + `lifecycle_manager` together via `ws/src/launch/launch/mserve_min.launch.py` — `lifecycle_manager` is the one driving configure/activate now, not the script itself — and serves the debug UI at the same URLs above once both nodes report `active`.
@@ -87,7 +87,7 @@ The UI shows lifecycle state for both nodes and allows configure/activate/deacti
 
 ## Running on boot (systemd)
 
-`mserve-drivechain.service` (native — no Docker dependency) sources ROS 2 Lyrical + the workspace and runs `./web/run_drivechain_hw.sh` on boot, so the robot comes up ready on power-on.
+`mserve-drivechain.service` (native — no Docker dependency) sources ROS 2 Lyrical + the workspace and runs `./scripts/run_stack.sh` on boot, so the robot comes up ready on power-on.
 
 ```bash
 sudo systemctl status mserve-drivechain      # check it's running
@@ -132,8 +132,8 @@ If you're building this from scratch on an even newer distro and hit
 `Unknown CMake command "ament_target_dependencies"`, this is why.
 
 The Docker path (`docker compose build robot-mserve`,
-`scripts/05_utils/docker_build_workspace.sh`) still exists as a fallback —
-`run_drivechain_hw.sh` uses it automatically if `ros2` isn't on PATH — but
+`scripts/docker/docker_build_workspace.sh`) still exists as a fallback —
+`run_stack.sh` uses it automatically if `ros2` isn't on PATH — but
 is no longer the primary workflow on this Pi.
 
 ## Runtime parameter updates (no restart needed)
@@ -149,7 +149,7 @@ ros2 param describe /mserve_base limits.max_linear_speed
 
 ## Stop / remove
 
-To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_drivechain_hw.sh` manually) — see [Running on boot](#running-on-boot-systemd). Since everything runs as native processes now, `stop` is the whole story — there's no container to separately remove.
+To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_stack.sh` manually) — see [Running on boot](#running-on-boot-systemd). Since everything runs as native processes now, `stop` is the whole story — there's no container to separately remove.
 
 ## Logs
 
@@ -157,7 +157,7 @@ To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C 
 sudo journalctl -u mserve-drivechain -f
 ```
 
-rosbridge's own log is written to `/tmp/rosbridge.log` (see `run_drivechain_hw.sh`).
+rosbridge's own log is written to `/tmp/rosbridge.log` (see `run_stack.sh`).
 
 Grafana/Loki (if running):
 

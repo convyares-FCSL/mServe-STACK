@@ -81,7 +81,7 @@ Primary RViz-only path:
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_rviz.sh
+scripts/sim/launch_mserve_description_rviz.sh
 ```
 
 This script:
@@ -106,14 +106,14 @@ Primary Gazebo path:
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh
+scripts/sim/launch_mserve_description_gazebo.sh
 ```
 
 Headless Gazebo path for RViz-only sensor inspection:
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh --headless
+scripts/sim/launch_mserve_description_gazebo.sh --headless
 ```
 
 This script:
@@ -137,10 +137,10 @@ This script:
 
 ```bash
 # Slower machine — give Gazebo more time before spawning
-scripts/05_utils/launch_mserve_description_gazebo.sh spawn_delay:=15.0
+scripts/sim/launch_mserve_description_gazebo.sh spawn_delay:=15.0
 
 # Headless with a longer spawn delay
-scripts/05_utils/launch_mserve_description_gazebo.sh --headless spawn_delay:=15.0
+scripts/sim/launch_mserve_description_gazebo.sh --headless spawn_delay:=15.0
 ```
 
 Manual Gazebo launch:
@@ -169,7 +169,7 @@ Terminal 1: launch Gazebo
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh --headless
+scripts/sim/launch_mserve_description_gazebo.sh --headless
 ```
 
 Terminal 2: source the host install space
@@ -237,7 +237,7 @@ The modern Gazebo Sim (Harmonic) integration uses:
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh --headless
+scripts/sim/launch_mserve_description_gazebo.sh --headless
 ```
 
 **Terminal 2**: Publish velocity commands
@@ -304,7 +304,7 @@ Notes:
 
 ```bash
 cd /home/ecm/mServe-STACK
-scripts/05_utils/launch_mserve_description_gazebo.sh --headless
+scripts/sim/launch_mserve_description_gazebo.sh --headless
 ```
 
 **Terminal 2**: Launch teleop
@@ -363,7 +363,7 @@ it to silently drop the request. If the entity tree shows the world objects
 (ground plane, barrels, cones) but not the robot, increase the delay:
 
 ```bash
-scripts/05_utils/launch_mserve_description_gazebo.sh spawn_delay:=20.0
+scripts/sim/launch_mserve_description_gazebo.sh spawn_delay:=20.0
 ```
 
 ### World obstacles not loading (model:// URI errors)

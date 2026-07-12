@@ -6,7 +6,7 @@
 - [x] Publish `sensor_msgs/Image` (`camera/image_raw`) + `sensor_msgs/CameraInfo` (`camera/camera_info`)
 - [x] Wire into `lifecycle_manager`'s bringup/shutdown trees
 - [x] Wire into `mserve_min.launch.py`
-- [x] Add to `run_drivechain_hw.sh`'s process-cleanup lists (drivechain/base/camera/lifecycle_manager)
+- [x] Add to `run_stack.sh`'s process-cleanup lists (drivechain/base/camera/lifecycle_manager)
 - [x] Web UI: `web/camera.html` — lifecycle, parameters, live image (via `web_video_server`), camera_info, logs
 - [x] Web UI: image preview added to `web/base.html` too (for driving while watching the feed)
 - [x] Verified end-to-end in `--sim` and with the real USB webcam: bringup → active → frames flowing → graceful shutdown

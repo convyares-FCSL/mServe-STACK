@@ -2,15 +2,15 @@
 # Starts a Zenoh router on the Pi so a remote RViz (e.g. on Thor) can see this
 # machine's ROS graph without relying on DDS multicast discovery, which
 # doesn't reliably cross Tailscale/multi-interface boxes. Companion script:
-# scripts/04_launch/launch_remote_rviz_zenoh.sh, run on the *remote* machine.
+# scripts/remote/launch_remote_rviz_zenoh.sh, run on the *remote* machine.
 #
 # Run this once, leave it running, then start the robot stack as normal
-# (./web/run_drivechain_hw.sh) — the router and the robot nodes are
+# (./scripts/run_stack.sh) — the router and the robot nodes are
 # independent processes; either can be (re)started without touching the
 # other. Ctrl+C stops the router.
 #
 # Usage:
-#   ./scripts/04_launch/start_zenoh_router.sh
+#   ./scripts/remote/start_zenoh_router.sh
 
 set -eo pipefail
 
@@ -38,7 +38,7 @@ command -v tailscale >/dev/null 2>&1 && echo "    tcp/$(tailscale ip -4 2>/dev/n
 echo ""
 echo "On the remote machine, point at whichever address it can actually"
 echo "reach and run:"
-echo "  $ROOT_DIR/scripts/04_launch/launch_remote_rviz_zenoh.sh <this-pi's-ip>"
+echo "  $ROOT_DIR/scripts/remote/launch_remote_rviz_zenoh.sh <this-pi's-ip>"
 echo ""
 echo "Press Ctrl+C to stop the router."
 echo ""

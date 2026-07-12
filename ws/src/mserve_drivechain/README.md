@@ -209,8 +209,10 @@ web/
 ├── drivechain.html     — drivechain control page
 ├── drivechain.js
 ├── index.html          — main debug bridge (links to drivechain page)
-├── run_drivechain_hw.sh — one-command stack launcher (sim or hardware)
 └── roslib.min.js
+
+scripts/
+└── run_stack.sh — one-command stack launcher (sim or hardware), serves web/ on :6240
 ```
 
 The web UI talks to four ROS services directly — no topic publisher, no DDS discovery delay:
@@ -224,14 +226,14 @@ The web UI talks to four ROS services directly — no topic publisher, no DDS di
 
 ### Quick launch (recommended)
 
-The `run_drivechain_hw.sh` script starts rosbridge, the drivechain node, runs the lifecycle, and serves the web UI — all in one command. Press **Ctrl+C** to cleanly stop everything.
+The `run_stack.sh` script starts rosbridge, the drivechain node, runs the lifecycle, and serves the web UI — all in one command. Press **Ctrl+C** to cleanly stop everything.
 
 **The script auto-detects whether ROS 2 is installed natively.** If `ros2` is not found (e.g., on a Raspberry Pi running Debian without ROS), it falls back automatically to Docker — starting the container, building the packages inside it, and routing all ROS commands through `docker compose exec`.
 
 **Sim (no hardware needed):**
 ```bash
 cd ~/mServe-STACK
-./web/run_drivechain_hw.sh --sim
+./scripts/run_stack.sh --sim
 # Open: http://localhost:6240/drivechain.html
 ```
 
@@ -239,11 +241,11 @@ cd ~/mServe-STACK
 ```bash
 cd ~/mServe-STACK
 # Ensure Pi UART is configured (see One-time Pi setup) and motor IDs are set
-./web/run_drivechain_hw.sh
+./scripts/run_stack.sh
 # Open: http://<pi-ip>:6240/drivechain.html
 
 # Custom UART device (e.g. USB instead of the GPIO header):
-./web/run_drivechain_hw.sh /dev/ttyACM0
+./scripts/run_stack.sh /dev/ttyACM0
 ```
 
 The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell at a glance which mode is running.
@@ -251,12 +253,12 @@ The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell 
 ### Running on this Pi (native, as of the July 2026 SD-card migration)
 
 This Pi now has ROS 2 (Lyrical) and a C++ toolchain installed natively — no
-Docker needed. `run_drivechain_hw.sh` detects `ros2` on PATH and runs
+Docker needed. `run_stack.sh` detects `ros2` on PATH and runs
 everything as native processes, including the web UI on port **6240**
 (`http://<pi-ip>:6240/drivechain.html`). `mserve-drivechain.service`
 (systemd, native, runs as the `ecm` user) starts this automatically on boot.
 
-The section below (Docker) is kept for reference — it's what `run_drivechain_hw.sh`
+The section below (Docker) is kept for reference — it's what `run_stack.sh`
 falls back to automatically on a *different* Pi/Debian box that has no ROS
 installation at all.
 
@@ -278,12 +280,12 @@ git clone <repo-url> ~/mServe-STACK
 cd ~/mServe-STACK
 
 # First run: Docker builds the image and compiles the ROS packages (takes a few minutes)
-./web/run_drivechain_hw.sh
+./scripts/run_stack.sh
 
 # Subsequent runs: incremental build, much faster
 ```
 
-On a Pi with no native ROS, `run_drivechain_hw.sh` automatically:
+On a Pi with no native ROS, `run_stack.sh` automatically:
 1. Detects that `ros2` is not available natively
 2. Starts the `robot-mserve` Docker container
 3. Runs `colcon build` inside the container
@@ -293,7 +295,7 @@ On a Pi with no native ROS, `run_drivechain_hw.sh` automatically:
 
 The web server always runs natively (Python is always available on Debian), so the browser URL is simply `http://<pi-ip>:6240/drivechain.html` from any machine on the same network.
 
-> **Serial device passthrough**: `docker-compose.yml` maps `/dev/ttyAMA0` (the Pi 5 GPIO header UART, see [UART device path](#uart-device-path--raspberry-pi-5-vs-pi-4)) into the container and adds the `dialout` group. If your setup uses a different device (e.g., `/dev/ttyACM0` over USB), pass it as an argument: `./web/run_drivechain_hw.sh /dev/ttyACM0` — but also update `docker-compose.yml` devices accordingly.
+> **Serial device passthrough**: `docker-compose.yml` maps `/dev/ttyAMA0` (the Pi 5 GPIO header UART, see [UART device path](#uart-device-path--raspberry-pi-5-vs-pi-4)) into the container and adds the `dialout` group. If your setup uses a different device (e.g., `/dev/ttyACM0` over USB), pass it as an argument: `./scripts/run_stack.sh /dev/ttyACM0` — but also update `docker-compose.yml` devices accordingly.
 
 ### Web UI controls
 

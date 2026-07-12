@@ -2,27 +2,25 @@
 
 ## Script Shape
 
-Scripts should encode build order and hygiene, not hide ROS 2.
+Scripts should encode build order and hygiene, not hide ROS 2. The section
+below was an early plan for a numbered, phase-based layout — the actual
+`scripts/` folder ended up flat and topic-named instead (easier to scan than
+hunting through numbered phase folders). Current layout, see
+`scripts/README.md` for the full reference:
 
 ```text
 scripts/
-├── 01_setup/
-│   └── build_interfaces.sh
-├── 02_bootstrap/
-│   └── build_cpp.sh
-├── 03_packages/
-│   ├── build_core.sh
-│   ├── build_sim.sh
-│   └── build_nav.sh
-├── 04_tests/
-│   ├── run_all.sh
-│   ├── run_cpp.sh
-│   └── run_integration.sh
-└── 05_utils/
-    ├── clean_all.sh
-    ├── debug_ros_graph.sh
-    ├── env_setup.sh
-    └── kill_mserve.sh
+├── run_stack.sh        run_rosbridge.sh    run_web_only.sh    clean_all.sh
+├── setup/               env_setup.sh, deps_setup.sh
+├── build/               build_workspace.sh, build_packages.sh
+├── remote/              launch_remote_rviz.sh, launch_remote_rviz_zenoh.sh,
+│                        launch_remote_teleop.sh, start_zenoh_router.sh
+├── sim/                 launch_mserve_description_gazebo.sh,
+│                        launch_mserve_description_rviz.sh,
+│                        stop_mserve_description_gazebo.sh
+├── docker/              docker_build_workspace.sh, docker_launch_mserve.sh,
+│                        docker_webbridge.sh
+└── test/                run_tests.sh
 ```
 
 ## Build Order

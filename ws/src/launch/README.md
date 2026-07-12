@@ -30,7 +30,7 @@ source install/setup.bash
 ros2 launch launch mserve_min.launch.py backend:=sim
 ```
 
-`web/run_drivechain_hw.sh` is the normal entry point — it calls this launch
+`scripts/run_stack.sh` is the normal entry point — it calls this launch
 file with the right args for `--sim`/hardware mode and waits for both nodes
 to reach `active` before serving the debug web UI.
 

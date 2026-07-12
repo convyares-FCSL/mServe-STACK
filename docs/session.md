@@ -94,7 +94,7 @@ Web UI fixes:
 
 - Package-level READMEs (e.g. `ws/src/mserve_drivechain/README.md`) reference
   a stale path (`~/ai-workspace/projects/mServe-STACK`) and port 8080 for the
-  web UI; the actual `run_drivechain_hw.sh` serves on port 6240.
+  web UI; the actual `run_stack.sh` serves on port 6240.
 - `docs/milestones.md`, `docs/packages.md`, `docs/TODO.md` describe an early
   package layout (`mserve_interfaces`, `mserve_bringup`, per-package folders
   prefixed `mserve_`) that doesn't match current `ws/src/` folder names
@@ -140,7 +140,7 @@ Web UI fixes:
   renamed the running node away from what `lifecycle_manager`'s tree
   targets (`mserve_drivechain`) — silently breaking the whole integration.
   Fixed, and added `backend`/`uart_device` launch args.
-- `run_drivechain_hw.sh` simplified per request: no longer spawns nodes or
+- `run_stack.sh` simplified per request: no longer spawns nodes or
   calls `ros2 lifecycle set` itself — it launches `mserve_min.launch.py` and
   waits for both nodes to reach `active`. Its `cleanup()` signals
   `lifecycle_manager` directly (SIGINT) rather than relying on `ros2
@@ -208,7 +208,7 @@ Web UI fixes:
   (`app.js`'s per-node loops were already keyed off a `nodePrefix` map, so
   this was a 2-line change).
 - Bug found via testing: forgot to add `camera_node` to
-  `run_drivechain_hw.sh`'s process-cleanup lists when scaffolding the new
+  `run_stack.sh`'s process-cleanup lists when scaffolding the new
   package — the shutdown tree correctly drove it to `finalized`, but nothing
   then killed the OS process. Fixed in all 5 spots (matches `drivechain_node`'s
   coverage).

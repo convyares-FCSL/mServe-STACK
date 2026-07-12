@@ -2,15 +2,15 @@
 # Launches RViz pointed at a Zenoh router running on the mServe Pi, instead of
 # relying on DDS multicast discovery (which doesn't reliably cross Tailscale
 # or multi-interface boxes like Thor). Companion script — run on the Pi
-# first, leave it running: scripts/04_launch/start_zenoh_router.sh
+# first, leave it running: scripts/remote/start_zenoh_router.sh
 #
 # Usage:
-#   ./scripts/04_launch/launch_remote_rviz_zenoh.sh [pi_ip] [rviz_config]
+#   ./scripts/remote/launch_remote_rviz_zenoh.sh [pi_ip] [rviz_config]
 #
 # Examples:
-#   ./scripts/04_launch/launch_remote_rviz_zenoh.sh                        # LAN default below
-#   ./scripts/04_launch/launch_remote_rviz_zenoh.sh 172.16.68.73           # explicit LAN IP
-#   ./scripts/04_launch/launch_remote_rviz_zenoh.sh 100.122.150.74         # Tailscale IP (off-LAN)
+#   ./scripts/remote/launch_remote_rviz_zenoh.sh                        # LAN default below
+#   ./scripts/remote/launch_remote_rviz_zenoh.sh 172.16.68.73           # explicit LAN IP
+#   ./scripts/remote/launch_remote_rviz_zenoh.sh 100.122.150.74         # Tailscale IP (off-LAN)
 
 set -eo pipefail
 
@@ -76,8 +76,8 @@ if ros2 node list 2>/dev/null | grep -q mserve; then
   ros2 node list | sed 's/^/  /'
 else
   echo "Warning: no mserve_* nodes visible yet."
-  echo "  - Is scripts/04_launch/start_zenoh_router.sh running on the Pi?"
-  echo "  - Is the robot stack (./web/run_drivechain_hw.sh) running on the Pi?"
+  echo "  - Is scripts/remote/start_zenoh_router.sh running on the Pi?"
+  echo "  - Is the robot stack (./scripts/run_stack.sh) running on the Pi?"
   echo "  - Continuing anyway — the graph may still be settling."
 fi
 echo ""

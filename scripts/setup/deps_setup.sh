@@ -48,4 +48,4 @@ colcon build --packages-select behaviortree_ros2
 echo "[deps_setup] All dependencies ready."
 echo ""
 echo "Next: build the workspace with:"
-echo "  bash scripts/02_bootstrap/build_workspace.sh"
+echo "  bash scripts/build/build_workspace.sh"

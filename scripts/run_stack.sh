@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# run_drivechain_hw.sh
+# run_stack.sh
 #
-# Starts the full drive stack (mserve_drivechain + mserve_base) — works both
-# natively (if ROS is installed) and inside the mserve Docker container
-# (Raspberry Pi / Debian).
+# Starts the full mServe stack (mserve_drivechain + mserve_base + mserve_camera
+# + robot_state_publisher, all lifecycle-managed by lifecycle_manager) plus
+# rosbridge and the debug web UI — works both natively (if ROS is installed)
+# and inside the mserve Docker container (Raspberry Pi / Debian).
 #
 # Usage:
-#   ./web/run_drivechain_hw.sh [--sim] [uart_device]
+#   ./scripts/run_stack.sh [--sim] [uart_device]
 #
 # Examples:
-#   ./web/run_drivechain_hw.sh --sim             # sim, no hardware needed
-#   ./web/run_drivechain_hw.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
-#   ./web/run_drivechain_hw.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
+#   ./scripts/run_stack.sh --sim             # sim, no hardware needed
+#   ./scripts/run_stack.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+#   ./scripts/run_stack.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
@@ -280,7 +281,7 @@ wait_for_active /mserve_base
 
 # ── Web server (always native — Python is always available) ───────────────────
 echo "Starting web server on http://localhost:6240…"
-cd "$SCRIPT_DIR"
+cd "$ROOT_DIR/web"
 python3 -m http.server 6240 &
 NATIVE_PIDS+=($!)
 

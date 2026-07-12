@@ -8,13 +8,13 @@ Raspberry Pi 5. Full design philosophy: `readme.md` and `docs/architecture.md`.
 ## Runtime environment (as of the July 2026 SD-card migration)
 
 - Runs **natively** on ROS 2 **Lyrical** (Ubuntu 26.04 "Resolute") — no Docker.
-  `Dockerfile`/`docker-compose.yml` are legacy fallback only; `run_drivechain_hw.sh`
+  `Dockerfile`/`docker-compose.yml` are legacy fallback only; `run_stack.sh`
   uses them automatically only if `ros2` isn't found on PATH.
 - Originally built against ROS 2 Jazzy. If building from scratch on a newer distro
   and `ament_target_dependencies()` errors as an unknown CMake command, see Build below.
 - Boots via `mserve-drivechain.service` (systemd, native — sources
   `/opt/ros/lyrical/setup.bash` + `ws/install/setup.bash`, then runs
-  `web/run_drivechain_hw.sh`).
+  `scripts/run_stack.sh`).
 - Gazebo + RViz simulation run on the NVIDIA Thor — not a PC/WSL2, and not the Pi
   itself (Pi 5 has no compute GPU and stays hardware-only).
 
@@ -65,8 +65,8 @@ deprecated). Use `target_link_libraries()` with modern imported targets instead 
 ## Run
 
 ```bash
-./web/run_drivechain_hw.sh          # hardware, /dev/ttyAMA0
-./web/run_drivechain_hw.sh --sim    # sim backend, no hardware needed
+./scripts/run_stack.sh          # hardware, /dev/ttyAMA0
+./scripts/run_stack.sh --sim    # sim backend, no hardware needed
 ```
 
 Web UI: `http://<pi-ip>:6240/drivechain.html`, `http://<pi-ip>:6240/base.html`.

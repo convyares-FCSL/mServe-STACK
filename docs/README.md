@@ -28,7 +28,7 @@ The C++ lessons in `/home/ecm/ros2-systems-operability/src/2_cpp` are the main s
 
 **As of the July 2026 SD-card migration, this Pi runs the stack natively — no
 Docker.** The Docker workflow below is kept as a documented fallback only
-(`run_drivechain_hw.sh` uses it automatically if `ros2` isn't found on PATH);
+(`run_stack.sh` uses it automatically if `ros2` isn't found on PATH);
 it is no longer the recommended path on this machine.
 
 ### Host-native workflow (recommended)
@@ -48,8 +48,8 @@ both lifecycle nodes, and serves the debug web UI:
 
 ```bash
 cd /home/ecm/mServe-STACK
-./web/run_drivechain_hw.sh          # hardware
-./web/run_drivechain_hw.sh --sim    # sim backend, no hardware needed
+./scripts/run_stack.sh          # hardware
+./scripts/run_stack.sh --sim    # sim backend, no hardware needed
 ```
 
 **Note on ROS distro:** this was originally built against ROS 2 Jazzy; it now
@@ -61,9 +61,9 @@ if you're building from scratch on a newer distro.
 
 ```bash
 docker compose up -d --build robot-mserve
-scripts/05_utils/docker_build_workspace.sh
-scripts/05_utils/docker_launch_mserve.sh
-scripts/05_utils/docker_webbridge.sh both
+scripts/docker/docker_build_workspace.sh
+scripts/docker/docker_launch_mserve.sh
+scripts/docker/docker_webbridge.sh both
 ```
 
 This launches rosbridge inside the `robot-mserve` container and serves the web UI at `http://localhost:8080`.
@@ -91,21 +91,18 @@ This current skeleton provides:
 
 A simple browser UI is available under `web/` for lifecycle and drive command testing.
 
-The current entry point is `./web/run_drivechain_hw.sh` (see above), which
-serves the UI on port **6240** — `http://<pi-ip>:6240/drivechain.html` and
-`.../base.html`. (Older instructions below reference `run_rosbridge.sh`/`run.sh`
-and port 8080; those scripts may be stale — check `web/` before relying on them.)
-
-```bash
-cd /home/ecm/mServe-STACK/web
-./run_rosbridge.sh
-./run.sh
-```
+The current entry point is `./scripts/run_stack.sh` (see above), which
+serves the UI on port **6240** — `http://<pi-ip>:6240/drivechain.html`,
+`.../base.html`, `.../camera.html`. `scripts/run_rosbridge.sh` and
+`scripts/run_web_only.sh` are standalone helpers for when the drive stack is
+already running some other way (see `web/README.md`).
 
 The UI connects to ROS via rosbridge at `ws://localhost:9090` and can:
 
-- query `/mserve_base` and `/mserve_drivechain` lifecycle state
+- query `/mserve_base`, `/mserve_drivechain`, `/mserve_camera` lifecycle state
 - trigger lifecycle transitions
 - publish `/cmd_vel` commands
 
-A central lifecycle manager is still a future milestone, but this web bridge makes the current node-level lifecycle visible and controllable during development.
+`lifecycle_manager` now drives configure/activate/shutdown on bringup — this
+web bridge is for manual transitions and observability during development,
+not the primary bringup path anymore.

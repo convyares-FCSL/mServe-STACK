@@ -31,7 +31,7 @@
   `shutdown_requested_`; the existing 100ms tick timer in `build()` checks
   that flag, runs `shutdown_tree_` while the context is still valid, and
   calls `rclcpp::shutdown()` itself once the tree completes. Also fixed:
-  `run_drivechain_hw.sh` now signals `lifecycle_manager` directly (SIGINT)
+  `run_stack.sh` now signals `lifecycle_manager` directly (SIGINT)
   rather than relying on `ros2 launch`'s own signal cascade, which proved
   unreliable when sent programmatically from a script's trap handler.
 - [ ] **`IsInState` shows as Action in Groot2** — `RosServiceNode` inherits from

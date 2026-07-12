@@ -11,7 +11,7 @@ if ! docker compose exec -T robot-mserve test -f /ws/install/setup.bash; then
   echo "The workspace has not been built yet."
   echo
   echo "Build it first with:"
-  echo "  scripts/05_utils/docker_build_workspace.sh"
+  echo "  scripts/docker/docker_build_workspace.sh"
   echo
   echo "Or run the raw build command:"
   echo "  docker compose exec robot-mserve bash -lc 'source /opt/ros/jazzy/setup.bash && cd /ws && colcon build --symlink-install --allow-overriding launch --packages-select interfaces utils mserve_base mserve_drivechain mserve_description mserve_bringup'"

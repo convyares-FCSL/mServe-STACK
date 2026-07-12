@@ -70,7 +70,7 @@ source install/setup.bash
 ros2 launch launch mserve_min.launch.py
 ```
 
-`web/run_drivechain_hw.sh` is the normal entry point (it invokes this launch
+`scripts/run_stack.sh` is the normal entry point (it invokes this launch
 file and picks `backend`/`uart_device` for you) — see the top-level readme.
 
 ## Running manually

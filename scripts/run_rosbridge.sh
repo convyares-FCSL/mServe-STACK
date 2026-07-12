@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
+# Standalone rosbridge starter — for when the drive stack is already running
+# some other way and you just need the bridge. Most of the time you want
+# scripts/run_stack.sh instead, which starts this for you.
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
-cd "$SCRIPT_DIR"
+cd "$ROOT_DIR/web"
 
 if command -v ros2 >/dev/null 2>&1; then
   echo "Starting rosbridge server on ws://localhost:9090"

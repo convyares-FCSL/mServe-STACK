@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 
 set +u
-source "$ROOT_DIR/scripts/01_setup/env_setup.sh" >/dev/null
+source "$ROOT_DIR/scripts/setup/env_setup.sh" >/dev/null
 set -u
 
 SHOW_HELP=false
@@ -35,9 +35,9 @@ Options:
   --headless   Run Gazebo server-only with headless rendering enabled.
 
 Examples:
-  scripts/05_utils/launch_mserve_description_gazebo.sh
-  scripts/05_utils/launch_mserve_description_gazebo.sh --headless
-  scripts/05_utils/launch_mserve_description_gazebo.sh world:=empty.sdf
+  scripts/sim/launch_mserve_description_gazebo.sh
+  scripts/sim/launch_mserve_description_gazebo.sh --headless
+  scripts/sim/launch_mserve_description_gazebo.sh world:=empty.sdf
 EOF
   exit 0
 fi

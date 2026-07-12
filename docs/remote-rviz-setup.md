@@ -76,7 +76,7 @@ export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 export ROS_DISCOVERY_SERVER=127.0.0.1:11888
 
-scripts/05_utils/launch_mserve_description_gazebo.sh launch_rviz:=false
+scripts/sim/launch_mserve_description_gazebo.sh launch_rviz:=false
 ```
 
 Use `launch_rviz:=false` because RViz will run on WSL.
@@ -287,7 +287,7 @@ export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 export ROS_DISCOVERY_SERVER=127.0.0.1:11888
-scripts/05_utils/launch_mserve_description_gazebo.sh launch_rviz:=false
+scripts/sim/launch_mserve_description_gazebo.sh launch_rviz:=false
 ```
 
 WSL RViz terminal:

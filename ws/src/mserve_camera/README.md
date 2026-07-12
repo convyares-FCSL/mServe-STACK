@@ -123,7 +123,7 @@ ros2 launch launch mserve_min.launch.py backend:=sim
 
 `camera_node` is launched alongside `mserve_drivechain`/`mserve_base`, and
 `lifecycle_manager` configures/activates it as part of the same bringup
-tree. `web/run_drivechain_hw.sh` is the normal entry point — see the
+tree. `scripts/run_stack.sh` is the normal entry point — see the
 top-level readme.
 
 ### Manually

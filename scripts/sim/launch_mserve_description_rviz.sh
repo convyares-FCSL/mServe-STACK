@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 
 set +u
-source "$ROOT_DIR/scripts/01_setup/env_setup.sh" >/dev/null
+source "$ROOT_DIR/scripts/setup/env_setup.sh" >/dev/null
 set -u
 
 cd "$ROOT_DIR/ws"

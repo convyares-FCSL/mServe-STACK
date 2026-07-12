@@ -11,9 +11,9 @@ Current confirmed state (as of 2026-07-12):
   100.122.150.74. Repo lives at /home/ecm/mServe-STACK on the Pi.
 - Real hardware confirmed working: mserve_base -> mserve_drivechain ->
   JSON/UART (/dev/ttyAMA0) -> ESP32 -> both DDSM115 motors. Drove it from
-  the web UI (web/run_drivechain_hw.sh, port 6240) today.
+  the web UI (scripts/run_stack.sh, port 6240) today.
 - mserve-drivechain.service (systemd) is currently DISABLED — I turned off
-  auto-start to do active dev. Run ./web/run_drivechain_hw.sh manually on
+  auto-start to do active dev. Run ./scripts/run_stack.sh manually on
   the Pi when you need the drive stack up; `sudo systemctl enable --now
   mserve-drivechain` restores auto-start later once this phase is done.
 - Known CMake gotcha on this distro: ament_target_dependencies() was
