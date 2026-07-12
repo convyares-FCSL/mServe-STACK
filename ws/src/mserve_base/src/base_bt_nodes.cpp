@@ -158,4 +158,206 @@ BT::NodeStatus PublishBaseStatus::tick()
   return BT::NodeStatus::SUCCESS;
 }
 
+// -------------------------------------------------------------------------------
+// Odometry
+// -------------------------------------------------------------------------------
+
+namespace {
+
+// Wrap an angle into (-pi, pi].
+double wrap_delta(double angle) {
+  while (angle > M_PI)  angle -= 2.0 * M_PI;
+  while (angle <= -M_PI) angle += 2.0 * M_PI;
+  return angle;
+}
+
+// Find a motor's feedback entry by ID; nullptr if not present in this message.
+const interfaces::msg::MotorState * find_motor(
+  const std::vector<interfaces::msg::MotorState> & motors, int motor_id)
+{
+  for (const auto & m : motors) {
+    if (m.motor_id == motor_id) return &m;
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+UpdateOdometry::UpdateOdometry(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+
+BT::NodeStatus UpdateOdometry::tick()
+{
+  auto & bb = config().blackboard;
+
+  interfaces::msg::DriveMotorFeedback feedback;
+  if (!bb->get("motor_feedback", feedback)) return BT::NodeStatus::SUCCESS;  // no feedback yet
+
+  const int left_id  = bb_get(bb, std::string("left_motor_id"),  2);
+  const int right_id = bb_get(bb, std::string("right_motor_id"), 1);
+
+  const auto * left  = find_motor(feedback.motors, left_id);
+  const auto * right = find_motor(feedback.motors, right_id);
+  if (!left || !right) return BT::NodeStatus::SUCCESS;  // feedback doesn't cover both wheels yet
+
+  const double wheel_radius     = bb_get(bb, std::string("wheel_radius"),     0.08);
+  const double wheel_separation = bb_get(bb, std::string("wheel_separation"), 0.35);
+  const double gear_ratio       = bb_get(bb, std::string("gear_ratio"),       1.0);
+
+  // mserve_drivechain's DDSM115 protocol only reports position feedback in
+  // position-control mode (mode 3) — in the speed-loop mode mserve_base
+  // actually drives in, position_rad is always 0 (drivechain_uart.cpp's
+  // parse_json_feedback: "not returned in speed-loop feedback"). So odometry
+  // integrates from wheel *velocity* instead — the one feedback signal
+  // that's reliable in speed-loop mode — rather than differencing an
+  // absolute position. mserve_base owns the wheel joint angle accumulation
+  // the same way, for the same reason (see PublishOdometry).
+  const double left_wheel_rad_s  = static_cast<double>(left->velocity_rads)  / gear_ratio;
+  const double right_wheel_rad_s = static_cast<double>(right->velocity_rads) / gear_ratio;
+
+  // DriveMotorFeedback.stamp isn't populated by mserve_drivechain either
+  // (always zero) — use wall-clock time for dt instead.
+  const rclcpp::Time now = rclcpp::Clock(RCL_ROS_TIME).now();
+  rclcpp::Time prev_time = now;
+  (void)bb->get("prev_odom_time", prev_time);
+  bb->set("prev_odom_time", now);
+
+  const bool initialized = bb_get(bb, std::string("odom_initialized"), false);
+  if (!initialized) {
+    // First feedback since (re)configure — no dt to integrate over yet.
+    bb->set("odom_initialized",  true);
+    bb->set("linear_velocity",   0.0);
+    bb->set("angular_velocity",  0.0);
+    return BT::NodeStatus::SUCCESS;
+  }
+
+  const double dt = (now - prev_time).seconds();
+  if (dt <= 0.0) return BT::NodeStatus::SUCCESS;  // duplicate/out-of-order feedback — skip
+
+  const double left_dist  = left_wheel_rad_s  * wheel_radius * dt;
+  const double right_dist = right_wheel_rad_s * wheel_radius * dt;
+
+  const double delta_s     = (left_dist + right_dist) / 2.0;
+  const double delta_theta = (right_dist - left_dist) / wheel_separation;
+
+  double x = 0.0, y = 0.0, theta = 0.0;
+  double left_wheel_angle = 0.0, right_wheel_angle = 0.0;
+  (void)bb->get("odom_x", x);
+  (void)bb->get("odom_y", y);
+  (void)bb->get("odom_theta", theta);
+  (void)bb->get("left_wheel_angle",  left_wheel_angle);
+  (void)bb->get("right_wheel_angle", right_wheel_angle);
+
+  // Midpoint (2nd-order) integration — more accurate than a first-order
+  // Euler step for the same tick rate, and no more expensive to compute.
+  const double theta_mid = theta + delta_theta / 2.0;
+  x += delta_s * std::cos(theta_mid);
+  y += delta_s * std::sin(theta_mid);
+  theta = wrap_delta(theta + delta_theta);  // sum, then normalize into (-pi, pi]
+
+  // Self-integrated wheel rotation for /joint_states — see the comment above
+  // on why this can't just come from mserve_drivechain's position_rad.
+  // Left unwrapped (continuously accumulating): a "continuous" URDF joint
+  // doesn't require bounding, and unwrapped values preserve turn count.
+  left_wheel_angle  += left_wheel_rad_s  * dt;
+  right_wheel_angle += right_wheel_rad_s * dt;
+
+  bb->set("odom_x", x);
+  bb->set("odom_y", y);
+  bb->set("odom_theta", theta);
+  bb->set("left_wheel_angle",  left_wheel_angle);
+  bb->set("right_wheel_angle", right_wheel_angle);
+  bb->set("linear_velocity",  delta_s / dt);
+  bb->set("angular_velocity", delta_theta / dt);
+
+  return BT::NodeStatus::SUCCESS;
+}
+
+// -------------------------------------------------------------------------------
+
+PublishOdometry::PublishOdometry(const std::string & name, const BT::NodeConfig & cfg) : BT::SyncActionNode(name, cfg) {}
+
+BT::NodeStatus PublishOdometry::tick()
+{
+  auto & bb = config().blackboard;
+
+  double x = 0.0, y = 0.0, theta = 0.0, v = 0.0, w = 0.0;
+  (void)bb->get("odom_x", x);
+  (void)bb->get("odom_y", y);
+  (void)bb->get("odom_theta", theta);
+  (void)bb->get("linear_velocity",  v);
+  (void)bb->get("angular_velocity", w);
+
+  const rclcpp::Time now = rclcpp::Clock(RCL_ROS_TIME).now();
+
+  // Pure-yaw quaternion — no roll/pitch on a ground-plane diff-drive robot.
+  const double half = theta / 2.0;
+  const double qz = std::sin(half);
+  const double qw = std::cos(half);
+
+  using PublishOdomFn = std::function<void(const nav_msgs::msg::Odometry &)>;
+  PublishOdomFn publish_odom;
+  if (bb->get("publish_odom", publish_odom)) {
+    nav_msgs::msg::Odometry odom;
+    odom.header.stamp    = now;
+    odom.header.frame_id = "odom";
+    odom.child_frame_id  = "base_link";
+    odom.pose.pose.position.x    = x;
+    odom.pose.pose.position.y    = y;
+    odom.pose.pose.orientation.z = qz;
+    odom.pose.pose.orientation.w = qw;
+    odom.twist.twist.linear.x  = v;
+    odom.twist.twist.angular.z = w;
+    // Covariance left at zero (default) — no real uncertainty estimate yet;
+    // fine for RViz/basic use, but tune before feeding this into Nav2/AMCL.
+    publish_odom(odom);
+  }
+
+  using PublishTfFn = std::function<void(const geometry_msgs::msg::TransformStamped &)>;
+  PublishTfFn publish_tf;
+  if (bb->get("publish_odom_tf", publish_tf)) {
+    geometry_msgs::msg::TransformStamped tf;
+    tf.header.stamp    = now;
+    tf.header.frame_id = "odom";
+    tf.child_frame_id  = "base_link";
+    tf.transform.translation.x = x;
+    tf.transform.translation.y = y;
+    tf.transform.rotation.z = qz;
+    tf.transform.rotation.w = qw;
+    publish_tf(tf);
+  }
+
+  using PublishJointsFn = std::function<void(const sensor_msgs::msg::JointState &)>;
+  PublishJointsFn publish_joints;
+  if (bb->get("publish_joint_states", publish_joints)) {
+    // Position comes from UpdateOdometry's self-integrated angle, not
+    // mserve_drivechain's position_rad (always 0 in speed-loop mode — see
+    // UpdateOdometry's comment). Velocity can still come straight from the
+    // latest feedback, which reports speed reliably.
+    double left_angle = 0.0, right_angle = 0.0;
+    (void)bb->get("left_wheel_angle",  left_angle);
+    (void)bb->get("right_wheel_angle", right_angle);
+
+    double left_vel = 0.0, right_vel = 0.0;
+    interfaces::msg::DriveMotorFeedback feedback;
+    if (bb->get("motor_feedback", feedback)) {
+      const int left_id  = bb_get(bb, std::string("left_motor_id"),  2);
+      const int right_id = bb_get(bb, std::string("right_motor_id"), 1);
+      const double gear_ratio = bb_get(bb, std::string("gear_ratio"), 1.0);
+      const auto * left  = find_motor(feedback.motors, left_id);
+      const auto * right = find_motor(feedback.motors, right_id);
+      if (left)  left_vel  = static_cast<double>(left->velocity_rads)  / gear_ratio;
+      if (right) right_vel = static_cast<double>(right->velocity_rads) / gear_ratio;
+    }
+
+    sensor_msgs::msg::JointState joints;
+    joints.header.stamp = now;
+    joints.name     = {"left_wheel_joint", "right_wheel_joint"};
+    joints.position = {left_angle, right_angle};
+    joints.velocity = {left_vel, right_vel};
+    publish_joints(joints);
+  }
+
+  return BT::NodeStatus::SUCCESS;
+}
+
 }  // namespace mserve_base

@@ -51,6 +51,7 @@ DrivechainNode::CallbackReturn DrivechainNode::on_configure(const rclcpp_lifecyc
     blackboard_->set("uart",            uart_.get());
     blackboard_->set("drive_cmd_store", drive_cmd_store_.get());
     blackboard_->set("ros_logger",      get_logger());
+    blackboard_->set("ros_clock",       get_clock());
 
     // Create publishers
     create_publishers();

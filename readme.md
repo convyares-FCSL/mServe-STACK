@@ -167,7 +167,7 @@ Grafana/Loki (if running):
 
 ## Design decisions
 
-- **`mserve_base` does not own kinematics.** Wheel geometry (`wheel_separation`, `wheel_radius`) and diff-drive math live in `mserve_drivechain`. Swapping the drivetrain hardware only requires changes in one package.
+- **`mserve_drivechain` does not own kinematics.** Wheel geometry (`wheel_separation`, `wheel_radius`) and diff-drive math (both directions — `/cmd_vel` → wheel RPM, and wheel velocity feedback → odometry) live in `mserve_base`. `mserve_drivechain` is a pure motor driver — it only ever sees per-motor RPM commands and reports per-motor velocity/position feedback, so swapping the drivetrain hardware only requires changes in one package.
 - **`mserve_base` is the future command arbiter.** When Nav2 and manual joystick are added, source arbitration and the e-stop gate live here. `mserve_drivechain` always sees a single safe Twist.
 - **Parameter bounds enforced by ROS descriptors.** Out-of-range values are rejected before callbacks are called. No manual throws needed.
 - **Named QoS profiles from `mserve_utils`.** `mserve_qos::commands`, `mserve_qos::feedback`, `mserve_qos::status` — profiles readable from params without recompiling.

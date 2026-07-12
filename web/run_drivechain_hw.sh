@@ -99,19 +99,21 @@ cleanup() {
     # Each pkill must be its own `exec` — chaining them in one `bash -lc "a; b; c"`
     # lets `pkill -f a` match the wrapper shell itself (its cmdline contains
     # "a; b; c"), killing it before b/c ever run.
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node         2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
-    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server    2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node       2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
   else
-    pkill -9 -f drivechain_node     2>/dev/null || true
-    pkill -9 -f base_node           2>/dev/null || true
-    pkill -9 -f camera_node         2>/dev/null || true
-    pkill -9 -f lifecycle_manager   2>/dev/null || true
-    pkill -9 -f rosbridge_websocket 2>/dev/null || true
-    pkill -9 -f web_video_server    2>/dev/null || true
+    pkill -9 -f drivechain_node       2>/dev/null || true
+    pkill -9 -f base_node             2>/dev/null || true
+    pkill -9 -f camera_node           2>/dev/null || true
+    pkill -9 -f robot_state_publisher 2>/dev/null || true
+    pkill -9 -f lifecycle_manager     2>/dev/null || true
+    pkill -9 -f rosbridge_websocket   2>/dev/null || true
+    pkill -9 -f web_video_server      2>/dev/null || true
   fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
@@ -167,27 +169,30 @@ fi
 # ── Kill any stale ROS processes from previous run ───────────────────────────
 if [[ "$USE_DOCKER" == true ]]; then
   # See note in cleanup() — one exec per pkill so each pattern actually runs.
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node     2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node           2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node         2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server      2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node             2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f robot_state_publisher 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager     2>/dev/null || true
   sleep 1
   # Force-kill any survivors so the new nodes don't end up with duplicate
   # /mserve_base or /mserve_drivechain registrations.
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket 2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server    2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node     2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node           2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node         2>/dev/null || true
-  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
 else
-  pkill -f rosbridge_websocket  2>/dev/null || true
-  pkill -f web_video_server     2>/dev/null || true
-  pkill -f drivechain_node      2>/dev/null || true
-  pkill -f base_node            2>/dev/null || true
-  pkill -f camera_node          2>/dev/null || true
+  pkill -f rosbridge_websocket   2>/dev/null || true
+  pkill -f web_video_server      2>/dev/null || true
+  pkill -f drivechain_node       2>/dev/null || true
+  pkill -f base_node             2>/dev/null || true
+  pkill -f camera_node           2>/dev/null || true
+  pkill -f robot_state_publisher 2>/dev/null || true
   pkill -f lifecycle_manager    2>/dev/null || true
   pkill -f "http.server 6240"   2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting

@@ -174,3 +174,155 @@ Web UI fixes:
   against this session's changes.
 - Camera/lidar bring-up (see `docs/continue.md`) — no camera or lidar
   hardware was detected connected to the Pi when checked this session.
+
+## 2026-07-12 — camera on real hardware, remote RViz, real odometry
+
+### Camera hardware confirmed + mserve_camera package
+
+- User plugged in a USB webcam (UVC, `HD Web Camera` 05a3:9331, `uvcvideo`
+  driver, `/dev/video0`) — confirmed via `lsusb`/`dmesg`/`v4l2-ctl`. Also has
+  a mic (`hw:2,0`, capture-only — `pcmC2D0c`, no `p` node, confirmed via
+  `arecord -l` after fixing a `video`/`audio` group-membership permissions
+  gap for both).
+- Installed `ros-lyrical-v4l2-camera`. Tried `ros-lyrical-audio-capture` for
+  the mic — blocked: depends on `libgstreamer-plugins-good1.0-0`, which
+  doesn't exist anywhere in this Ubuntu Resolute release's repos. Deferred
+  (only `audio-common-msgs` installed, no GStreamer dependency).
+- Built `mserve_camera` (new package) — lifecycle node wrapping
+  `v4l2_camera`'s `V4l2CameraDevice` class directly (same pattern as
+  `lifecycle_manager` wrapping BT.CPP, and `mserve_drivechain` wrapping
+  `DriveUart`), not the whole `v4l2_camera_node`. YUYV @ 640x480 chosen over
+  MJPG/H264 — uncompressed, zero conversion code, this camera's YUYV mode
+  hits 30fps at this resolution. Frame rate observed at ~12.6Hz in practice
+  (frame *interval* is never explicitly requested via `VIDIOC_S_PARM`, only
+  format/resolution) — tracked as a known gap, not fixed.
+- Installed `ros-lyrical-web-video-server` to transcode the raw YUYV image to
+  MJPEG over plain HTTP (port 8080) for the browser — found and fixed a real
+  QoS bug in the process: published `camera/image_raw`/`camera/camera_info`
+  with `SensorDataQoS()` (best-effort, correct convention), but
+  `web_video_server` hardcodes a reliable subscription with no per-stream
+  override, so it silently dropped every frame. Switched to reliable QoS.
+- Web UI: `web/camera.html`/`camera.js` (lifecycle, params, image, camera_info,
+  log — same pattern as `drivechain.html`), image preview added to
+  `web/base.html`, `mserve_camera` lifecycle card added to `index.html`
+  (`app.js`'s per-node loops were already keyed off a `nodePrefix` map, so
+  this was a 2-line change).
+- Bug found via testing: forgot to add `camera_node` to
+  `run_drivechain_hw.sh`'s process-cleanup lists when scaffolding the new
+  package — the shutdown tree correctly drove it to `finalized`, but nothing
+  then killed the OS process. Fixed in all 5 spots (matches `drivechain_node`'s
+  coverage).
+
+### Remote RViz (Thor) — discovery rabbit hole, landed on same-LAN multicast
+
+- Goal: get RViz on Thor to see the Pi's ROS graph (finishing `docs/continue.md`
+  Phase 1). Found `robot_state_publisher` was never wired into the real
+  hardware launch path (`mserve_min.launch.py`) at all — added it, sourcing
+  the URDF from `mserve_description` via `xacro` (which had to be installed —
+  wasn't on the Pi). Hit two real bugs along the way: `launch_ros` tries to
+  parse a bare `Command(...)` result as YAML by default, which breaks on
+  URDF/XML content — fixed by wrapping in `ParameterValue(..., value_type=str)`;
+  and adding `mserve_description` as an `exec_depend` of the `launch` package
+  created a real circular dependency, because `launch` is also the literal
+  name of the core ROS 2 launch framework package, and `mserve_description`
+  already depends on that (the framework, not us) — colcon resolves the
+  ambiguous name to the local package first. Left the dependency out (it's
+  Python, resolved at runtime, not needed for build ordering) and documented
+  the trap in `launch/package.xml`.
+- Tried Fast-DDS Discovery Server over Tailscale first (matching
+  `docs/remote-rviz-setup.md`'s old WSL-era pattern, roles swapped since the
+  Pi now hosts the real graph and Thor is the client). Got it fully working
+  on the Pi side (server reachable, all nodes/topics visible locally) but
+  Thor never saw the graph despite every individual piece checking out
+  correct — env vars byte-exact, firewall/Tailscale ACLs not blocking UDP,
+  no timing issue. Root cause: Fast-DDS major version mismatch — Pi runs
+  3.6.1 (Lyrical), Thor runs 2.14.6 (Jazzy) — a version boundary eProsima
+  made breaking discovery-server wire-protocol changes across.
+  - Along the way: confirmed the Pi and Thor are actually on the **same LAN
+    subnet** (`172.16.0.0/16` WiFi) — the whole Tailscale/discovery-server
+    detour was unnecessary for this setup. Plain multicast discovery
+    (matching `ROS_DOMAIN_ID`, no `ROS_DISCOVERY_SERVER`) worked immediately
+    once tried.
+  - Also explored `rmw_zenoh_cpp` as a longer-term answer for the
+    off-LAN/VPN case (available on both sides: Pi `0.10.4`, Thor `0.2.9`) —
+    got it fully working via a `rmw_zenohd` router with explicit
+    `ZENOH_CONFIG_OVERRIDE` connect endpoints (ROS's default Zenoh config
+    disables multicast scouting entirely, so this sidesteps DDS-style
+    discovery pain by design). Confirmed working locally on the Pi; not
+    pursued further once same-LAN multicast turned out to already work.
+  - Recurring gotcha hit twice: the `ros2 daemon` caches the discovery
+    config from whenever it was last started — switching
+    `ROS_DISCOVERY_SERVER`/`RMW_IMPLEMENTATION`/`ZENOH_CONFIG_OVERRIDE`
+    requires `ros2 daemon stop && ros2 daemon start` in the *same* shell
+    before anything using that config will see the graph, including the
+    launch script's own `ros2 lifecycle get` polling.
+- End state: RViz on Thor successfully rendered `RobotModel` + `TF` + `Image`
+  over plain LAN multicast, `Global Status: Ok`.
+
+### Real wheel odometry in mserve_base
+
+- User's direction: keep `mserve_drivechain` a pure motor driver (no
+  kinematics) — already true in code (forward kinematics already lived in
+  `mserve_base`, matching what the user wanted) but contradicted by
+  `readme.md`'s Design Decisions section, which claimed the opposite. Fixed
+  the doc; no code moved.
+- Real, hardware-forcing discovery while building this: `position_rad` is
+  **always 0** in the speed-loop mode `mserve_base` actually drives motors
+  in — the DDSM115 protocol only reports position in position-control mode
+  (`drivechain_uart.cpp`'s `parse_json_feedback`: *"not returned in
+  speed-loop feedback"*). Caught this via live testing (drove the sim robot,
+  `/odom` stayed at zero) rather than assuming the design would work.
+  Redesigned from position-delta odometry (differencing an absolute
+  position, with wraparound handling) to velocity-integration odometry
+  (integrating `velocity_rads * dt` each tick) — the signal that's actually
+  reliable in speed-loop mode. `mserve_base` also now self-integrates
+  `left_wheel_angle`/`right_wheel_angle` the same way, purely for
+  `/joint_states`, since `mserve_drivechain` can't provide real wheel angle
+  either.
+- Found and fixed two more real bugs in `mserve_drivechain` along the way:
+  `velocity_rpm`/`velocity_rads` were sign-corrected for physically-reversed
+  motors (`motor_signs`) but `position_rad` wasn't — live on this robot,
+  since `motor_signs: [1, -1]`; and `DriveMotorFeedback.stamp` was never
+  populated at all (always zero) — added a `ros_clock` blackboard entry
+  (matching the existing `ros_logger` pattern) so `PublishMotorFeedback` can
+  stamp it properly.
+- New BT nodes `UpdateOdometry`/`PublishOdometry` in `mserve_base`, added to
+  `drive_tree.xml` after the existing drive-command steps. Publishes
+  `/odom` (`nav_msgs/Odometry`), broadcasts `odom -> base_link` TF, and
+  publishes `/joint_states` — the last of which also fixes the
+  `left_wheel_joint`/`right_wheel_joint` TF errors RViz was showing (those
+  are `continuous` URDF joints; `robot_state_publisher` can't compute their
+  transform at all without *some* `/joint_states` source, which nothing
+  published before this).
+- Verified end-to-end in `--sim`: drove straight (`/odom` position grew
+  correctly, zero rotation), then rotated in place (correct wheel RPM signs,
+  `/odom` orientation quaternion and `angular.z` matched the commanded rate,
+  position stayed stable), `odom -> base_link` TF resolved via `tf2_echo`
+  with continuously updating values, `/joint_states` positions accumulating
+  correctly.
+
+### Not done yet
+
+- Camera frame rate still ~12.6Hz (see above) — not fixed this session.
+- Mic (`audio_common`/GStreamer) still blocked — not attempted this session
+  beyond confirming the blocker.
+- Odometry covariance is left at zero (no real uncertainty estimate) — fine
+  for RViz, but needs tuning before this feeds into Nav2/AMCL.
+- Lidar bring-up (Phase 2 of `docs/continue.md`) not started.
+
+### Odometry re-verified on real hardware
+
+After the sim verification above, re-ran the same checks against the real
+DDSM115 motors (`backend=hardware`, `/dev/ttyAMA0`). A short, bounded test
+drive (`timeout`-limited `cmd_vel` burst, confirmed floor was clear first) —
+forward at 0.15 m/s for ~2s — showed real-world detail sim can't produce:
+`/odom` landed at `x≈0.148m` (less than the naive 0.15×2=0.3m, consistent
+with the DDSM115's acceleration ramp — `motor_accel`, not instant — eating
+into the short command window) with a small `y≈0.003m`/~1.6° yaw drift
+(plausible small left/right motor response difference, exactly the kind of
+real error dead-reckoning is honestly susceptible to — see the covariance
+note above). Dead-man switch correctly zeroed the real motors after the
+bounded publish ended (`velocity_rpm: 0`, no fault codes), `odom -> base_link`
+TF matched `/odom` exactly and was stable at rest, and shutdown was clean
+(no leftover processes, motors stopped). Odometry design is confirmed
+correct on both sim and real hardware now.

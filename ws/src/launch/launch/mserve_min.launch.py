@@ -1,15 +1,24 @@
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
     interfaces_share = get_package_share_directory('interfaces')
     params_file = os.path.join(interfaces_share, 'config', 'mserve_params.yaml')
+
+    description_share = Path(get_package_share_directory('mserve_description'))
+    xacro_file = description_share / 'urdf' / 'mserve.urdf.xacro'
+    # launch_ros tries to parse a plain Command(...) result as YAML by
+    # default, which breaks on URDF/XML content — ParameterValue forces it
+    # to be treated as a plain string instead.
+    robot_description = ParameterValue(Command(['xacro', ' ', str(xacro_file)]), value_type=str)
 
     backend_arg = DeclareLaunchArgument(
         'backend', default_value='hardware',
@@ -55,11 +64,24 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Publishes /robot_description + /tf_static /tf from the URDF — needed so
+    # a remote RViz (e.g. on Thor) can place camera_link_optical relative to
+    # base_link. Not a lifecycle node — robot_state_publisher is a plain
+    # topic publisher with nothing to configure/activate.
+    robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='screen',
+        parameters=[{'robot_description': robot_description}],
+    )
+
     return LaunchDescription([
         backend_arg,
         uart_device_arg,
         drivechain,
         base,
         camera,
+        robot_state_publisher,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])

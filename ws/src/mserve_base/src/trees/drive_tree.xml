@@ -9,12 +9,21 @@
       differential-drive kinematics (geometry.*, motor_ids.*).
       CallDriveService forwards the wheel commands to mserve_drivechain's
       ~/drive service (best-effort — SUCCESS even if unreachable).
+      PublishBaseStatus reports drivechain reachability.
+
+      UpdateOdometry reads the latest mserve_drivechain motor_feedback and
+      integrates differential-drive odometry (wheel position deltas -> x/y/theta).
+      PublishOdometry publishes nav_msgs/Odometry on /odom, broadcasts the
+      odom->base_link TF transform, and publishes /joint_states for the wheel
+      joints (left_wheel_joint/right_wheel_joint) from the same feedback.
     -->
     <Sequence name="drive_cycle">
       <ApplyCmdVelSafety />
       <ComputeKinematics />
       <CallDriveService />
       <PublishBaseStatus />
+      <UpdateOdometry />
+      <PublishOdometry />
     </Sequence>
   </BehaviorTree>
 </root>

@@ -13,8 +13,10 @@ owns the robot geometry and the `/cmd_vel` → wheel-RPM conversion.
 ```
 BaseNode (lifecycle)
 │
-├── Subscriber  /cmd_vel              (geometry_msgs/Twist)
+├── Subscriber  /cmd_vel                          (geometry_msgs/Twist)
 │     └── CmdVelStore::update() — thread-safe; no BT
+├── Subscriber  /mserve_drivechain/motor_feedback  (DriveMotorFeedback)
+│     └── stored directly on the blackboard for UpdateOdometry
 │
 ├── Timer  (feedback_rate Hz, default 10 Hz)
 │     └── drive_tree.xml:
@@ -23,11 +25,31 @@ BaseNode (lifecycle)
 │           ComputeKinematics  — safe Twist + geometry.* + motor_ids.* → wheel RPM
 │           CallDriveService   — async call to mserve_drivechain ~/drive (best-effort)
 │           PublishBaseStatus  — publish ~/base_status
+│           UpdateOdometry     — integrate odom pose + wheel angles from wheel *velocity*
+│           PublishOdometry    — publish /odom, broadcast odom->base_link TF, publish /joint_states
 │
 ├── Publisher  /mserve/cmd_vel_safe   (geometry_msgs/Twist)
 ├── Publisher  ~/base_status          (DriveStatus)
+├── Publisher  /odom                  (nav_msgs/Odometry)
+├── Publisher  /joint_states           (sensor_msgs/JointState)
+├── Broadcaster odom -> base_link TF  (tf2_ros::TransformBroadcaster)
 └── Client     /mserve_drivechain/drive (interfaces/srv/Drive)
 ```
+
+### Odometry — why it integrates velocity, not position
+
+`mserve_drivechain`'s DDSM115 protocol only reports wheel position in
+position-control mode; in the speed-loop mode `mserve_base` actually drives
+in, `position_rad` is always `0` (`drivechain_uart.cpp`'s
+`parse_json_feedback`: *"not returned in speed-loop feedback"*). So
+`UpdateOdometry` integrates `velocity_rads` over time instead of differencing
+an absolute position — the one feedback signal that's reliable in
+speed-loop mode. It also self-integrates `left_wheel_angle`/`right_wheel_angle`
+the same way, purely for `/joint_states` (so RViz can resolve the wheel TF
+frames), since `mserve_drivechain` can't provide real wheel angle either.
+`nav_msgs/Odometry`'s covariance fields are left at zero (no real uncertainty
+estimate yet) — fine for RViz/basic use, but tune before feeding this into
+Nav2/AMCL.
 
 Command flow: `/cmd_vel` (Nav2, joystick, or the web UI) is cached in
 `CmdVelStore`. The drive timer reads the cache on every tick. If no message
@@ -51,15 +73,20 @@ all BT nodes:
 | `safe_twist` | `geometry_msgs::msg::Twist` | ApplyCmdVelSafety | ComputeKinematics |
 | `wheel_commands` | `vector<MotorCommand>` ([left, right]) | ComputeKinematics | CallDriveService |
 | `drivechain_reachable` | bool | CallDriveService | PublishBaseStatus |
+| `motor_feedback` | `DriveMotorFeedback` | on_motor_feedback | UpdateOdometry, PublishOdometry |
+| `odom_x` / `odom_y` / `odom_theta` | double | UpdateOdometry | UpdateOdometry (next tick), PublishOdometry |
+| `left_wheel_angle` / `right_wheel_angle` | double | UpdateOdometry | PublishOdometry (`/joint_states`) |
+| `linear_velocity` / `angular_velocity` | double | UpdateOdometry | PublishOdometry |
 | `publish_cmd_vel_safe` | `std::function` | on_configure | ApplyCmdVelSafety |
 | `publish_base_status` | `std::function` | on_configure | PublishBaseStatus |
+| `publish_odom` / `publish_odom_tf` / `publish_joint_states` | `std::function` | on_configure | PublishOdometry |
 
 ### Key source files
 
 | File | Purpose |
 |---|---|
 | `include/mserve_base/base_node.hpp` | Node public API |
-| `src/base_node.cpp` | Lifecycle + BT runner + cmd_vel subscription |
+| `src/base_node.cpp` | Lifecycle + BT runner + cmd_vel/motor_feedback subscriptions |
 | `src/base_params.cpp` | Parameter declaration, loading, hot-change |
 | `src/base_bt_nodes.cpp` | All BT node implementations |
 | `src/include/base_types.hpp` | `WheelDescriptor`, `CmdVelStore` |
@@ -128,6 +155,15 @@ ros2 topic echo /mserve/cmd_vel_safe
 
 # Bridge status: "bridging" / "drivechain_unreachable"
 ros2 topic echo /mserve_base/base_status
+
+# Odometry pose/twist
+ros2 topic echo /odom
+
+# Wheel joint angles (for RViz TF resolution)
+ros2 topic echo /joint_states
+
+# odom -> base_link transform
+ros2 run tf2_ros tf2_echo odom base_link
 ```
 
 ## BT tree
@@ -138,4 +174,6 @@ ros2 topic echo /mserve_base/base_status
 
 `CallDriveService` is best-effort: if `mserve_drivechain`'s `~/drive` service
 isn't available yet, the tick still returns SUCCESS and `~/base_status`
-reports `drivechain_unreachable`.
+reports `drivechain_unreachable`. `UpdateOdometry` is the same way — if
+`motor_feedback` hasn't arrived yet, or doesn't cover both configured wheel
+IDs, it returns SUCCESS without updating the pose.

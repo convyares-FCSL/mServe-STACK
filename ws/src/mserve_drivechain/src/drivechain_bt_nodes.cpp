@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <functional>
+#include <rclcpp/clock.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 
@@ -330,7 +331,7 @@ BT::NodeStatus SetAllMotors::tick()
     // Un-flip sign so reported velocity is in the robot's reference frame
     state.velocity_rpm  = static_cast<float>(fb.speed_rpm * m.sign);
     state.velocity_rads = static_cast<float>(fb.speed_rpm * m.sign * kRpmToRads);
-    state.position_rad  = static_cast<float>(fb.position  * kTickToRad);
+    state.position_rad  = static_cast<float>(fb.position  * kTickToRad * m.sign);
     state.current_a     = fb.current;
     state.temperature_c = fb.temperature;
     state.fault_code    = static_cast<uint8_t>(fb.fault_code);
@@ -358,7 +359,11 @@ BT::NodeStatus PublishMotorFeedback::tick()
   std::vector<interfaces::msg::MotorState> states;
   (void)config().blackboard->get("motor_states", states);
 
+  rclcpp::Clock::SharedPtr ros_clock;
+  (void)config().blackboard->get("ros_clock", ros_clock);
+
   DriveMotorFeedback msg;
+  msg.stamp  = ros_clock ? ros_clock->now() : rclcpp::Clock(RCL_ROS_TIME).now();
   msg.motors = states;
   pub_fn(msg);
   return BT::NodeStatus::SUCCESS;

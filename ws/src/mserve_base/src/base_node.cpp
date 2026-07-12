@@ -6,11 +6,13 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <functional>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 namespace mserve_base {
 
-using DriveStatus  = interfaces::msg::DriveStatus;
-using DriveService = interfaces::srv::Drive;
+using DriveStatus         = interfaces::msg::DriveStatus;
+using DriveService        = interfaces::srv::Drive;
+using DriveMotorFeedback  = interfaces::msg::DriveMotorFeedback;
 
 // ==============================================================================
 // Construction / destruction
@@ -48,10 +50,23 @@ BaseNode::CallbackReturn BaseNode::on_configure(const rclcpp_lifecycle::State &)
     cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(cmd_vel_topic, cmd_qos,
       [this](const geometry_msgs::msg::Twist::SharedPtr msg) { on_cmd_vel(msg); });
 
+    // QoS matches mserve_drivechain's motor_feedback publisher (rclcpp::QoS(10)).
+    motor_feedback_sub_ = create_subscription<DriveMotorFeedback>(
+      "/mserve_drivechain/motor_feedback", rclcpp::QoS(10),
+      [this](const DriveMotorFeedback::SharedPtr msg) { on_motor_feedback(msg); });
+
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+
     create_publishers();
 
     drive_client_ = create_client<DriveService>("/mserve_drivechain/drive");
     blackboard_->set("drive_client", drive_client_);
+
+    // Odometry integration state — reset on every (re)configure.
+    blackboard_->set("odom_initialized", false);
+    blackboard_->set("odom_x",     0.0);
+    blackboard_->set("odom_y",     0.0);
+    blackboard_->set("odom_theta", 0.0);
 
     register_bt_nodes();
     build_bt_tree();
@@ -69,6 +84,8 @@ BaseNode::CallbackReturn BaseNode::on_configure(const rclcpp_lifecycle::State &)
 BaseNode::CallbackReturn BaseNode::on_activate(const rclcpp_lifecycle::State &) {
   cmd_vel_safe_pub_->on_activate();
   base_status_pub_->on_activate();
+  odom_pub_->on_activate();
+  joint_state_pub_->on_activate();
   drive_active_ = true;
 
   double rate = 10.0;
@@ -89,6 +106,8 @@ BaseNode::CallbackReturn BaseNode::on_deactivate(const rclcpp_lifecycle::State &
 
   cmd_vel_safe_pub_->on_deactivate();
   base_status_pub_->on_deactivate();
+  odom_pub_->on_deactivate();
+  joint_state_pub_->on_deactivate();
   RCLCPP_INFO(get_logger(), "mserve_base deactivated");
   return CallbackReturn::SUCCESS;
 }
@@ -98,8 +117,12 @@ BaseNode::CallbackReturn BaseNode::on_cleanup(const rclcpp_lifecycle::State &) {
   drive_tree_ = {};
   drive_client_.reset();
   cmd_vel_sub_.reset();
+  motor_feedback_sub_.reset();
+  tf_broadcaster_.reset();
   cmd_vel_safe_pub_.reset();
   base_status_pub_.reset();
+  odom_pub_.reset();
+  joint_state_pub_.reset();
   cmd_vel_store_.reset();
   blackboard_.reset();
   RCLCPP_INFO(get_logger(), "mserve_base cleaned up");
@@ -122,6 +145,8 @@ void BaseNode::register_bt_nodes() {
   factory_.registerNodeType<ComputeKinematics>("ComputeKinematics");
   factory_.registerNodeType<CallDriveService>("CallDriveService");
   factory_.registerNodeType<PublishBaseStatus>("PublishBaseStatus");
+  factory_.registerNodeType<UpdateOdometry>("UpdateOdometry");
+  factory_.registerNodeType<PublishOdometry>("PublishOdometry");
 }
 
 void BaseNode::build_bt_tree() {
@@ -143,12 +168,20 @@ void BaseNode::on_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg) {
   cmd_vel_store_->update(*msg);
 }
 
+void BaseNode::on_motor_feedback(const DriveMotorFeedback::SharedPtr msg) {
+  blackboard_->set("motor_feedback", *msg);
+}
+
 void BaseNode::create_publishers() {
   const auto cmd_vel_safe_topic = mserve_topics::cmd_vel_safe(*this);
   const auto cmd_qos             = mserve_qos::commands(*this);
 
   cmd_vel_safe_pub_ = create_publisher<geometry_msgs::msg::Twist>(cmd_vel_safe_topic, cmd_qos);
   base_status_pub_  = create_publisher<DriveStatus>(std::string(get_name()) + "/base_status", rclcpp::QoS(10));
+  // Plain top-level topics, not namespaced under the node — Nav2/robot_localization
+  // and RViz's defaults both expect /odom and /joint_states unprefixed.
+  odom_pub_         = create_publisher<nav_msgs::msg::Odometry>("/odom", rclcpp::QoS(10));
+  joint_state_pub_  = create_publisher<sensor_msgs::msg::JointState>("/joint_states", rclcpp::QoS(10));
 
   blackboard_->set<std::function<void(const geometry_msgs::msg::Twist &)>>("publish_cmd_vel_safe",
     [this](const geometry_msgs::msg::Twist & msg) {
@@ -157,6 +190,18 @@ void BaseNode::create_publishers() {
   blackboard_->set<std::function<void(const DriveStatus &)>>("publish_base_status",
     [this](const DriveStatus & msg) {
       if (base_status_pub_->is_activated()) base_status_pub_->publish(msg);
+    });
+  blackboard_->set<std::function<void(const nav_msgs::msg::Odometry &)>>("publish_odom",
+    [this](const nav_msgs::msg::Odometry & msg) {
+      if (odom_pub_->is_activated()) odom_pub_->publish(msg);
+    });
+  blackboard_->set<std::function<void(const sensor_msgs::msg::JointState &)>>("publish_joint_states",
+    [this](const sensor_msgs::msg::JointState & msg) {
+      if (joint_state_pub_->is_activated()) joint_state_pub_->publish(msg);
+    });
+  blackboard_->set<std::function<void(const geometry_msgs::msg::TransformStamped &)>>("publish_odom_tf",
+    [this](const geometry_msgs::msg::TransformStamped & msg) {
+      tf_broadcaster_->sendTransform(msg);
     });
 }
 

@@ -9,6 +9,22 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <!--
+    Deliberately NOT declaring an exec_depend on mserve_description, even
+    though mserve_min.launch.py uses get_package_share_directory('mserve_description')
+    at runtime: this package's name ("launch") collides with the core ROS 2
+    launch framework's own package name. mserve_description's package.xml
+    declares <exec_depend>launch</exec_depend> (meaning the framework), but
+    colcon resolves that ambiguous name to this LOCAL package first — adding
+    mserve_description here creates a real dependency cycle
+    (launch -> mserve_description -> launch). mserve_description is already
+    built ahead of this package via the documented top-level build commands,
+    so the runtime lookup still works; this is just about colcon's ordering.
+  -->
+
 
   <export>
     <build_type>ament_cmake</build_type>
