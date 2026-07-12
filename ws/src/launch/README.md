@@ -19,7 +19,7 @@ The lifecycle manager automatically configures and activates all managed nodes v
 ## Run
 
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK/ws
+cd ~/mServe-STACK/ws
 source install/setup.bash
 ros2 launch mserve_launch mserve_min.launch.py
 ```

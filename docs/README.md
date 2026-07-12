@@ -26,31 +26,43 @@ The C++ lessons in `/home/ecm/ros2-systems-operability/src/2_cpp` are the main s
 
 ## Running the Current Skeleton
 
-### Docker-based workflow (recommended)
+**As of the July 2026 SD-card migration, this Pi runs the stack natively — no
+Docker.** The Docker workflow below is kept as a documented fallback only
+(`run_drivechain_hw.sh` uses it automatically if `ros2` isn't found on PATH);
+it is no longer the recommended path on this machine.
+
+### Host-native workflow (recommended)
 
 From `/home/ecm/mServe-STACK`:
 
 ```bash
+source /opt/ros/lyrical/setup.bash
+cd ws
+colcon build --symlink-install --packages-select interfaces utils mserve_base mserve_drivechain mserve_description
+source install/setup.bash
+ros2 launch launch mserve_min.launch.py
+```
+
+Or use the one-command launcher, which builds, starts rosbridge, activates
+both lifecycle nodes, and serves the debug web UI:
+
+```bash
+cd /home/ecm/mServe-STACK
+./web/run_drivechain_hw.sh          # hardware
+./web/run_drivechain_hw.sh --sim    # sim backend, no hardware needed
+```
+
+**Note on ROS distro:** this was originally built against ROS 2 Jazzy; it now
+builds natively against ROS 2 Lyrical. `ament_target_dependencies()` was
+removed in Lyrical — see the CMake note in the root `readme.md` Build section
+if you're building from scratch on a newer distro.
+
+### Docker workflow (legacy fallback)
+
+```bash
 docker compose up -d --build robot-mserve
-```
-
-Build and run inside the container:
-
-```bash
 scripts/05_utils/docker_build_workspace.sh
-```
-
-Launch the bringup using the Docker helper:
-
-```bash
-cd /home/ecm/mServe-STACK
 scripts/05_utils/docker_launch_mserve.sh
-```
-
-Start the web bridge using Docker:
-
-```bash
-cd /home/ecm/mServe-STACK
 scripts/05_utils/docker_webbridge.sh both
 ```
 
@@ -59,52 +71,36 @@ This launches rosbridge inside the `robot-mserve` container and serves the web U
 If you want to run the raw command instead of the helper, use:
 
 ```bash
-docker compose exec robot-mserve bash -lc "cd /ws && source /opt/ros/jazzy/setup.bash && source install/setup.bash && export AMENT_PREFIX_PATH=/ws/install/mserve_bringup:/ws/install/mserve_description:/ws/install/mserve_base:/ws/install/mserve_drivechain:/ws/install/mserve_utils:/ws/install/mserve_interfaces:\$AMENT_PREFIX_PATH && ros2 launch mserve_bringup mserve_min.launch.py"
+docker compose exec robot-mserve bash -lc "cd /ws && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 launch launch mserve_min.launch.py"
 ```
-
-Check lifecycle state from within the same container:
-
-```bash
-docker compose exec robot-mserve bash -lc "cd /ws && source install/setup.bash && ros2 lifecycle get /mserve_base"
-
-docker compose exec robot-mserve bash -lc "cd /ws && source install/setup.bash && ros2 lifecycle get /mserve_drivechain"
-```
-
-### Host-native workflow (only if ROS is installed on the host)
-
-If you have a host ROS environment, the original workflow still applies:
-
-```bash
-./scripts/01_setup/env_setup.sh
-cd ws
-colcon build --symlink-install --packages-select mserve_interfaces mserve_utils mserve_base mserve_drivechain mserve_description mserve_bringup
-source install/setup.bash
-ros2 launch mserve_bringup mserve_min.launch.py
-```
-
-The Docker workflow is recommended when the host does not have ROS installed or when you want the same environment used by Loki/log collection.
 
 This current skeleton provides:
 
 - `mserve_base`: the robot drive lifecycle node that accepts `/cmd_vel`.
-- `mserve_drivechain`: the drivetrain/ESP32 boundary stub that publishes feedback and status.
-- `mserve_bringup`: the central bringup launch package.
-- `mserve_interfaces`: shared ROS messages, services, actions, and config.
-- `mserve_utils`: shared C++ helper support for later utilities.
+- `mserve_drivechain`: diff-drive kinematics + the JSON/UART link to the onboard
+  ESP32 motor controller (Waveshare DDSM Driver HAT), which drives the DDSM115
+  hub motors. Not a stub — this is the real hardware boundary. See
+  `ws/src/mserve_drivechain/README.md` for the full protocol writeup.
+- `launch`: the central bringup launch package (was planned as `mserve_bringup`;
+  the actual folder/package name is `launch`).
+- `interfaces`: shared ROS messages, services, actions, and config (was planned
+  as `mserve_interfaces`).
+- `utils`: shared C++ helper support (was planned as `mserve_utils`).
 
 ## Development Web Bridge
 
 A simple browser UI is available under `web/` for lifecycle and drive command testing.
 
-To use it:
+The current entry point is `./web/run_drivechain_hw.sh` (see above), which
+serves the UI on port **6240** — `http://<pi-ip>:6240/drivechain.html` and
+`.../base.html`. (Older instructions below reference `run_rosbridge.sh`/`run.sh`
+and port 8080; those scripts may be stale — check `web/` before relying on them.)
 
 ```bash
 cd /home/ecm/mServe-STACK/web
 ./run_rosbridge.sh
 ./run.sh
 ```
-
-Then open `http://localhost:8080`.
 
 The UI connects to ROS via rosbridge at `ws://localhost:9090` and can:
 

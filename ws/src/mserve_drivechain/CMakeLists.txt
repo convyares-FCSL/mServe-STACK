@@ -31,7 +31,7 @@ target_include_directories(drivechain_uart PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
-ament_target_dependencies(drivechain_uart interfaces)
+target_link_libraries(drivechain_uart interfaces::interfaces)
 
 # ==============================================================================
 # Main node library
@@ -51,15 +51,15 @@ target_include_directories(drivechain_node_lib
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 
-ament_target_dependencies(drivechain_node_lib
-  rclcpp
-  rclcpp_lifecycle
-  behaviortree_cpp
-  ament_index_cpp
-  lifecycle_msgs
-  std_srvs
-  interfaces
-  utils
+target_link_libraries(drivechain_node_lib
+  rclcpp::rclcpp
+  rclcpp_lifecycle::rclcpp_lifecycle
+  behaviortree_cpp::behaviortree_cpp
+  ament_index_cpp::ament_index_cpp
+  lifecycle_msgs::lifecycle_msgs
+  std_srvs::std_srvs
+  interfaces::interfaces
+  utils::utils
 )
 
 target_link_libraries(drivechain_node_lib drivechain_uart)
@@ -70,7 +70,7 @@ target_link_libraries(drivechain_node_lib drivechain_uart)
 
 add_executable(drivechain_node src/main.cpp)
 target_include_directories(drivechain_node PRIVATE include)
-ament_target_dependencies(drivechain_node rclcpp)
+target_link_libraries(drivechain_node rclcpp::rclcpp)
 target_link_libraries(drivechain_node drivechain_node_lib)
 
 # ==============================================================================
@@ -106,7 +106,7 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_packet_codec test/test_packet_codec.cpp src/drivechain_uart.cpp)
   target_include_directories(test_packet_codec PRIVATE src include)
-  ament_target_dependencies(test_packet_codec interfaces)
+  target_link_libraries(test_packet_codec interfaces::interfaces)
 endif()
 
 ament_package()

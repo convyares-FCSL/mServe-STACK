@@ -1,6 +1,13 @@
 # Hybrid RViz and Teleop from WSL with Gazebo on NVIDIA Thor
 
-This guide covers the hybrid setup:
+> **Superseded.** This guide's premise — Gazebo on Thor, RViz on a WSL
+> laptop — no longer matches the current setup: RViz now also runs directly
+> on Thor alongside Gazebo, so there's no WSL leg for the DDS traffic to
+> cross anymore. Kept for reference (the discovery-server setup may still be
+> useful for remote monitoring from a laptop), but don't follow this as the
+> current normal workflow.
+
+This guide covers the (now historical) hybrid setup:
 
 - **Thor** runs Gazebo, ROS 2 nodes, `robot_state_publisher`, and `ros_gz_bridge`.
 - **Windows laptop / WSL** runs RViz and keyboard teleop.

@@ -1,6 +1,6 @@
 # mServe Stack
 
-ROS 2 Jazzy C++ robot stack for the mServe differential-drive robot, running on a Raspberry Pi 5 inside Docker.
+ROS 2 C++ robot stack for the mServe differential-drive robot, running natively (no Docker) on a Raspberry Pi 5. Originally built against ROS 2 Jazzy; as of the July 2026 SD-card migration it builds and runs natively against ROS 2 Lyrical — see the CMake note in [Build](#build) if you're building from scratch on a newer distro.
 
 The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
 
@@ -9,40 +9,42 @@ The design philosophy is learning-first: every control boundary, kinematic calcu
 ## Hardware
 
 - Raspberry Pi 5 (runtime)
-- DDSM115 hub motors × 2 via DDSM Hub Motor Driver Board
-- Gazebo simulation runs on a PC (WSL2) — the Pi 5 has no compute GPU
+- DDSM115 hub motors × 2, driven via a Waveshare DDSM Driver HAT — its onboard ESP32 speaks JSON over UART on the Pi 5 GPIO header (`/dev/ttyAMA0`) and handles the raw DDSM115 protocol itself; the ESP32 firmware lives in `ws/src/mserve_drivechain/drive_firmware/`
+- Gazebo + RViz simulation run on the NVIDIA Thor — the Pi 5 has no compute GPU and stays hardware-only
 
 ## Workspace
 
 ```
 ws/src/
-  mserve_interfaces/    central config, messages, services
-  mserve_utils/         shared utilities: params, QoS profiles, topic names
-  mserve_base/          command arbiter and safety clamp
-  mserve_drivechain/    diff-drive kinematics + DDSM115 protocol
-  mserve_description/   URDF robot model
-  mserve_bringup/       launch files
+  interfaces/            central config, messages, services
+  utils/                 shared utilities: params, QoS profiles, topic names
+  mserve_base/           command arbiter and safety clamp
+  mserve_drivechain/     diff-drive kinematics + JSON/UART protocol to the ESP32 motor controller
+  mserve_description/    URDF robot model
+  launch/                launch files
 ```
+
+(Folder names dropped the `mserve_` prefix on `interfaces`/`utils`/`launch` at some point — the docs below still use the old prefixed names in places; treat the folder names above as current.)
 
 ### Package responsibilities
 
 | Package | Role |
 |---------|------|
-| `mserve_interfaces` | Shared messages, services, central YAML config |
-| `mserve_utils` | `get_or_declare_param`, `bounded_double`, named QoS profiles, topic name utilities |
+| `interfaces` | Shared messages, services, central YAML config |
+| `utils` | `get_or_declare_param`, `bounded_double`, named QoS profiles, topic name utilities |
 | `mserve_base` | Subscribes `/cmd_vel`, clamps to speed limits, publishes `/mserve/cmd_vel_safe` |
-| `mserve_drivechain` | Subscribes `/mserve/cmd_vel_safe`, runs diff-drive kinematics, owns DDSM115 protocol |
+| `mserve_drivechain` | Subscribes `/mserve/cmd_vel_safe`, runs diff-drive kinematics, owns the JSON-over-UART link to the onboard ESP32 (Waveshare DDSM Driver HAT) — the ESP32 itself handles the raw DDSM115 protocol |
 | `mserve_description` | URDF robot description |
-| `mserve_bringup` | `mserve_min.launch.py` — starts base + drivechain |
+| `launch` | `mserve_min.launch.py` — starts base + drivechain |
 
 ## Files
 
 - `.env`: local runtime settings (gitignored).
-- `docker-compose.yml`: ROS container with ports 5002, 8080, 9090.
+- `Dockerfile` / `docker-compose.yml`: legacy — the stack ran in Docker before the July 2026 migration to the Ubuntu 26.04 SD card. Left in place for reference but unused; `run_drivechain_hw.sh` only falls back to them if it can't find `ros2` on PATH.
 - `docs/`: design notes, milestones, session log, task tracker.
 - `scripts/`: helper scripts by phase.
 - `web/`: debug browser UI (lifecycle control + cmd_vel publisher) and `run_drivechain_hw.sh`, the main entry point for the hardware stack.
-- `ws/`: ROS 2 workspace, mounted at `/ws` in the container.
+- `ws/`: ROS 2 workspace (`ws/src/`), built natively with `colcon`.
 
 ## Docs
 
@@ -56,7 +58,16 @@ ws/src/
 
 ## Normal flow
 
-The drive stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) starts automatically on boot (see [Running on boot](#running-on-boot-systemd)). To run it manually — e.g. after a reboot of the script itself, or for development — use:
+The drive stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) starts automatically on boot via `mserve-drivechain.service` (see [Running on boot](#running-on-boot-systemd)) — **on a running Pi you normally don't need to start anything by hand, just open the web UI directly:**
+
+- `http://<pi-ip>:6240/drivechain.html`
+- `http://<pi-ip>:6240/base.html`
+
+e.g. on this Pi (static Wi-Fi IP): `http://172.16.68.73:6240/drivechain.html` /
+`http://172.16.68.73:6240/base.html` — also reachable over Tailscale at
+`http://100.122.150.74:6240/...` from off-network.
+
+To run it manually instead — e.g. after stopping the service, or for development — use:
 
 ```bash
 ./web/run_drivechain_hw.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
@@ -64,16 +75,13 @@ The drive stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) start
 ./web/run_drivechain_hw.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
-This builds the workspace (native if ROS 2 is installed, otherwise inside the `robot-mserve` Docker container), starts rosbridge, configures + activates both lifecycle nodes, and serves the debug UI. Then open:
+This builds the workspace natively (falls back to the legacy `robot-mserve` Docker container only if `ros2` isn't found on PATH), starts rosbridge, configures + activates both lifecycle nodes, and serves the debug UI at the same URLs above.
 
-- `http://<pi-ip>:6240/drivechain.html`
-- `http://<pi-ip>:6240/base.html`
-
-The UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing. Press Ctrl+C to stop everything — this deactivates both nodes and tears down rosbridge/web server cleanly.
+The UI shows lifecycle state for both nodes and allows configure/activate/deactivate/shutdown and cmd_vel publishing. Click **Connect** before driving — activation alone doesn't open the UART port, `~/connect` does. Press Ctrl+C to stop everything if running manually — this deactivates both nodes and tears down rosbridge/web server cleanly.
 
 ## Running on boot (systemd)
 
-`mserve-drivechain.service` runs `./web/run_drivechain_hw.sh` automatically once Docker is up, so the robot comes up ready on power-on.
+`mserve-drivechain.service` (native — no Docker dependency) sources ROS 2 Lyrical + the workspace and runs `./web/run_drivechain_hw.sh` on boot, so the robot comes up ready on power-on.
 
 ```bash
 sudo systemctl status mserve-drivechain      # check it's running
@@ -86,28 +94,28 @@ sudo systemctl stop mserve-drivechain        # stop everything (runs cleanup)
 
 ## Build
 
-From `/home/ecm/mServe-STACK`:
+From `/home/ecm/mServe-STACK/ws`, natively (no Docker):
 
 ```bash
-docker compose build robot-mserve
-scripts/05_utils/docker_build_workspace.sh
+source /opt/ros/lyrical/setup.bash
+colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
+  --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
-Raw Docker command:
+**CMake note (Jazzy → Lyrical):** `ament_target_dependencies()` was removed
+entirely in ROS 2 Lyrical (not just deprecated — the macro doesn't exist).
+The CMakeLists for `utils`, `mserve_drivechain`, and `mserve_base` were
+updated to use `target_link_libraries()` with modern imported targets
+instead (`rclcpp::rclcpp`, `interfaces::interfaces`, etc. — message packages
+export a `<pkg>::<pkg>` aggregate target automatically via
+`rosidl_cmake_aggregate_target-extras.cmake`, no extra `find_package` needed).
+If you're building this from scratch on an even newer distro and hit
+`Unknown CMake command "ament_target_dependencies"`, this is why.
 
-```bash
-docker compose exec robot-mserve bash -lc "
-  source /opt/ros/jazzy/setup.bash && cd /ws &&
-  colcon build --symlink-install \
-    --packages-select \
-      mserve_interfaces \
-      mserve_utils \
-      mserve_base \
-      mserve_drivechain \
-      mserve_description \
-      mserve_bringup
-"
-```
+The Docker path (`docker compose build robot-mserve`,
+`scripts/05_utils/docker_build_workspace.sh`) still exists as a fallback —
+`run_drivechain_hw.sh` uses it automatically if `ros2` isn't on PATH — but
+is no longer the primary workflow on this Pi.
 
 ## Runtime parameter updates (no restart needed)
 
@@ -122,20 +130,15 @@ ros2 param describe /mserve_base limits.max_linear_speed
 
 ## Stop / remove
 
-To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_drivechain_hw.sh` manually) — see [Running on boot](#running-on-boot-systemd).
-
-The commands below stop/remove the underlying `robot-mserve` container itself. Don't run `docker compose down` while `mserve-drivechain.service` is enabled — it brings the container back up (`docker compose up -d robot-mserve`) on every start/restart.
-
-```bash
-docker compose stop robot-mserve   # stop, keep container
-docker compose down                 # remove container
-```
+To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_drivechain_hw.sh` manually) — see [Running on boot](#running-on-boot-systemd). Since everything runs as native processes now, `stop` is the whole story — there's no container to separately remove.
 
 ## Logs
 
 ```bash
-docker compose logs -f robot-mserve
+sudo journalctl -u mserve-drivechain -f
 ```
+
+rosbridge's own log is written to `/tmp/rosbridge.log` (see `run_drivechain_hw.sh`).
 
 Grafana/Loki (if running):
 

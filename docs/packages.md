@@ -110,7 +110,13 @@ Responsibilities:
 - Consume `WheelFeedback`.
 - Publish `DriveStatus`.
 
-## `mserve_esp32`
+## `mserve_esp32` (as implemented: folded into `mserve_drivechain`, not a separate package)
+
+> This was planned as its own package; in practice the ESP32 boundary was
+> implemented inside `mserve_drivechain` instead (JSON-over-UART client in
+> `drivechain_uart.cpp`), with the ESP32's own firmware living under
+> `mserve_drivechain/drive_firmware/`. Section kept for the design intent,
+> which is still accurate — just not the package split.
 
 C++ lifecycle package for ESP32 motor-controller communication.
 

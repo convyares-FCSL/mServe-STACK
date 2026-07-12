@@ -1,55 +1,93 @@
 # mServe-STACK — Claude Code project instructions
 
-## Teaching style (non-negotiable)
+## Project
 
-Walk through steps proactively. Show code snippets in chat as part of the explanation.
-Do NOT edit or write files unless the user explicitly says "implement", "do it", "write it",
-or similar. Do NOT ask questions to check understanding — teach and move forward. Only ask
-if you genuinely do not know something (ambiguous constraint, missing context).
-The user asks questions when they have them. See `lesson_plan_btros2.md` for the learning
-arc context.
+mServe is a learning-first ROS 2 C++ differential-drive robot stack running on a
+Raspberry Pi 5. Full design philosophy: `readme.md` and `docs/architecture.md`.
+
+## Runtime environment (as of the July 2026 SD-card migration)
+
+- Runs **natively** on ROS 2 **Lyrical** (Ubuntu 26.04 "Resolute") — no Docker.
+  `Dockerfile`/`docker-compose.yml` are legacy fallback only; `run_drivechain_hw.sh`
+  uses them automatically only if `ros2` isn't found on PATH.
+- Originally built against ROS 2 Jazzy. If building from scratch on a newer distro
+  and `ament_target_dependencies()` errors as an unknown CMake command, see Build below.
+- Boots via `mserve-drivechain.service` (systemd, native — sources
+  `/opt/ros/lyrical/setup.bash` + `ws/install/setup.bash`, then runs
+  `web/run_drivechain_hw.sh`).
+- Gazebo + RViz simulation run on the NVIDIA Thor — not a PC/WSL2, and not the Pi
+  itself (Pi 5 has no compute GPU and stays hardware-only).
 
 ## Project layout
 
 ```
 ws/src/
-  hyfleet_booster/     — per-booster lifecycle node + BT state machine (C++20 / ROS 2 Jazzy)
-  hyfleet_compressor/  — coordinator lifecycle node, routes goals to boosters via BT
-  hyfleet_sim/         — Python simulator standing in for real hardware
+  interfaces/           messages, services, central YAML config (rosidl)
+  utils/                shared C++ helpers: params, QoS profiles, topic names
+  mserve_base/          command arbiter + safety clamp lifecycle node
+  mserve_drivechain/    diff-drive kinematics + JSON/UART link to the ESP32 motor controller
+  mserve_description/   URDF robot model
+  launch/               launch files (mserve_min.launch.py)
 ```
 
-## Key architecture decisions (locked — do not change without discussion)
+`mserve_base_archive/`, `template/` (an old `hyfleet_subsystem` scaffold from an
+unrelated project, left in the tree), and `lifecycle_manager/` all carry
+`COLCON_IGNORE` and are excluded from the build.
 
-- BoosterNode: single `active_goal_` / `active_tree_`; tick timer 100 ms; MTE executor
-- CompressorNode: `ops_[2]` (LOW slot=0, HIGH slot=1, SYNC slot=0); per-slot blackboard
-  child of `shared_blackboard_`; MutuallyExclusive callback group shared between action
-  server and tick timer (fixes `spin_some` race — do not change this)
-- BT.CPP `RosActionNode::halt()` → `cancelGoal()` touches a shared `SingleThreadedExecutor`
-  without the library mutex — the callback group serialisation is the fix
-- Parameters: `on_parameters` rejects any change unless state is UNCONFIGURED
-- `reenable_offset_bar` (default 50.0 bar) declared in `booster_params.cpp`, written to
-  blackboard at configure; not a goal field
-- All 5 integration tests pass end-to-end against the sim:
-  `test_low`, `test_high`, `test_parallel_both`, `test_setpoint_update`, `test_stop`
+## Hardware chain
 
-## Build and run
+`mserve_base` (`/cmd_vel` → clamp → `/mserve/cmd_vel_safe`) → `mserve_drivechain`
+(diff-drive kinematics → JSON over UART on `/dev/ttyAMA0`, the Pi 5 GPIO header) →
+onboard ESP32 on a Waveshare DDSM Driver HAT → DDSM115 hub motors ×2. The ESP32
+owns the raw DDSM115 binary protocol; the Pi side only ever speaks JSON
+(`mserve_drivechain/src/drivechain_uart.cpp`). ESP32 firmware lives in
+`ws/src/mserve_drivechain/drive_firmware/`.
+
+Both `mserve_base` and `mserve_drivechain` are lifecycle nodes driven by
+BehaviorTree.CPP trees (`src/trees/*.xml`).
+
+## Build
 
 ```bash
-# Build
-colcon build --packages-select hyfleet_booster hyfleet_compressor hyfleet_sim
-source install/setup.bash
-
-# Terminal 1 — stack
-ros2 launch hyfleet_sim hyfleet_sim.launch.py
-
-# Terminal 2 — test
-python3 ws/src/hyfleet_sim/scripts/test_low.py
+source /opt/ros/lyrical/setup.bash
+cd ws
+colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
+  --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
-## Stage status
+`ament_target_dependencies()` does not exist in Lyrical (fully removed, not just
+deprecated). Use `target_link_libraries()` with modern imported targets instead —
+`rclcpp::rclcpp`, and `<pkg>::<pkg>` aggregate targets for message packages
+(auto-generated via `rosidl_cmake_aggregate_target-extras.cmake`, no extra
+`find_package` needed). Already fixed in the current CMakeLists for `utils`,
+`mserve_drivechain`, `mserve_base` — keep new packages consistent with this pattern.
 
-- Stage 1 (BoosterNode shell): done
-- Stage 2 (Booster BT state machine): done; all trees implemented and tested
-- Stage 3 (CompressorNode PARALLEL mode): done; all 5 tests passing
-- Stage 3 (SYNC mode): next — InterstageAboveBand / InterstateBelowBand nodes + sync.xml
-- Stage 4–7: see `ws/src/hyfleet_compressor/docs/todo.md`
+## Run
+
+```bash
+./web/run_drivechain_hw.sh          # hardware, /dev/ttyAMA0
+./web/run_drivechain_hw.sh --sim    # sim backend, no hardware needed
+```
+
+Web UI: `http://<pi-ip>:6240/drivechain.html`, `http://<pi-ip>:6240/base.html`.
+rosbridge on `:9090`.
+
+## Key decisions (full list in readme.md "Design decisions")
+
+- `mserve_base` does not own kinematics — that's `mserve_drivechain`'s job, so
+  swapping drivetrain hardware only touches one package.
+- No `ros2_control` yet — the first control stack is hand-written (clamping,
+  kinematics, protocol, fail-safe) so every part is visible and learnable.
+- Parameter bounds are enforced by ROS descriptors, not manual throws.
+
+## Docs caveat
+
+`docs/architecture.md`, `docs/packages.md`, `docs/milestones.md`, `docs/plan.md`
+are early planning docs. Some describe a `mserve_esp32` **ROS package** boundary
+that was ultimately implemented differently — the ESP32 is a physical board
+running its own firmware (`mserve_drivechain/drive_firmware/`), not a separate
+ROS package — and use package names (`mserve_interfaces`, `mserve_bringup`) that
+don't match the current `interfaces`/`launch` folders. Treat those docs as
+historical intent, not current fact; check actual `ws/src/` structure and the
+per-package READMEs (e.g. `ws/src/mserve_drivechain/README.md`, which is
+detailed and current) first.

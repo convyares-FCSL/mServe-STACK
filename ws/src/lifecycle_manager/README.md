@@ -36,11 +36,11 @@ sudo apt install ros-jazzy-behaviortree-cpp
 sudo apt install ros-jazzy-generate-parameter-library
 
 # behaviortree_ros2 source build
-cd ~/ai-workspace/projects/mServe-STACK/ws/src
+cd ~/mServe-STACK/ws/src
 git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
 
 # Build in order
-cd ~/ai-workspace/projects/mServe-STACK/ws
+cd ~/mServe-STACK/ws
 colcon build --packages-select btcpp_ros2_interfaces
 colcon build --packages-select behaviortree_ros2
 colcon build --packages-select mserve_lifecycle_manager --symlink-install
@@ -49,7 +49,7 @@ colcon build --packages-select mserve_lifecycle_manager --symlink-install
 ## Running via launch (recommended)
 
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK/ws
+cd ~/mServe-STACK/ws
 source install/setup.bash
 ros2 launch mserve_launch mserve_min.launch.py
 ```

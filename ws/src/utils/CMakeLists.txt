@@ -14,7 +14,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-ament_target_dependencies(${PROJECT_NAME} rclcpp lifecycle_msgs)
+target_link_libraries(${PROJECT_NAME} rclcpp::rclcpp lifecycle_msgs::lifecycle_msgs)
 
 install(TARGETS ${PROJECT_NAME}
   EXPORT ${PROJECT_NAME}Targets

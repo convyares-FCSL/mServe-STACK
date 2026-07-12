@@ -2,7 +2,7 @@
 
 This is the short project plan. Detailed design notes live in `docs/` so the root stays easy to scan.
 
-mServe is a learning-first ROS 2 Jazzy C++ robot stack. The skeleton should follow the style of `/home/ecm/ros2-systems-operability/src/2_cpp`: clear package boundaries, central configuration, lifecycle nodes, focused tests, and launch files that make topology visible.
+mServe is a learning-first ROS 2 C++ robot stack. Originally built against ROS 2 Jazzy; as of the July 2026 SD-card migration it runs natively (no Docker) against ROS 2 Lyrical. The skeleton should follow the style of `/home/ecm/ros2-systems-operability/src/2_cpp`: clear package boundaries, central configuration, lifecycle nodes, focused tests, and launch files that make topology visible.
 
 ## Design Direction
 
@@ -52,7 +52,7 @@ After that, add lidar, camera, display, Gazebo, Nav2, AI, and manipulation one l
 ## Current Open Questions
 
 1. Which ESP32 transport should the first comms stub target: USB serial, UART, UDP, or another link?
-2. ~~Which Gazebo stack should we use first?~~ **Decided:** Gazebo Harmonic (`ros_gz`) on WSL2/PC. Pi 5 has no compute GPU; simulation lives on the development machine.
+2. ~~Which Gazebo stack should we use first?~~ **Decided:** Gazebo Harmonic (`ros_gz`). Originally ran on WSL2/PC; as of the simulation migration, Gazebo **and** RViz both run on the NVIDIA Thor instead (not a PC/WSL2). Pi 5 has no compute GPU and stays hardware-only — see `docs/simulation_hil.md`.
 3. What lidar, camera, and display hardware are likely?
 4. Should the first AI milestone be perception-only, or high-level task planning?
 5. Should the future arm stay as a reserved URDF frame for now, or should `mserve_manipulation` be scaffolded early?

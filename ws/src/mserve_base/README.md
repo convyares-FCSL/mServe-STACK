@@ -87,7 +87,7 @@ hot-changeable at runtime.
 ## Build
 
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK/ws
+cd ~/mServe-STACK/ws
 colcon build --packages-select interfaces utils mserve_drivechain mserve_base
 source install/setup.bash
 ```

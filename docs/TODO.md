@@ -5,9 +5,9 @@
 - [x] Scaffold `mserve_interfaces` with central config and first messages.
 - [x] Scaffold `mserve_utils` with config/QoS validation tests.
 - [x] Scaffold `mserve_base` lifecycle node.
-- [x] Scaffold `mserve_drivetrain` lifecycle node in dry-run mode.
-- [x] Scaffold `mserve_bringup` minimal launch.
-- [ ] Decide first ESP32 transport: USB serial, UART, UDP, or other.
+- [x] Scaffold `mserve_drivechain` lifecycle node in dry-run mode.
+- [x] Scaffold `launch` (planned as `mserve_bringup`) minimal launch.
+- [x] Decide first ESP32 transport: **UART** (`/dev/ttyAMA0`, Pi 5 GPIO header), JSON protocol. Implemented in `mserve_drivechain/src/drivechain_uart.cpp`, not a separate transport-agnostic layer.
 - [ ] Decide whether first robot model is plain URDF or minimal Xacro.
 
 ## Next

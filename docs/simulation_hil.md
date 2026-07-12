@@ -2,7 +2,12 @@
 
 ## What we have today
 
-- A ROS 2 Jazzy robot description package in `ws/src/mserve_description`.
+**Update:** Gazebo and RViz both now run on the NVIDIA Thor (not a PC/WSL2). The
+"move to Thor" step below is done; the plan section is kept for history.
+
+- A ROS 2 robot description package in `ws/src/mserve_description` (originally
+  built against Jazzy; the Pi itself now runs natively on Lyrical — Thor's ROS
+  distro for simulation is tracked separately).
 - Gazebo Harmonic integration using `ros_gz_sim` and `ros_gz_bridge`.
 - A `params/mserve_gazebo_bridge.yaml` bridge that connects:
   - `cmd_vel` ROS → Gazebo
@@ -18,19 +23,17 @@
 - A lightweight simulation world in `worlds/empty.sdf`.
 - A working `teleop_twist_keyboard` path for manual drive testing.
 
-## Current limitations
+## Current limitations (historical — resolved by the Thor move)
 
-- Running Gazebo in WSL is choppy because WSL GPU support is limited.
-- The simulation is workable, but not smooth enough for full-time development.
-- The Pi5 is not the ideal platform for heavy Gazebo simulation.
+- Running Gazebo in WSL was choppy because WSL GPU support is limited.
+- The Pi5 was never the ideal platform for heavy Gazebo simulation, and stays hardware-only.
 
-## What’s next
+## What's next
 
-1. Move Gazebo + ROS to the Nvidia Thor machine.
+1. ~~Move Gazebo + ROS to the Nvidia Thor machine.~~ **Done** — Gazebo and RViz both now run on Thor.
 2. Use VS Code Remote SSH for editing the code on Thor.
-3. Optionally run RViz on the laptop over SSH/X11 or by connecting to Thor’s ROS 2 network.
-4. Refine the URDF/xacro model for the robot and sensors.
-5. Add more realistic sensor simulation, then compare to the Pi5 hardware interface.
+3. Refine the URDF/xacro model for the robot and sensors.
+4. Add more realistic sensor simulation, then compare to the Pi5 hardware interface.
 
 ## Planned Hardware-in-Loop workflow
 

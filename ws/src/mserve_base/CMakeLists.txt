@@ -40,15 +40,15 @@ target_include_directories(base_node_lib
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 
-ament_target_dependencies(base_node_lib
-  rclcpp
-  rclcpp_lifecycle
-  behaviortree_cpp
-  ament_index_cpp
-  lifecycle_msgs
-  geometry_msgs
-  interfaces
-  utils
+target_link_libraries(base_node_lib
+  rclcpp::rclcpp
+  rclcpp_lifecycle::rclcpp_lifecycle
+  behaviortree_cpp::behaviortree_cpp
+  ament_index_cpp::ament_index_cpp
+  lifecycle_msgs::lifecycle_msgs
+  geometry_msgs::geometry_msgs
+  interfaces::interfaces
+  utils::utils
 )
 
 # ==============================================================================
@@ -57,7 +57,7 @@ ament_target_dependencies(base_node_lib
 
 add_executable(base_node src/main.cpp)
 target_include_directories(base_node PRIVATE include)
-ament_target_dependencies(base_node rclcpp)
+target_link_libraries(base_node rclcpp::rclcpp)
 target_link_libraries(base_node base_node_lib)
 
 # ==============================================================================

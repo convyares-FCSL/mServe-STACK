@@ -80,7 +80,7 @@ sudo apt install ros-jazzy-rqt-image-view
 Primary RViz-only path:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_rviz.sh
 ```
 
@@ -93,7 +93,7 @@ This script:
 Manual RViz launch:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
 source install_host/setup.bash
@@ -105,14 +105,14 @@ ros2 launch mserve_description mserve_rviz.launch.py
 Primary Gazebo path:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_gazebo.sh
 ```
 
 Headless Gazebo path for RViz-only sensor inspection:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_gazebo.sh --headless
 ```
 
@@ -146,7 +146,7 @@ scripts/05_utils/launch_mserve_description_gazebo.sh --headless spawn_delay:=15.
 Manual Gazebo launch:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
 source install_host/setup.bash
@@ -156,7 +156,7 @@ ros2 launch mserve_description mserve_gazebo.launch.py
 Manual headless Gazebo launch:
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-select mserve_description
 source install_host/setup.bash
@@ -168,14 +168,14 @@ ros2 launch mserve_description mserve_gazebo.launch.py headless:=true
 Terminal 1: launch Gazebo
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_gazebo.sh --headless
 ```
 
 Terminal 2: source the host install space
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 source install_host/setup.bash
 ```
@@ -236,14 +236,14 @@ The modern Gazebo Sim (Harmonic) integration uses:
 **Terminal 1**: Launch Gazebo
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_gazebo.sh --headless
 ```
 
 **Terminal 2**: Publish velocity commands
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 source install_host/setup.bash
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}, angular: {z: 0.0}}" --once
@@ -303,14 +303,14 @@ Notes:
 **Terminal 1**: Launch Gazebo
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK
+cd /home/ecm/mServe-STACK
 scripts/05_utils/launch_mserve_description_gazebo.sh --headless
 ```
 
 **Terminal 2**: Launch teleop
 
 ```bash
-cd /home/ecm/ai-workspace/projects/mServe-STACK/ws
+cd /home/ecm/mServe-STACK/ws
 source /opt/ros/jazzy/setup.bash
 source install_host/setup.bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
@@ -388,6 +388,6 @@ Important:
 - A Docker build with `--symlink-install` creates install-space symlinks that
   point back into `/ws/build/...`.
 - That install tree is not safe to source from the host path
-  `/home/ecm/ai-workspace/projects/mServe-STACK/ws`.
+  `/home/ecm/mServe-STACK/ws`.
 - If that happens, remove `ws/build`, `ws/install`, and `ws/log`, then rebuild
   in the same environment you plan to run from.

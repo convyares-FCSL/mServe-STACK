@@ -195,7 +195,7 @@ Hardware params (`drive.backend`, `hardware.*`) can only be changed in `UNCONFIG
 ## Build
 
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK/ws
+cd ~/mServe-STACK/ws
 colcon build --packages-select interfaces mserve_drivechain
 source install/setup.bash
 ```
@@ -230,17 +230,17 @@ The `run_drivechain_hw.sh` script starts rosbridge, the drivechain node, runs th
 
 **Sim (no hardware needed):**
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK
+cd ~/mServe-STACK
 ./web/run_drivechain_hw.sh --sim
-# Open: http://localhost:8080/drivechain.html
+# Open: http://localhost:6240/drivechain.html
 ```
 
 **Real hardware (Pi with HAT):**
 ```bash
-cd ~/ai-workspace/projects/mServe-STACK
+cd ~/mServe-STACK
 # Ensure Pi UART is configured (see One-time Pi setup) and motor IDs are set
 ./web/run_drivechain_hw.sh
-# Open: http://<pi-ip>:8080/drivechain.html
+# Open: http://<pi-ip>:6240/drivechain.html
 
 # Custom UART device (e.g. USB instead of the GPIO header):
 ./web/run_drivechain_hw.sh /dev/ttyACM0
@@ -248,9 +248,19 @@ cd ~/ai-workspace/projects/mServe-STACK
 
 The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell at a glance which mode is running.
 
-### Running on a Raspberry Pi (Debian / no native ROS)
+### Running on this Pi (native, as of the July 2026 SD-card migration)
 
-The Pi typically has no ROS installation. The Docker stack handles everything:
+This Pi now has ROS 2 (Lyrical) and a C++ toolchain installed natively — no
+Docker needed. `run_drivechain_hw.sh` detects `ros2` on PATH and runs
+everything as native processes, including the web UI on port **6240**
+(`http://<pi-ip>:6240/drivechain.html`). `mserve-drivechain.service`
+(systemd, native, runs as the `ecm` user) starts this automatically on boot.
+
+The section below (Docker) is kept for reference — it's what `run_drivechain_hw.sh`
+falls back to automatically on a *different* Pi/Debian box that has no ROS
+installation at all.
+
+### Running on a Raspberry Pi with no native ROS (Docker fallback)
 
 **Prerequisites (one-time):**
 ```bash
@@ -273,15 +283,15 @@ cd ~/mServe-STACK
 # Subsequent runs: incremental build, much faster
 ```
 
-On the Pi, `run_drivechain_hw.sh` automatically:
+On a Pi with no native ROS, `run_drivechain_hw.sh` automatically:
 1. Detects that `ros2` is not available natively
 2. Starts the `robot-mserve` Docker container
 3. Runs `colcon build` inside the container
 4. Launches rosbridge and the drivechain node inside the container
 5. Runs the lifecycle transitions inside the container
-6. Serves the web UI natively with Python on port 8080
+6. Serves the web UI natively with Python on port 6240
 
-The web server always runs natively (Python is always available on Debian), so the browser URL is simply `http://<pi-ip>:8080/drivechain.html` from any machine on the same network.
+The web server always runs natively (Python is always available on Debian), so the browser URL is simply `http://<pi-ip>:6240/drivechain.html` from any machine on the same network.
 
 > **Serial device passthrough**: `docker-compose.yml` maps `/dev/ttyAMA0` (the Pi 5 GPIO header UART, see [UART device path](#uart-device-path--raspberry-pi-5-vs-pi-4)) into the container and adds the `dialout` group. If your setup uses a different device (e.g., `/dev/ttyACM0` over USB), pass it as an argument: `./web/run_drivechain_hw.sh /dev/ttyACM0` — but also update `docker-compose.yml` devices accordingly.
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-mServe is a ROS 2 Jazzy C++ robot stack for learning real robot systems in detail. The project should make the important parts visible: configuration, lifecycle state, command validation, motor communication, simulation, tests, and launch topology.
+mServe is a ROS 2 C++ robot stack for learning real robot systems in detail. Originally built against ROS 2 Jazzy; as of the July 2026 SD-card migration it runs natively (no Docker) against ROS 2 Lyrical. The project should make the important parts visible: configuration, lifecycle state, command validation, motor communication, simulation, tests, and launch topology.
 
 This matters because the same ROS 2 habits transfer into more serious controls work, including hydrogen compression, dispensing, process control, and safety-adjacent automation. We should avoid hiding the useful learning behind large frameworks too early.
 
@@ -24,6 +24,14 @@ Do not start with `ros2_control`.
 The first control stack should be small enough to read in one sitting and close enough to the hardware that each moving part is understandable.
 
 ## ESP32 Motor Boundary
+
+> **As implemented:** this boundary exists, but not as a separate ROS package.
+> The ESP32 is a physical board (onboard the Waveshare DDSM Driver HAT) running
+> its own firmware — `ws/src/mserve_drivechain/drive_firmware/` — and
+> `mserve_drivechain` owns the JSON-over-UART client side directly (see
+> `drivechain_uart.cpp`) rather than a dedicated `mserve_esp32` ROS package.
+> The boundary described below is real; the package split is not. See
+> `ws/src/mserve_drivechain/README.md` for the current, detailed writeup.
 
 Create a dedicated C++ package named `mserve_esp32`.
 
