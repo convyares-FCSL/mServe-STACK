@@ -33,7 +33,12 @@ unset ROS_DISCOVERY_SERVER
 
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-export ZENOH_CONFIG_OVERRIDE="connect/endpoints=[\"tcp/$PI_IP:7447\"]"
+# mode=client: default rmw_zenoh_cpp sessions are mode "peer", which gossips
+# with other peers behind the router and then tries to connect to them
+# directly using whatever locator they advertised — often a loopback address
+# on the Pi, unreachable from here. "client" mode never gossips or attempts
+# direct peer links; it only ever talks through the router.
+export ZENOH_CONFIG_OVERRIDE="mode=client;connect/endpoints=[\"tcp/$PI_IP:7447\"]"
 
 echo "ROS 2 Network Configuration:"
 echo "  RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"

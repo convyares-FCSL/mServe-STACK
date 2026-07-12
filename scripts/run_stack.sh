@@ -153,6 +153,30 @@ else
   source "$SETUP"
 fi
 
+# ── Zenoh: join a local router if one is already running ────────────────────
+# scripts/remote/start_zenoh_router.sh starts rmw_zenohd independently of this
+# script. Without this, the nodes below launch on the default RMW (plain DDS)
+# and never connect to that router at all — it ends up with zero peers, so a
+# remote RViz pointed at it (scripts/remote/launch_remote_rviz_zenoh.sh) sees
+# nothing (no TF, no topics), even though the router itself is up. Joining is
+# automatic here: rmw_zenoh_cpp's default local scouting finds a router on the
+# same host with no extra config.
+#
+# mode=client: the default session mode is "peer", which gossips with other
+# peers behind the router and then tries to connect to them directly using
+# whatever locator they advertised — that can be a loopback address, which is
+# fine locally but breaks the moment a remote machine (Thor) is one of the
+# gossiped peers. "client" mode never gossips or attempts direct peer links;
+# every node here talks only through the router, and so does the remote side
+# (scripts/remote/launch_remote_rviz_zenoh.sh sets the same mode).
+if [[ "$USE_DOCKER" == false ]] && pgrep -f rmw_zenohd >/dev/null 2>&1; then
+  echo "Zenoh router detected — joining it (RMW_IMPLEMENTATION=rmw_zenoh_cpp, mode=client)"
+  export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+  export ZENOH_CONFIG_OVERRIDE="mode=client"
+  ros2 daemon stop >/dev/null 2>&1 || true
+  ros2 daemon start >/dev/null 2>&1 || true
+fi
+
 # ── Check UART (hardware only) ────────────────────────────────────────────────
 if [[ "$SIM_MODE" == false ]]; then
   if [[ "$USE_DOCKER" == true ]]; then
