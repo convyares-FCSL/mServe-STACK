@@ -58,6 +58,7 @@ After that, add lidar, camera, display, Gazebo, Nav2, AI, and manipulation one l
 
 1. ~~Which ESP32 transport should the first comms stub target?~~ **Decided:** UART (`/dev/ttyAMA0`, Pi 5 GPIO header), JSON protocol — see `docs/TODO.md`.
 2. ~~Which Gazebo stack should we use first?~~ **Decided:** Gazebo Harmonic (`ros_gz`). Originally ran on WSL2/PC; as of the simulation migration, Gazebo **and** RViz both run on the NVIDIA Thor instead (not a PC/WSL2). Pi 5 has no compute GPU and stays hardware-only — see `docs/simulation_hil.md`.
-3. What lidar, camera, and display hardware are likely? — still open; no camera or lidar hardware confirmed connected as of 2026-07-12 (see `docs/continue.md` for the planned bring-up phases).
+3. ~~What lidar and camera hardware are likely?~~ **Decided/done:** generic USB UVC webcam (`mserve_camera`) and RPLIDAR C1 (`mserve_lidar`), both verified against real hardware as of 2026-07-13. Display hardware is still open — see `docs/packages.md`'s `mserve_display` entry.
 4. Should the first AI milestone be perception-only, or high-level task planning?
-5. Should the future arm stay as a reserved URDF frame for now, or should `mserve_manipulation` be scaffolded early?
+5. ~~Should the future arm stay as a reserved URDF frame for now, or should `mserve_manipulation` be scaffolded early?~~ **Decided:** stays a reserved frame (`arm_mount_link`) for now. `mserve_manipulation` is deliberately sequenced as the next major phase *after* `mserve_navigation` lands, not scaffolded in parallel — see `docs/packages.md`.
+6. SLAM Toolbox (map while driving) vs. AMCL (pre-built map) for `mserve_navigation` — not decided yet, blocks scaffolding that package.

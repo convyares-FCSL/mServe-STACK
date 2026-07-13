@@ -28,6 +28,11 @@ find_package(image_transport REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(v4l2_camera REQUIRED)
 
+# For camera/image_raw/compressed: hand-rolled YUYV -> BGR -> JPEG (cv::cvtColor
+# + cv::imencode) rather than image_transport's compressed_image_transport
+# plugin — see camera_node.hpp's encode_compressed() comment for why.
+find_package(OpenCV REQUIRED)
+
 # ==============================================================================
 # Main node library
 # ==============================================================================
@@ -41,6 +46,8 @@ target_include_directories(camera_node_lib
   PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
     "$<INSTALL_INTERFACE:include>"
+  PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
 )
 
 target_link_libraries(camera_node_lib
@@ -49,6 +56,7 @@ target_link_libraries(camera_node_lib
   sensor_msgs::sensor_msgs
   v4l2_camera::v4l2_camera
   utils::utils
+  ${OpenCV_LIBS}
 )
 
 # ==============================================================================

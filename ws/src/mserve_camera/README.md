@@ -27,8 +27,9 @@ CameraNode (lifecycle)
 ├── on_cleanup     releases the device
 ├── on_shutdown    same as cleanup — safe to call from any state
 │
-├── Publisher  camera/image_raw     (sensor_msgs/Image, encoding=yuv422_yuy2)
-└── Publisher  camera/camera_info   (sensor_msgs/CameraInfo, uncalibrated placeholder)
+├── Publisher  camera/image_raw              (sensor_msgs/Image, encoding=yuv422_yuy2)
+├── Publisher  camera/image_raw/compressed   (sensor_msgs/CompressedImage, format=jpeg)
+└── Publisher  camera/camera_info            (sensor_msgs/CameraInfo, uncalibrated placeholder)
 ```
 
 Unlike `mserve_drivechain`/`mserve_base`, there's no BehaviorTree here —
@@ -56,6 +57,7 @@ dedicated capture thread is enough. This matches how upstream
 | `width` | `640` | Capture width (px) |
 | `height` | `480` | Capture height (px) |
 | `frame_id` | `camera_link_optical` | REP-103 optical frame — matches `mserve_camera.xacro`/`mserve_depth_camera.xacro`'s `camera_link → camera_link_optical` joint, not the physical mount frame |
+| `jpeg_quality` | `80` | `cv::IMWRITE_JPEG_QUALITY` for `camera/image_raw/compressed` (1-100) |
 
 `device`/`width`/`height` can only be changed in `UNCONFIGURED` state (reopening
 the V4L2 device mid-stream isn't supported). Pixel format is fixed to YUYV —
@@ -79,13 +81,39 @@ git history / re-run `v4l2-ctl --list-formats-ext` for your camera) — at that
 point switching to `MJPG` and adding a decode step becomes worth it. Not
 done yet.
 
-**Known gap**: only pixel format + resolution are requested via
-`requestDataFormat()` — the frame *interval* (fps) is never explicitly set
-via `VIDIOC_S_PARM`, so the driver keeps whatever interval was last active.
-Observed rate on the dev webcam was ~12.6 Hz instead of the format table's
-advertised 30 Hz. Fixing this means calling the V4L2 `VIDIOC_S_PARM` ioctl
-directly (`V4l2CameraDevice` doesn't expose a wrapper for it) — not done yet,
-see `docs/todo.md`.
+**Known gap, still open**: only pixel format + resolution are requested via
+`requestDataFormat()` — the frame *interval* (fps) is never actually applied.
+`CameraNode::request_frame_rate()` attempts `VIDIOC_S_PARM` via a second,
+independent `open()` of the device (since `V4l2CameraDevice` doesn't expose
+its internal fd), but this is confirmed (2026-07-13, real hardware) to be a
+silent no-op — the ioctl reports success, but the streamed rate stays at
+whatever it was (~12.6 Hz observed, not the format table's 30 Hz). Frame
+interval negotiation on this driver turns out to be scoped per-fd, not
+device-global as originally assumed; a second fd's successful `S_PARM` call
+doesn't carry over to the fd that actually calls `STREAMON`. See `docs/todo.md`.
+
+## Compressed image (`camera/image_raw/compressed`)
+
+`camera/image_raw` is raw YUYV — uncompressed, ~600KB/frame at 640x480.
+Over a WiFi-connected bridge (`foxglove_bridge`, `rosbridge`) that multiplexes
+every topic over a single WebSocket connection, a continuous raw image stream
+easily saturates the link and queues up ahead of small, time-critical
+messages sharing that same connection (`TF`, `/joint_states`) — symptom
+observed in practice: teleop commands felt instant (tiny message, jumps the
+queue) but the robot model / video visibly lagged ~12s behind in Foxglove,
+tracking a growing backlog rather than a fixed pipeline delay.
+
+`CameraNode::encode_compressed()` hand-encodes each frame YUYV → BGR
+(`cv::cvtColor`, `COLOR_YUV2BGR_YUYV`) → JPEG (`cv::imencode`) and publishes
+it as `sensor_msgs/CompressedImage` on `camera/image_raw/compressed`,
+gated by the same `LifecyclePublisher` activate/deactivate pattern as every
+other publisher here. Deliberately **not** using `image_transport`'s
+`compressed_image_transport` plugin (the standard ROS mechanism for this)
+even though it's the more "official" route: `image_transport::Publisher`
+wraps a plain `rclcpp::Publisher`, not a `LifecyclePublisher` — adopting it
+would silently break the "deactivate stops all publishing" guarantee every
+other topic here relies on. Hand-rolling the encode step is a few lines and
+keeps the whole node on one consistent lifecycle-safe publishing pattern.
 
 ## Build
 

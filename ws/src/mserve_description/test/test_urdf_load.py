@@ -21,7 +21,10 @@ def test_xacro_expands_to_expected_links_and_joints():
     links = {link.attrib['name'] for link in robot.findall('link')}
     joints = {joint.attrib['name']: joint.attrib['type'] for joint in robot.findall('joint')}
     lidar_sensor = robot.find("./gazebo[@reference='lidar_link']/sensor[@name='rplidar_c1']")
-    camera_sensor = robot.find("./gazebo[@reference='camera_link']/sensor[@name='pi_camera_module_3']")
+    # mserve.urdf.xacro currently includes mserve_depth_camera.xacro, not the
+    # plain mserve_camera.xacro (commented out there) — different sensor name/
+    # type/topic even though the link/joint names are shared between the two.
+    camera_sensor = robot.find("./gazebo[@reference='camera_link']/sensor[@name='depth_camera']")
 
     assert {
         'base_link',
@@ -45,8 +48,8 @@ def test_xacro_expands_to_expected_links_and_joints():
     assert joints['lidar_riser_joint'] == 'fixed'
     assert joints['lidar_joint'] == 'fixed'
     assert camera_sensor is not None
-    assert camera_sensor.attrib['type'] == 'camera'
-    assert camera_sensor.findtext('topic') == 'camera/image_raw'
+    assert camera_sensor.attrib['type'] == 'rgbd_camera'
+    assert camera_sensor.findtext('topic') == 'camera'
     assert lidar_sensor is not None
     assert lidar_sensor.attrib['type'] == 'gpu_lidar'
     assert lidar_sensor.findtext('topic') == 'scan'

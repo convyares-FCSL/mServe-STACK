@@ -19,18 +19,20 @@
 
 ## Next
 
-- [ ] Add launch tests for minimal bringup.
-- [ ] Add robot description and TF smoke test.
+- [x] Add launch tests for minimal bringup — `ws/src/launch/test/test_launch_descriptions.py` (was a dead stub, never wired into `BUILD_TESTING`; now checks `mserve_min.launch.py` actually declares `backend`/`uart_device` args and wires up all six expected package/executable pairs, including `lifecycle_manager` inside its `TimerAction`).
+- [x] Add robot description and TF smoke test — `ws/src/mserve_description/test/test_tf_smoke.py`, a `launch_testing` test that boots `robot_state_publisher` alone (no hardware, no other mServe node) with the real xacro and checks `/tf_static` actually carries every fixed-joint frame. `test_urdf_load.py` already covered the xacro structurally but not runtime TF. Along the way, running the suite for the first time (`BUILD_TESTING` had never actually been turned on in this repo before — every documented build command uses `-DBUILD_TESTING=OFF`) surfaced that `test_urdf_load.py` itself was already broken: it asserted the old `mserve_camera.xacro` sensor (`pi_camera_module_3`, topic `camera/image_raw`), but `mserve.urdf.xacro` has included `mserve_depth_camera.xacro` instead for a while (`depth_camera` sensor, topic `camera`) — fixed.
+- [ ] `mserve_camera` frame rate still stuck at ~12.6Hz, not the format table's 30Hz. Attempted fix (second independent `open()` issuing `VIDIOC_S_PARM`) verified on real hardware (2026-07-13) to be a silent no-op — assumption that frame interval is UVC device-level rather than per-fd was wrong for this driver. Left in place harmlessly; real fix needs a different mechanism. See `ws/src/mserve_camera/docs/todo.md`.
+- [x] Add Foxglove Bridge support — `scripts/run_foxglove_bridge.sh` (standalone, mirrors `run_rosbridge.sh`), `ws://<pi-ip>:8765`. Debugged two collisions along the way: (1) sourcing the full workspace `install/setup.bash` breaks `ros2 launch`'s XML frontend, because this repo has a package literally named `launch` that shadows the real `launch` framework package on the ament index — fixed by sourcing only `install/interfaces/share/interfaces/local_setup.bash`. (2) `set -u` in the script aborts immediately when sourcing ROS's `setup.bash` (references an unset var internally) — matched `run_stack.sh`'s existing `set -eo pipefail` (no `-u`).
+- [x] Add `camera/image_raw/compressed` (JPEG, `sensor_msgs/CompressedImage`) — raw YUYV was saturating the WebSocket bridges (foxglove_bridge/rosbridge multiplex every topic over one connection), queuing ahead of small time-critical messages like `/tf` and causing the robot model to visibly lag ~12s behind teleop in Foxglove even though driving itself felt instant. Hand-rolled (`cv::cvtColor` + `cv::imencode`), not via `image_transport`'s plugin system — see `ws/src/mserve_camera/README.md`'s "Compressed image" section for why. **Verified on real hardware**: switching Foxglove's Image panel to the compressed topic dropped the lag from ~12s to ~1s.
 - [ ] Add Gazebo simulation package.
-- [ ] Fix `mserve_camera` frame rate — stuck at ~12.6Hz because the V4L2 frame interval (`VIDIOC_S_PARM`) is never explicitly requested, only pixel format/resolution. See `ws/src/mserve_camera/docs/todo.md`.
 - [ ] Mic (`audio_common`) — `ros-lyrical-audio-capture` depends on `libgstreamer-plugins-good1.0-0`, which doesn't exist in this Ubuntu Resolute release's repos at all. Deferred; hand-rolling an ALSA capture node is the likely path if revisited (see `ws/src/mserve_camera/docs/todo.md`).
-- [ ] Add display package.
-- [ ] Add Nav2 simulation launch.
+- [ ] Add display package — not started; interface contract already exists (`interfaces/srv/SetDisplayMode.srv`, `interfaces/msg/DisplayStatus.msg`) and `display_link` is already a reserved frame in the URDF, but no screen hardware chosen and nothing implements the interface yet. See `docs/packages.md`.
+- [ ] Decide SLAM Toolbox vs. AMCL, then add Nav2 simulation launch / `mserve_navigation`. See `docs/plan.md`'s Current Open Questions.
 
 ## Later
 
 - [ ] Add real ESP32 packet protocol.
 - [ ] Add hardware safety behavior for ESP32 comms loss.
 - [ ] Add AI package.
-- [ ] Add arm/manipulation package.
+- [ ] Add arm/manipulation package (`mserve_manipulation`) — deliberately sequenced as the next major phase *after* `mserve_navigation` lands, not scaffolded in parallel. `arm_mount_link` is already a reserved frame in the URDF. See `docs/packages.md`.
 - [ ] Revisit `ros2_control` later as a comparison exercise, not as the first implementation.

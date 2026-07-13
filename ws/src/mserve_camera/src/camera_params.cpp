@@ -19,13 +19,18 @@ void CameraNode::declare_params()
   // REP-103 optical frame — matches mserve_camera.xacro/mserve_depth_camera.xacro's
   // camera_link -> camera_link_optical joint, not the physical mount frame.
   this->declare_parameter<std::string>("frame_id", "camera_link_optical");
+
+  this->declare_parameter<int64_t>("jpeg_quality", kJpegQualityDefault,
+    mserve_utils::make_int_range_descriptor(
+      "JPEG quality for camera/image_raw/compressed", kJpegQualityMin, kJpegQualityMax));
 }
 
 void CameraNode::load_params() {
-  device_   = get_parameter("device").as_string();
-  width_    = static_cast<int>(get_parameter("width").as_int());
-  height_   = static_cast<int>(get_parameter("height").as_int());
-  frame_id_ = get_parameter("frame_id").as_string();
+  device_       = get_parameter("device").as_string();
+  width_        = static_cast<int>(get_parameter("width").as_int());
+  height_       = static_cast<int>(get_parameter("height").as_int());
+  frame_id_     = get_parameter("frame_id").as_string();
+  jpeg_quality_ = static_cast<int>(get_parameter("jpeg_quality").as_int());
 
   // Uncalibrated placeholder CameraInfo — width/height/frame_id are real,
   // K/D/R/P are left zeroed until an actual calibration is run. Any consumer

@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <v4l2_camera/v4l2_camera_device.hpp>
 
@@ -39,11 +40,28 @@ private:
   int width_  = 640;
   int height_ = 480;
   std::string frame_id_;
+  int jpeg_quality_ = 80;
 
   // Capture loop — V4l2CameraDevice::capture() blocks until a frame is ready,
   // so this runs on its own thread rather than a fixed-rate timer (matches
   // upstream v4l2_camera_node's own capture_thread_/canceled_ pattern).
   void capture_loop();
+
+  // VIDIOC_S_PARM (frame interval) — V4l2CameraDevice has no wrapper for it,
+  // so this reaches the device directly via a second, independent open() of
+  // the same node. See camera_limits.hpp's kTargetFps — as of 2026-07-13 this
+  // is confirmed NOT to actually change the streamed rate; kept only because
+  // it's a harmless no-op on failure, pending a real fix.
+  bool request_frame_rate(int fps);
+
+  // YUYV -> BGR -> JPEG via OpenCV directly (cv::cvtColor + cv::imencode) —
+  // hand-rolled rather than pulled in via image_transport's plugin system,
+  // because image_transport::Publisher wraps a plain rclcpp::Publisher, not
+  // a LifecyclePublisher, which would silently break the "deactivate stops
+  // all publishing" guarantee the rest of this node relies on. Returns
+  // nullptr if the encode fails (never expected to under normal operation,
+  // since the source Mat/encoding are always what capture_loop just built).
+  sensor_msgs::msg::CompressedImage::UniquePtr encode_compressed(const sensor_msgs::msg::Image & image);
 
   std::unique_ptr<v4l2_camera::V4l2CameraDevice> camera_;
   std::thread       capture_thread_;
@@ -51,8 +69,9 @@ private:
 
   sensor_msgs::msg::CameraInfo camera_info_;  // uncalibrated placeholder — see camera_params.cpp
 
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr      image_pub_;
-  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::CameraInfo>::SharedPtr info_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr           image_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::CompressedImage>::SharedPtr compressed_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::CameraInfo>::SharedPtr      info_pub_;
 };
 
 }  // namespace mserve_camera

@@ -6,7 +6,9 @@
     Lifecycle-managed camera node for mServe. Wraps v4l2_camera's
     V4l2CameraDevice (raw V4L2 device access, not the whole v4l2_camera_node)
     so bringup/shutdown is gated the same way as mserve_drivechain/mserve_base
-    via lifecycle_manager. Publishes standard sensor_msgs/Image + CameraInfo.
+    via lifecycle_manager. Publishes standard sensor_msgs/Image + CameraInfo,
+    plus a hand-rolled JPEG-compressed camera/image_raw/compressed for
+    bandwidth-constrained subscribers (Foxglove, RViz over WiFi).
   </description>
   <maintainer email="ca99896@gmail.com">ecm</maintainer>
   <license>Apache-2.0</license>
@@ -18,6 +20,7 @@
   <depend>sensor_msgs</depend>
   <depend>v4l2_camera</depend>
   <depend>utils</depend>
+  <depend>libopencv-dev</depend>
 
   <test_depend>ament_lint_auto</test_depend>
 

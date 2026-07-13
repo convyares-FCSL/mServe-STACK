@@ -9,7 +9,9 @@ install(DIRECTORY launch params rviz urdf worlds models
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
   ament_add_pytest_test(test_mserve_description test/test_urdf_load.py)
+  add_launch_test(test/test_tf_smoke.py)
 endif()
 
 ament_package()

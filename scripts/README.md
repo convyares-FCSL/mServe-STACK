@@ -9,6 +9,7 @@ specialized helper.
 scripts/
 ├── run_stack.sh          main entry point: full stack (hardware or --sim)
 ├── run_rosbridge.sh      standalone rosbridge only
+├── run_foxglove_bridge.sh standalone Foxglove Bridge only (ws://<pi-ip>:8765)
 ├── run_web_only.sh       standalone static web server only
 ├── clean_all.sh          remove ws/build, ws/install, ws/log
 ├── setup/

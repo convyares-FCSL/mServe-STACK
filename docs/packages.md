@@ -240,30 +240,46 @@ Lifecycle node wrapping `v4l2_camera`'s `V4l2CameraDevice` class directly
 established), publishing standard `sensor_msgs/Image`/`CameraInfo` so any
 ROS node — RViz, a future AI package — can consume it without knowing
 mServe exists. See `ws/src/mserve_camera/README.md` for pixel-format
-reasoning, parameters, and known gaps (frame rate, no calibration, mic
-deferred).
+reasoning, parameters, and known gaps (calibration, mic deferred).
+
+## `mserve_lidar`
+
+Also not in the original plan. Lifecycle node wrapping a vendored Slamtec
+RPLIDAR SDK's `sl::ILidarDriver` directly (same pattern as `mserve_camera`
+and `mserve_drivechain`'s `DriveUart` — no apt package for `rplidar_ros`
+exists on this distro, so the SDK is vendored as source instead), publishing
+standard `sensor_msgs/LaserScan`. Targets the RPLIDAR C1. See
+`ws/src/mserve_lidar/README.md` for the SDK vendoring rationale, scan
+message construction, and known gaps.
 
 ## Later Packages
 
-`mserve_lidar`:
-
-- Wrap or adapt the chosen lidar driver.
-- Keep filtering/health logic testable.
-
 `mserve_display`:
 
-- Handle robot display/status output.
-- Expose `SetDisplayMode`.
+- Handle robot display/status output. Interface contract already exists —
+  `interfaces/srv/SetDisplayMode.srv` (`mode` in, `success`/`message` out)
+  and `interfaces/msg/DisplayStatus.msg` (`mode`, `text`) — but nothing
+  implements it yet.
+- `display_link` is already a reserved fixed-joint frame in
+  `mserve_core.xacro` (geometry placeholder only, no real screen dimensions
+  or hardware chosen yet).
+- Screen hardware itself is still an open question (see `docs/plan.md`'s
+  Current Open Questions).
 
 `mserve_sim`:
 
 - Start Gazebo.
 - Spawn robot.
 - Bridge clock, scan, camera, command, and feedback topics.
+- Partially covered already without a standalone package — see
+  `docs/milestones.md` Milestone 8.
 
 `mserve_navigation`:
 
 - Own Nav2 config, maps, behavior tree, and launch wrappers.
+- Blocked on one decision first: SLAM Toolbox (map while driving) vs. AMCL
+  against a pre-built map — changes what this package depends on. Not
+  decided yet.
 
 `mserve_ai`:
 
@@ -272,3 +288,8 @@ deferred).
 `mserve_manipulation`:
 
 - Future arm package, likely with MoveIt 2 later.
+- **Next major phase after `mserve_navigation` lands**, not before — deliberate
+  ordering, not just an open slot. `arm_mount_link` is already a reserved
+  fixed-joint frame in `mserve_core.xacro` (geometry placeholder only, no arm
+  hardware chosen yet) so the mount point exists without committing to
+  scaffolding the package early (see `docs/plan.md`'s Current Open Questions).
