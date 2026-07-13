@@ -1,5 +1,0 @@
-robot:
-  name: mserve
-  base_link: base_link
-  wheel_separation: 0.35
-  wheel_radius: 0.08

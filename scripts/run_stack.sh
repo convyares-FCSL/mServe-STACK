@@ -9,14 +9,15 @@
 # and inside the mserve Docker container (Raspberry Pi / Debian).
 #
 # Usage:
-#   ./scripts/run_stack.sh [--sim] [--foxglove] [--slam] [uart_device]
+#   ./scripts/run_stack.sh [--sim] [--foxglove] [--slam-map|--slam-local] [uart_device]
 #
 # Examples:
 #   ./scripts/run_stack.sh --sim             # sim, no hardware needed
 #   ./scripts/run_stack.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
 #   ./scripts/run_stack.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
 #   ./scripts/run_stack.sh --foxglove        # also start Foxglove Bridge (ws://<pi-ip>:8765)
-#   ./scripts/run_stack.sh --slam            # also start SLAM Toolbox (builds /map while driving)
+#   ./scripts/run_stack.sh --slam-map        # also start SLAM Toolbox, building/extending a map
+#   ./scripts/run_stack.sh --slam-local      # also start SLAM Toolbox, localizing against a saved map
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
@@ -25,17 +26,19 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 WS_DIR="$ROOT_DIR/ws"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
-# Order-independent: --sim, --foxglove, --slam can appear in any order before
-# the optional positional uart_device.
+# Order-independent: --sim, --foxglove, --slam-map/--slam-local can appear in
+# any order before the optional positional uart_device.
 SIM_MODE=false
 FOXGLOVE=false
 SLAM=false
+SLAM_MODE=""
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --sim) SIM_MODE=true ;;
     --foxglove) FOXGLOVE=true ;;
-    --slam) SLAM=true ;;
+    --slam-map) SLAM=true; SLAM_MODE="map" ;;
+    --slam-local) SLAM=true; SLAM_MODE="local" ;;
     *) ARGS+=("$arg") ;;
   esac
 done
@@ -345,7 +348,7 @@ wait_for_active /mserve_drivechain
 echo "Waiting for base node to activate…"
 wait_for_active /mserve_base
 
-# ── Start SLAM Toolbox (opt-in, --slam) ───────────────────────────────────────
+# ── Start SLAM Toolbox (opt-in, --slam-map / --slam-local) ────────────────────
 # Placed after drivechain/base are confirmed active so /scan (mserve_lidar)
 # and odom -> base_link TF (mserve_base) are already flowing by the time it
 # starts — not strictly required (it just waits quietly otherwise, same as
@@ -355,10 +358,14 @@ wait_for_active /mserve_base
 # hit the launch-package-name collision that foxglove_bridge's XML file does.
 if [[ "$SLAM" == true ]]; then
   if [[ "$USE_DOCKER" == true ]]; then
-    echo "NOTE: --slam is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
+    echo "NOTE: --slam-$SLAM_MODE is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
   else
-    echo "Starting SLAM Toolbox — /map will start publishing once configure/activate completes…"
-    ros2 launch launch mserve_slam.launch.py > /tmp/mserve_slam.log 2>&1 &
+    if [[ "$SLAM_MODE" == "map" ]]; then
+      echo "Starting SLAM Toolbox (mapping) — /map will start publishing once configure/activate completes…"
+    else
+      echo "Starting SLAM Toolbox (localization) — needs a real map_file_name already set in slam_params_local.yaml…"
+    fi
+    ros2 launch launch mserve_slam.launch.py mode:="$SLAM_MODE" > /tmp/mserve_slam.log 2>&1 &
     NATIVE_PIDS+=($!)
   fi
 fi
@@ -384,9 +391,15 @@ if [[ "$FOXGLOVE" == true ]]; then
   echo "  Foxglove: ws://${LOCAL_IP}:8765  (Open Connection -> Foxglove WebSocket)"
   echo ""
 fi
-if [[ "$SLAM" == true ]]; then
-  echo "  SLAM Toolbox running — /map building live. Save when ready:"
+if [[ "$SLAM" == true && "$SLAM_MODE" == "map" ]]; then
+  echo "  SLAM Toolbox running (mapping) — /map building live."
+  echo "  Save for viewing (a .pgm + .yaml):"
   echo "    ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: 'my_map'}}\""
+  echo "  Save for --slam-local (the actual pose-graph it needs):"
+  echo "    ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \"{filename: '/absolute/path/my_map'}\""
+  echo ""
+elif [[ "$SLAM" == true && "$SLAM_MODE" == "local" ]]; then
+  echo "  SLAM Toolbox running (localization) against the map set in slam_params_local.yaml."
   echo ""
 fi
 echo "  rosbridge log: /tmp/rosbridge.log"

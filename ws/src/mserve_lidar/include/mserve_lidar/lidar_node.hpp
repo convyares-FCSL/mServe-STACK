@@ -54,7 +54,7 @@ private:
   void capture_loop();
   void publish_scan(
     const std::vector<sl_lidar_response_measurement_node_hq_t> & nodes,
-    size_t first, size_t last, rclcpp::Time stamp, double scan_duration);
+    size_t count, rclcpp::Time stamp, double scan_duration);
 
   sl::IChannel * channel_ = nullptr;
   sl::ILidarDriver * driver_ = nullptr;

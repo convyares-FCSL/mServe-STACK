@@ -223,23 +223,32 @@ void LidarNode::capture_loop() {
 
     if (SL_IS_FAIL(result)) continue;
     driver_->ascendScanData(nodes.data(), count);
+    if (count < 2) continue;  // need at least 2 points for angle_increment
 
-    // Trim leading/trailing no-return samples so angle_min/max reflect real data.
-    size_t first = 0;
-    while (first < count && nodes[first].dist_mm_q2 == 0) ++first;
-    size_t last = count;
-    while (last > first && nodes[last - 1].dist_mm_q2 == 0) --last;
-    if (last <= first + 1) continue;  // need at least 2 points for angle_increment
-
-    publish_scan(nodes, first, last, start, scan_duration);
+    publish_scan(nodes, count, start, scan_duration);
   }
 }
 
 void LidarNode::publish_scan(
   const std::vector<sl_lidar_response_measurement_node_hq_t> & nodes,
-  size_t first, size_t last, rclcpp::Time stamp, double scan_duration)
+  size_t count, rclcpp::Time stamp, double scan_duration)
 {
-  const size_t node_count = last - first;
+  // Deliberately NOT trimming leading/trailing no-return (dist_mm_q2 == 0)
+  // samples here — this used to shrink the published array to only the
+  // "real data" span, but that means angle_min/angle_max/array-size varied
+  // scan-to-scan (however many no-return samples happened to land at the
+  // edges that revolution). SLAM/Nav2 consumers (slam_toolbox's Karto
+  // backend confirmed, and Nav2's costmap raytracing works the same way)
+  // register a laser's geometry from the first scan they see and expect
+  // every later scan to match it exactly — a varying array size meant
+  // slam_toolbox silently rejected nearly every scan after the first
+  // ("LaserRangeScan contains N range readings, expected M"), so /map never
+  // updated. Fixed by always publishing the full raw buffer (indices
+  // 0..count-1) and representing no-return samples as `range = infinity`
+  // wherever they land, which is what the standard LaserScan convention
+  // (and the mid-scan case just below) already does — no data is lost,
+  // just no longer silently dropped from the array's edges.
+  const size_t node_count = count;
 
   auto scan = std::make_unique<sensor_msgs::msg::LaserScan>();
   scan->header.stamp = stamp;
@@ -247,8 +256,8 @@ void LidarNode::publish_scan(
 
   // SDK angles increase clockwise looking down at the device; negate to
   // follow REP-103 (counter-clockwise-positive about +Z, X-forward).
-  const float angle_min_deg = node_angle_deg(nodes[first]);
-  const float angle_max_deg = node_angle_deg(nodes[last - 1]);
+  const float angle_min_deg = node_angle_deg(nodes[0]);
+  const float angle_max_deg = node_angle_deg(nodes[node_count - 1]);
   scan->angle_min = deg2rad(-angle_max_deg);
   scan->angle_max = deg2rad(-angle_min_deg);
   scan->angle_increment = (scan->angle_max - scan->angle_min) / static_cast<double>(node_count - 1);
@@ -263,7 +272,7 @@ void LidarNode::publish_scan(
   for (size_t i = 0; i < node_count; ++i) {
     // Reversed index — we negated the angle direction above, so ranges[0]
     // must correspond to angle_min, i.e. the last (highest-angle) SDK sample.
-    const auto & node = nodes[last - 1 - i];
+    const auto & node = nodes[node_count - 1 - i];
     const float range_m = static_cast<float>(node.dist_mm_q2) / 4000.0f;
     scan->ranges[i] = (range_m == 0.0f) ? std::numeric_limits<float>::infinity() : range_m;
     scan->intensities[i] = static_cast<float>(node.quality >> 2);

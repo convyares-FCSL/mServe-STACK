@@ -140,8 +140,8 @@
       <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
         Builds <code>/map</code> from this lidar's <code>/scan</code> while driving.
         Separate node/process from <code>mserve_lidar</code> above — start it with
-        <code>./scripts/run_stack.sh --slam</code> (or standalone with
-        <code>./scripts/run_slam.sh</code>) before these controls do anything.
+        <code>./scripts/run_stack.sh --slam-map</code> (or standalone with
+        <code>./scripts/run_slam.sh map</code>) before these controls do anything.
       </p>
       <div class="node-state" style="margin-bottom:12px">
         State: <span id="slam-node-state" class="state-label">?</span>
@@ -180,7 +180,15 @@
         <input type="text" id="slam-map-name" placeholder="map name" value="my_map"
           style="background:var(--surface-2);border:1px solid #475569;border-radius:6px;color:var(--text);padding:6px 10px;font-size:0.85rem;width:160px" />
         <button id="slam-btn-save-map">Save Map</button>
+        <button id="slam-btn-serialize-map">Serialize Map</button>
       </div>
+      <p style="font-size:0.75rem;color:#64748b;margin:6px 0 0">
+        Both write into <code>map/</code> under the same name — <strong>Save
+        Map</strong> is a viewable <code>.pgm</code>/<code>.yaml</code>;
+        <strong>Serialize Map</strong> is slam_toolbox's own pose-graph
+        format, the one <code>--slam-local</code> actually loads. Run both if
+        you want to keep the map for localization later.
+      </p>
       <div id="slam-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 

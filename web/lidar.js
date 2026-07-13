@@ -95,6 +95,20 @@ document.getElementById('slam-btn-save-map').addEventListener('click', () => {
   }, (err) => { elSlamMsg.textContent = `Error: ${err}`; });
 });
 
+document.getElementById('slam-btn-serialize-map').addEventListener('click', () => {
+  const name = document.getElementById('slam-map-name').value.trim() || 'map';
+  elSlamMsg.textContent = `Serializing as "${name}"…`;
+  new ROSLIB.Service({
+    ros,
+    name: '/slam_toolbox/serialize_map',
+    serviceType: 'slam_toolbox/srv/SerializePoseGraph',
+  }).callService(new ROSLIB.ServiceRequest({ filename: name }), (res) => {
+    elSlamMsg.textContent = res?.result === 0
+      ? `Serialized "${name}" — set slam_params_local.yaml's map_file_name to it for --slam-local.`
+      : `Serialize returned code ${res?.result} — check slam_toolbox's own log.`;
+  }, (err) => { elSlamMsg.textContent = `Error: ${err}`; });
+});
+
 new ROSLIB.Topic({
   ros,
   name: '/map_metadata',

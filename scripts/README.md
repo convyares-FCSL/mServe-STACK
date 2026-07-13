@@ -50,13 +50,16 @@ bash scripts/build/build_workspace.sh  # build all mServe packages
 ./scripts/run_stack.sh --sim        # sim backend, no hardware needed
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device
 ./scripts/run_stack.sh --foxglove   # also start Foxglove Bridge (ws://<pi-ip>:8765)
-./scripts/run_stack.sh --slam       # also start SLAM Toolbox (builds /map while driving)
+./scripts/run_stack.sh --slam-map   # also start SLAM Toolbox, building/extending a map
+./scripts/run_stack.sh --slam-local # also start SLAM Toolbox, localizing against a saved map
 ```
 
-`--foxglove`/`--slam`/`--sim` can combine in any order — e.g.
-`./scripts/run_stack.sh --sim --slam --foxglove`. Both flags default off:
-without them, `run_stack.sh` only starts what it's always started (drivechain/
-base/camera/lidar + rosbridge + web UI) — same load as before either existed.
+`--foxglove`/`--slam-map`/`--slam-local`/`--sim` can combine in any order —
+e.g. `./scripts/run_stack.sh --sim --slam-map --foxglove` (`--slam-map` and
+`--slam-local` are mutually exclusive with each other, not with the others).
+All flags default off: without them, `run_stack.sh` only starts what it's
+always started (drivechain/base/camera/lidar + rosbridge + web UI) — same
+load as before any of them existed.
 
 This is also what `mserve-drivechain.service` runs on boot — see the
 top-level `readme.md`'s "Running on boot" section.
