@@ -9,7 +9,6 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>lifecycle_manager</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>
@@ -33,6 +32,23 @@
     here creates the identical cycle. slam_toolbox is vendored source
     (ws/src/slam_toolbox/, gitignored — see scripts/run_slam.sh), built
     ahead of this package the same way.
+
+    Same reasoning again for NOT declaring lifecycle_manager here (used at
+    runtime by mserve_slam.launch.py's second lifecycle_manager instance):
+    this isn't just a cycle-avoidance issue but caused a real regression —
+    ANY package that declares <exec_depend>launch</exec_depend> meaning the
+    framework (e.g. mserve_description) gets that ambiguously resolved to
+    this local package by colcon, so whatever this package.xml depends on
+    leaks into their transitive dependency graph too. Declaring
+    lifecycle_manager here broke mserve_description's isolated Gazebo host
+    build on the Thor (scripts/sim/launch_mserve_description_gazebo.sh,
+    a "packages-select mserve_description" build into a separate
+    install_host/ directory): colcon then insisted on finding a built
+    lifecycle_manager + utils that were never part of that build.
+    lifecycle_manager is only ever referenced here as a runtime
+    package-name string (Node action in mserve_slam.launch.py), not a real
+    build dependency, so nothing is lost by leaving it out — same as
+    mserve_description/slam_toolbox above.
   -->
 
   <test_depend>ament_cmake_pytest</test_depend>
