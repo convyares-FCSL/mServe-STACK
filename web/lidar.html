@@ -134,6 +134,56 @@
       </div>
     </section>
 
+    <!-- SLAM Toolbox ────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>SLAM Toolbox</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Builds <code>/map</code> from this lidar's <code>/scan</code> while driving.
+        Separate node/process from <code>mserve_lidar</code> above — start it with
+        <code>./scripts/run_stack.sh --slam</code> (or standalone with
+        <code>./scripts/run_slam.sh</code>) before these controls do anything.
+      </p>
+      <div class="node-state" style="margin-bottom:12px">
+        State: <span id="slam-node-state" class="state-label">?</span>
+      </div>
+      <div class="button-row" style="margin-bottom:16px">
+        <button id="slam-btn-configure">Configure</button>
+        <button id="slam-btn-activate">Activate</button>
+        <button id="slam-btn-deactivate">Deactivate</button>
+        <button id="slam-btn-cleanup">Cleanup</button>
+      </div>
+
+      <div class="feedback-grid" style="margin-bottom:16px">
+        <div class="feedback-card">
+          <h4>Map size</h4>
+          <div class="feedback-value" id="slam-map-size" style="font-size:1.3rem">—</div>
+          <div class="feedback-unit">cells (width × height)</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Resolution</h4>
+          <div class="feedback-value" id="slam-map-resolution" style="font-size:1.3rem">—</div>
+          <div class="feedback-unit">m / cell</div>
+        </div>
+      </div>
+
+      <div class="button-row" style="margin-bottom:8px;align-items:center">
+        <button id="slam-btn-reset" class="btn-danger">Reset Map</button>
+      </div>
+      <p style="font-size:0.75rem;color:#64748b;margin:0 0 16px">
+        Clears the current map and pose graph and starts fresh — can't be
+        undone, save first if you want to keep it. <code>/map</code> won't
+        visibly clear until the next scan is processed (it's a latched
+        topic) — nudge the robot if it looks unchanged.
+      </p>
+
+      <div class="button-row" style="align-items:center;gap:10px">
+        <input type="text" id="slam-map-name" placeholder="map name" value="my_map"
+          style="background:var(--surface-2);border:1px solid #475569;border-radius:6px;color:var(--text);padding:6px 10px;font-size:0.85rem;width:160px" />
+        <button id="slam-btn-save-map">Save Map</button>
+      </div>
+      <div id="slam-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
     <!-- Parameters ──────────────────────────────────────────────────────── -->
     <section class="panel">
       <h2>Parameters</h2>

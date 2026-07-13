@@ -9,12 +9,14 @@
 # and inside the mserve Docker container (Raspberry Pi / Debian).
 #
 # Usage:
-#   ./scripts/run_stack.sh [--sim] [uart_device]
+#   ./scripts/run_stack.sh [--sim] [--foxglove] [--slam] [uart_device]
 #
 # Examples:
 #   ./scripts/run_stack.sh --sim             # sim, no hardware needed
 #   ./scripts/run_stack.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
 #   ./scripts/run_stack.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
+#   ./scripts/run_stack.sh --foxglove        # also start Foxglove Bridge (ws://<pi-ip>:8765)
+#   ./scripts/run_stack.sh --slam            # also start SLAM Toolbox (builds /map while driving)
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
@@ -23,12 +25,21 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 WS_DIR="$ROOT_DIR/ws"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
+# Order-independent: --sim, --foxglove, --slam can appear in any order before
+# the optional positional uart_device.
 SIM_MODE=false
-if [[ "${1:-}" == "--sim" ]]; then
-  SIM_MODE=true
-  shift
-fi
-UART_DEVICE="${1:-/dev/ttyAMA0}"
+FOXGLOVE=false
+SLAM=false
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --sim) SIM_MODE=true ;;
+    --foxglove) FOXGLOVE=true ;;
+    --slam) SLAM=true ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+UART_DEVICE="${ARGS[0]:-/dev/ttyAMA0}"
 
 # ── Detect native vs Docker ───────────────────────────────────────────────────
 if command -v ros2 >/dev/null 2>&1; then
@@ -89,9 +100,11 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
   else
-    pkill -f rosbridge_websocket 2>/dev/null || true
-    pkill -f web_video_server    2>/dev/null || true
-    pkill -f "http.server 6240"  2>/dev/null || true
+    pkill -f rosbridge_websocket    2>/dev/null || true
+    pkill -f web_video_server       2>/dev/null || true
+    pkill -f foxglove_bridge        2>/dev/null || true
+    pkill -f async_slam_toolbox_node 2>/dev/null || true
+    pkill -f "http.server 6240"     2>/dev/null || true
   fi
 
   # Give everything a moment to settle before force-killing survivors.
@@ -118,6 +131,8 @@ cleanup() {
     pkill -9 -f lifecycle_manager     2>/dev/null || true
     pkill -9 -f rosbridge_websocket   2>/dev/null || true
     pkill -9 -f web_video_server      2>/dev/null || true
+    pkill -9 -f foxglove_bridge       2>/dev/null || true
+    pkill -9 -f async_slam_toolbox_node 2>/dev/null || true
   fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
@@ -217,8 +232,10 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
 else
-  pkill -f rosbridge_websocket   2>/dev/null || true
-  pkill -f web_video_server      2>/dev/null || true
+  pkill -f rosbridge_websocket    2>/dev/null || true
+  pkill -f web_video_server       2>/dev/null || true
+  pkill -f foxglove_bridge        2>/dev/null || true
+  pkill -f async_slam_toolbox_node 2>/dev/null || true
   pkill -f drivechain_node       2>/dev/null || true
   pkill -f base_node             2>/dev/null || true
   pkill -f camera_node           2>/dev/null || true
@@ -260,6 +277,25 @@ else
   NATIVE_PIDS+=($!)
 fi
 sleep 1
+
+# ── Start Foxglove Bridge (opt-in, --foxglove) ────────────────────────────────
+# Runs the node directly via `ros2 run`, not `ros2 launch ...xml`: this repo
+# has a package literally named "launch" that shadows the real ROS 2 launch
+# framework package once the workspace is sourced (already done above by this
+# point), which breaks the XML launch frontend specifically — see
+# scripts/run_foxglove_bridge.sh's comment. `ros2 run` doesn't need that
+# frontend at all, so it sidesteps the collision rather than working around
+# it with extra sourcing gymnastics.
+if [[ "$FOXGLOVE" == true ]]; then
+  if [[ "$USE_DOCKER" == true ]]; then
+    echo "NOTE: --foxglove is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
+  else
+    echo "Starting Foxglove Bridge on ws://0.0.0.0:8765…"
+    ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 > /tmp/foxglove_bridge.log 2>&1 &
+    NATIVE_PIDS+=($!)
+    sleep 1
+  fi
+fi
 
 # ── Launch drivechain + base + lifecycle_manager ─────────────────────────────
 # All node startup and lifecycle configure/activate is owned by
@@ -309,6 +345,24 @@ wait_for_active /mserve_drivechain
 echo "Waiting for base node to activate…"
 wait_for_active /mserve_base
 
+# ── Start SLAM Toolbox (opt-in, --slam) ───────────────────────────────────────
+# Placed after drivechain/base are confirmed active so /scan (mserve_lidar)
+# and odom -> base_link TF (mserve_base) are already flowing by the time it
+# starts — not strictly required (it just waits quietly otherwise, same as
+# every other node here catching up to its dependencies), but avoids the
+# handful of seconds of "why is /map empty" that starting it first would give.
+# Plain `ros2 launch launch mserve_slam.launch.py` (.py, not .xml) — doesn't
+# hit the launch-package-name collision that foxglove_bridge's XML file does.
+if [[ "$SLAM" == true ]]; then
+  if [[ "$USE_DOCKER" == true ]]; then
+    echo "NOTE: --slam is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
+  else
+    echo "Starting SLAM Toolbox — /map will start publishing once configure/activate completes…"
+    ros2 launch launch mserve_slam.launch.py > /tmp/mserve_slam.log 2>&1 &
+    NATIVE_PIDS+=($!)
+  fi
+fi
+
 # ── Web server (always native — Python is always available) ───────────────────
 echo "Starting web server on http://localhost:6240…"
 cd "$ROOT_DIR/web"
@@ -326,6 +380,15 @@ echo "  Open in browser:"
 echo "    http://${LOCAL_IP}:6240/drivechain.html"
 echo "    http://${LOCAL_IP}:6240/base.html"
 echo ""
+if [[ "$FOXGLOVE" == true ]]; then
+  echo "  Foxglove: ws://${LOCAL_IP}:8765  (Open Connection -> Foxglove WebSocket)"
+  echo ""
+fi
+if [[ "$SLAM" == true ]]; then
+  echo "  SLAM Toolbox running — /map building live. Save when ready:"
+  echo "    ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: 'my_map'}}\""
+  echo ""
+fi
 echo "  rosbridge log: /tmp/rosbridge.log"
 echo ""
 echo "  Press Ctrl+C to stop everything."

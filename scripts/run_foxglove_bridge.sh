@@ -27,22 +27,23 @@ if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   exit 1
 fi
 
-# Deliberately source ONLY interfaces' local_setup.bash, not the workspace's
-# aggregate install/setup.bash: this repo has a package literally named
-# "launch" (see ws/src/launch/package.xml's comment on the same collision),
-# which shadows the real ROS 2 `launch` framework package on the ament index
-# once sourced — and foxglove_bridge_launch.xml needs the real one to parse
-# at all ("FileNotFoundError: .../install/launch/share/launch/frontend/
-# grammar.lark"). Sourcing just interfaces is enough to resolve the custom
-# msg/srv schemas (DriveStatus, DriveMotorFeedback, Drive.srv, ...) without
-# pulling in the collision.
-INTERFACES_SETUP="$ROOT_DIR/ws/install/interfaces/share/interfaces/local_setup.bash"
-if [[ -f "$INTERFACES_SETUP" ]]; then
-  source "$INTERFACES_SETUP"
+# Source the whole workspace, not just interfaces (as earlier versions of
+# this script did): safe here because we invoke the node directly via
+# `ros2 run` below, not `ros2 launch foxglove_bridge foxglove_bridge_launch.xml`
+# — this repo has a package literally named "launch" (see
+# ws/src/launch/package.xml's comment) that shadows the real ROS 2 `launch`
+# framework package once the workspace is sourced, which breaks the XML
+# launch frontend specifically. `ros2 run` never touches that frontend, so
+# there's nothing to work around — full sourcing means every custom msg/srv
+# package (interfaces, slam_toolbox, ...) resolves automatically, including
+# ones added after this script was written.
+WS_SETUP="$ROOT_DIR/ws/install/setup.bash"
+if [[ -f "$WS_SETUP" ]]; then
+  source "$WS_SETUP"
 else
-  echo "WARNING: $INTERFACES_SETUP not found — build the workspace first."
-  echo "         Custom interfaces/ message and service schemas won't resolve without it."
+  echo "WARNING: $WS_SETUP not found — build the workspace first."
+  echo "         Custom message/service schemas won't resolve without it."
 fi
 
 echo "Starting Foxglove Bridge on ws://0.0.0.0:$PORT"
-exec ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$PORT"
+exec ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:="$PORT"

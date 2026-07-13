@@ -27,7 +27,7 @@ ws/src/
   mserve_description/    URDF robot model
   lifecycle_manager/     BehaviorTree.CPP-driven configure/activate/shutdown of all four nodes
   launch/                launch files
-  BehaviorTree.ROS2/     vendored dependency for lifecycle_manager (gitignored, see Build)
+  third_party/           vendored source deps (BehaviorTree.ROS2, slam_toolbox) — gitignored, see third_party/README.md
 ```
 
 (Folder names dropped the `mserve_` prefix on `interfaces`/`utils`/`launch` at some point — the docs below still use the old prefixed names in places; treat the folder names above as current.)
@@ -152,15 +152,12 @@ sudo systemctl stop mserve-drivechain        # stop everything (runs cleanup)
 ## Build
 
 `lifecycle_manager` depends on `behaviortree_ros2`/`btcpp_ros2_interfaces`,
-which are vendored (not apt-installed) — clone them once before the first
-build:
-
-```bash
-cd /home/ecm/mServe-STACK/ws/src
-git clone --branch humble https://github.com/BehaviorTree/BehaviorTree.ROS2.git
-touch BehaviorTree.ROS2/btcpp_ros2_samples/COLCON_IGNORE  # not needed
-sudo apt install ros-lyrical-behaviortree-cpp libboost-dev ros-lyrical-generate-parameter-library
-```
+vendored (not apt-installed) at `ws/src/third_party/BehaviorTree.ROS2/` —
+clone + build once before the first build of the main stack. `slam_toolbox`
+(also vendored, `ws/src/third_party/slam_toolbox/`) is only needed if you're
+using `scripts/run_slam.sh`, not for the core drive stack. Full clone/apt/
+build commands for both: **[`ws/src/third_party/README.md`](ws/src/third_party/README.md)**
+— or just run `scripts/setup/deps_setup.sh`, which does all of it.
 
 `mserve_camera` and `mserve_lidar` need their own system deps — camera wraps
 an apt-installed driver package, lidar vendors its SDK as source (no apt

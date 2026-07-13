@@ -10,6 +10,7 @@ scripts/
 ├── run_stack.sh          main entry point: full stack (hardware or --sim)
 ├── run_rosbridge.sh      standalone rosbridge only
 ├── run_foxglove_bridge.sh standalone Foxglove Bridge only (ws://<pi-ip>:8765)
+├── run_slam.sh           standalone SLAM Toolbox (build /map while driving — needs run_stack.sh already up)
 ├── run_web_only.sh       standalone static web server only
 ├── clean_all.sh          remove ws/build, ws/install, ws/log
 ├── setup/
@@ -48,7 +49,14 @@ bash scripts/build/build_workspace.sh  # build all mServe packages
 ./scripts/run_stack.sh              # hardware, /dev/ttyAMA0
 ./scripts/run_stack.sh --sim        # sim backend, no hardware needed
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device
+./scripts/run_stack.sh --foxglove   # also start Foxglove Bridge (ws://<pi-ip>:8765)
+./scripts/run_stack.sh --slam       # also start SLAM Toolbox (builds /map while driving)
 ```
+
+`--foxglove`/`--slam`/`--sim` can combine in any order — e.g.
+`./scripts/run_stack.sh --sim --slam --foxglove`. Both flags default off:
+without them, `run_stack.sh` only starts what it's always started (drivechain/
+base/camera/lidar + rosbridge + web UI) — same load as before either existed.
 
 This is also what `mserve-drivechain.service` runs on boot — see the
 top-level `readme.md`'s "Running on boot" section.

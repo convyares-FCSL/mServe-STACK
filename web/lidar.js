@@ -8,48 +8,101 @@ const elNodeState = document.getElementById('node-state');
 ros.on('connection', () => {
   elStatus.textContent = 'ROS Connected';
   elStatus.className = 'status connected';
-  refreshNodeState();
+  refreshLidarState();
+  refreshSlamState();
 });
 ros.on('error',  () => { elStatus.textContent = 'ROS Error';        elStatus.className = 'status disconnected'; });
 ros.on('close',  () => { elStatus.textContent = 'ROS Disconnected'; elStatus.className = 'status disconnected'; });
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────────
+// ── Lifecycle (generalized over node name — used for both mserve_lidar and
+// the separate slam_toolbox process below) ─────────────────────────────────
 
 const TRANSITIONS = { configure: 1, activate: 3, deactivate: 4, cleanup: 2 };
 
-function changeState(transitionId) {
+function changeState(nodeName, transitionId, onDone) {
   new ROSLIB.Service({
     ros,
-    name: '/mserve_lidar/change_state',
+    name: `/${nodeName}/change_state`,
     serviceType: 'lifecycle_msgs/srv/ChangeState',
   }).callService(
     new ROSLIB.ServiceRequest({ transition: { id: transitionId, label: '' } }),
-    () => setTimeout(refreshNodeState, 400),
-    (err) => console.error('change_state error', err),
+    () => setTimeout(onDone, 400),
+    (err) => console.error(`${nodeName} change_state error`, err),
   );
 }
 
-function refreshNodeState() {
+function refreshNodeState(nodeName, elState) {
   new ROSLIB.Service({
     ros,
-    name: '/mserve_lidar/get_state',
+    name: `/${nodeName}/get_state`,
     serviceType: 'lifecycle_msgs/srv/GetState',
   }).callService(new ROSLIB.ServiceRequest({}), (res) => {
     const label = res?.current_state?.label ?? 'unavailable';
-    elNodeState.textContent = label;
-    elNodeState.className = `state-label state-${label}`;
+    elState.textContent = label;
+    elState.className = `state-label state-${label}`;
   }, () => {
-    elNodeState.textContent = 'unavailable';
-    elNodeState.className = 'state-label state-unavailable';
+    elState.textContent = 'unavailable';
+    elState.className = 'state-label state-unavailable';
   });
 }
 
-document.getElementById('btn-configure').addEventListener('click',  () => changeState(TRANSITIONS.configure));
-document.getElementById('btn-activate').addEventListener('click',   () => changeState(TRANSITIONS.activate));
-document.getElementById('btn-deactivate').addEventListener('click', () => changeState(TRANSITIONS.deactivate));
-document.getElementById('btn-cleanup').addEventListener('click',    () => changeState(TRANSITIONS.cleanup));
+function refreshLidarState() { refreshNodeState('mserve_lidar', elNodeState); }
 
-setInterval(refreshNodeState, 4000);
+document.getElementById('btn-configure').addEventListener('click',  () => changeState('mserve_lidar', TRANSITIONS.configure, refreshLidarState));
+document.getElementById('btn-activate').addEventListener('click',   () => changeState('mserve_lidar', TRANSITIONS.activate, refreshLidarState));
+document.getElementById('btn-deactivate').addEventListener('click', () => changeState('mserve_lidar', TRANSITIONS.deactivate, refreshLidarState));
+document.getElementById('btn-cleanup').addEventListener('click',    () => changeState('mserve_lidar', TRANSITIONS.cleanup, refreshLidarState));
+
+setInterval(refreshLidarState, 4000);
+
+// ── SLAM Toolbox ─────────────────────────────────────────────────────────────
+
+const elSlamNodeState = document.getElementById('slam-node-state');
+const elSlamMsg       = document.getElementById('slam-msg');
+
+function refreshSlamState() { refreshNodeState('slam_toolbox', elSlamNodeState); }
+
+document.getElementById('slam-btn-configure').addEventListener('click',  () => changeState('slam_toolbox', TRANSITIONS.configure, refreshSlamState));
+document.getElementById('slam-btn-activate').addEventListener('click',   () => changeState('slam_toolbox', TRANSITIONS.activate, refreshSlamState));
+document.getElementById('slam-btn-deactivate').addEventListener('click', () => changeState('slam_toolbox', TRANSITIONS.deactivate, refreshSlamState));
+document.getElementById('slam-btn-cleanup').addEventListener('click',    () => changeState('slam_toolbox', TRANSITIONS.cleanup, refreshSlamState));
+
+setInterval(refreshSlamState, 4000);
+
+document.getElementById('slam-btn-reset').addEventListener('click', () => {
+  if (!confirm('Reset the map? This clears the current map and pose graph — cannot be undone.')) return;
+  elSlamMsg.textContent = 'Resetting…';
+  new ROSLIB.Service({
+    ros,
+    name: '/slam_toolbox/reset',
+    serviceType: 'slam_toolbox/srv/Reset',
+  }).callService(new ROSLIB.ServiceRequest({ pause_new_measurements: false }), () => {
+    elSlamMsg.textContent = 'Map reset — /map will clear once the next scan is processed.';
+  }, (err) => { elSlamMsg.textContent = `Error: ${err}`; });
+});
+
+document.getElementById('slam-btn-save-map').addEventListener('click', () => {
+  const name = document.getElementById('slam-map-name').value.trim() || 'map';
+  elSlamMsg.textContent = `Saving as "${name}"…`;
+  new ROSLIB.Service({
+    ros,
+    name: '/slam_toolbox/save_map',
+    serviceType: 'slam_toolbox/srv/SaveMap',
+  }).callService(new ROSLIB.ServiceRequest({ name: { data: name } }), (res) => {
+    elSlamMsg.textContent = res?.result === 0
+      ? `Saved "${name}".`
+      : `Save returned code ${res?.result} — check slam_toolbox's own log.`;
+  }, (err) => { elSlamMsg.textContent = `Error: ${err}`; });
+});
+
+new ROSLIB.Topic({
+  ros,
+  name: '/map_metadata',
+  messageType: 'nav_msgs/msg/MapMetaData',
+}).subscribe((msg) => {
+  document.getElementById('slam-map-size').textContent = `${msg.width} × ${msg.height}`;
+  document.getElementById('slam-map-resolution').textContent = msg.resolution.toFixed(3);
+});
 
 // ── Parameters ───────────────────────────────────────────────────────────────
 

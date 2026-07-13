@@ -13,6 +13,11 @@ All project documentation should live in this folder unless it is a short root-l
 - `remote-rviz-setup.md`: superseded — the earlier Fast DDS discovery server + WSL approach, kept for reference.
 - `TODO.md`: task tracker.
 - `session.md`: session notes, decisions, and what changed.
+- `camera/todo.md`, `lidar/todo.md`, `lifecycle_manager/{todo,lesson_plan}.md`:
+  per-package known-limitations/notes docs. Live here, not alongside their
+  package source under `ws/src/` — keeps all project docs in one place
+  rather than spread throughout the repo. Each package's own `README.md`
+  points here.
 
 ## Source Guide
 

@@ -9,6 +9,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>
 
@@ -23,6 +24,14 @@
     (launch -> mserve_description -> launch). mserve_description is already
     built ahead of this package via the documented top-level build commands,
     so the runtime lookup still works; this is just about colcon's ordering.
+
+    Same reasoning for NOT declaring slam_toolbox here (used at runtime by
+    mserve_slam.launch.py): slam_toolbox's own package.xml has
+    <test_depend>launch</test_depend> (meaning the framework), which colcon
+    also resolves to this local package first — depending on slam_toolbox
+    here creates the identical cycle. slam_toolbox is vendored source
+    (ws/src/slam_toolbox/, gitignored — see scripts/run_slam.sh), built
+    ahead of this package the same way.
   -->
 
   <test_depend>ament_cmake_pytest</test_depend>

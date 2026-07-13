@@ -47,7 +47,7 @@ dedicated capture thread is enough. This matches how upstream
 | `src/camera_node.cpp` | Lifecycle callbacks + capture loop |
 | `src/camera_params.cpp` | Parameter declaration, loading, hot-change guard |
 | `src/main.cpp` | Entry point |
-| `docs/todo.md` | Known limitations, next steps |
+| `docs/camera/todo.md` (repo root) | Known limitations, next steps |
 
 ## Parameters
 
@@ -90,7 +90,7 @@ silent no-op — the ioctl reports success, but the streamed rate stays at
 whatever it was (~12.6 Hz observed, not the format table's 30 Hz). Frame
 interval negotiation on this driver turns out to be scoped per-fd, not
 device-global as originally assumed; a second fd's successful `S_PARM` call
-doesn't carry over to the fd that actually calls `STREAMON`. See `docs/todo.md`.
+doesn't carry over to the fd that actually calls `STREAMON`. See `docs/camera/todo.md`.
 
 ## Compressed image (`camera/image_raw/compressed`)
 
@@ -178,4 +178,4 @@ server-side), `camera_info`, and `/rosout` logs, matching the pattern of
 
 ## Tests
 
-None yet — see `docs/todo.md`.
+None yet — see `docs/camera/todo.md`.

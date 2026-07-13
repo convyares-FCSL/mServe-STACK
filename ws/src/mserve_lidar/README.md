@@ -65,7 +65,7 @@ connected.
 | `src/lidar_params.cpp` | Parameter declaration, loading, hot-change guard |
 | `src/main.cpp` | Entry point |
 | `third_party/rplidar_sdk/` | Vendored Slamtec RPLIDAR SDK (BSD-licensed) |
-| `docs/todo.md` | Known limitations, next steps |
+| `docs/lidar/todo.md` (repo root) | Known limitations, next steps |
 
 ## Parameters
 
@@ -170,4 +170,4 @@ matching the pattern of `web/camera.html`. See the top-level `web/README.md`.
 
 ## Tests
 
-None yet — see `docs/todo.md`.
+None yet — see `docs/lidar/todo.md`.

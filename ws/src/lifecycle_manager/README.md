@@ -16,8 +16,8 @@ Automatically configures and activates managed nodes in order, idempotently and 
 - Non-blocking 100ms timer tick alongside live ROS executor
 - On SIGINT/SIGTERM, runs `trees/shutdown.xml` (deactivate/shutdown both
   nodes) while the ROS context is still valid, then exits itself — see
-  `docs/todo.md`'s "Shutdown ordering" entry for why this isn't just the
-  default `rclcpp::on_shutdown()` hook
+  `docs/lifecycle_manager/todo.md`'s "Shutdown ordering" entry (repo root
+  `docs/`) for why this isn't just the default `rclcpp::on_shutdown()` hook
 
 ## Package structure
 
@@ -31,17 +31,21 @@ src/
     bringup.xml             Bringup tree — edit to change bringup order
     shutdown.xml             Shutdown tree — edit to change teardown order
     node_models.xml          Generated at startup, for Groot2's palette
-docs/
-    lesson_plan.md              Concept notes from learning sessions
-    todo.md                     Remaining work and known limitations
 ```
+
+Docs for this package live at the repo root, not alongside the source —
+`docs/lifecycle_manager/lesson_plan.md` (concept notes from learning
+sessions) and `docs/lifecycle_manager/todo.md` (remaining work and known
+limitations).
 
 ## System setup — fresh machine
 
-`behaviortree_ros2` is vendored (not apt-installed) at `ws/src/BehaviorTree.ROS2/`
-(gitignored, `humble` branch — the apt-packaged `behaviortree_cpp` core is
-new enough that this branch builds fine against it). `btcpp_ros2_samples`
-inside that clone carries a `COLCON_IGNORE` — it's not needed.
+`behaviortree_ros2` is vendored (not apt-installed) at
+`ws/src/third_party/BehaviorTree.ROS2/` (gitignored, `humble` branch — the
+apt-packaged `behaviortree_cpp` core is new enough that this branch builds
+fine against it). `btcpp_ros2_samples` inside that clone carries a
+`COLCON_IGNORE` — it's not needed. Full instructions:
+[`ws/src/third_party/README.md`](../third_party/README.md).
 
 ```bash
 # BT.CPP core (apt)
@@ -51,7 +55,7 @@ sudo apt install ros-lyrical-behaviortree-cpp
 sudo apt install libboost-dev ros-lyrical-generate-parameter-library
 
 # behaviortree_ros2 source build
-cd ~/mServe-STACK/ws/src
+cd ~/mServe-STACK/ws/src/third_party
 git clone --branch humble https://github.com/BehaviorTree/BehaviorTree.ROS2.git
 touch BehaviorTree.ROS2/btcpp_ros2_samples/COLCON_IGNORE
 
@@ -132,7 +136,7 @@ For a shutdown-tree entry, use one of the `shutdown_*` transitions below —
 ## Dependencies
 
 - `behaviortree_cpp` — `ros-lyrical-behaviortree-cpp` (apt)
-- `behaviortree_ros2` — vendored source build (`ws/src/BehaviorTree.ROS2/`, `humble` branch)
+- `behaviortree_ros2` — vendored source build (`ws/src/third_party/BehaviorTree.ROS2/`, `humble` branch)
 - `btcpp_ros2_interfaces` — vendored source build (same repo)
 - `utils` — transition name lookup (`mserve_utils/lifecycle.hpp`)
 - `lifecycle_msgs`, `ament_index_cpp`, `rclcpp`

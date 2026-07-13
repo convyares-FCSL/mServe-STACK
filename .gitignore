@@ -6,8 +6,9 @@ install/
 log/
 temp/
 
-# Third-party vendored dependencies (source builds)
-ws/src/BehaviorTree.ROS2/
+# Third-party vendored dependencies (source builds) — see ws/src/third_party/README.md
+ws/src/third_party/*/
+!ws/src/third_party/README.md
 
 # ROS 2 workspace output
 ws/build/

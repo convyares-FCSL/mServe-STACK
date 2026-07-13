@@ -37,8 +37,8 @@
 - [ ] **`IsInState` shows as Action in Groot2** — `RosServiceNode` inherits from
   `ActionNodeBase`, not `ConditionNode`. Cosmetic only, no runtime impact.
 - [ ] **Dockerfile** — update to clone and build `behaviortree_ros2` from source
-  (native build already vendors it at `ws/src/BehaviorTree.ROS2/`, gitignored,
-  `humble` branch — Dockerfile hasn't been touched to match).
+  (native build already vendors it at `ws/src/third_party/BehaviorTree.ROS2/`,
+  gitignored, `humble` branch — Dockerfile hasn't been touched to match).
 
 ## Next
 
