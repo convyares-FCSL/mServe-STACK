@@ -19,6 +19,23 @@ Automatically configures and activates managed nodes in order, idempotently and 
   `docs/lifecycle_manager/todo.md`'s "Shutdown ordering" entry (repo root
   `docs/`) for why this isn't just the default `rclcpp::on_shutdown()` hook
 
+## Running more than one instance
+
+Which tree files get loaded is controlled by two string params,
+`bringup_tree_file`/`shutdown_tree_file` (both resolved relative to this
+package's own `share/lifecycle_manager/trees/`, default `bringup.xml`/
+`shutdown.xml`) — so a second instance can manage a different node (or set
+of nodes) with its own tree pair, without touching the always-on one. Give
+it a distinct node name too (`-r __node:=...`, or `name=` on a launch_ros
+`Node` action), otherwise both instances register as `/lifecycle_manager`
+and collide. `ws/src/launch/launch/mserve_slam.launch.py` does exactly this
+for `slam_toolbox` — see `trees/slam_bringup.xml`/`trees/slam_shutdown.xml`
+for the pattern (identical to a single-node sequence out of the main
+`bringup.xml`/`shutdown.xml`, just in their own file). This is deliberately
+a *second process*, not an extra sequence appended to the main tree: SLAM is
+opt-in, and a node that isn't running yet would just add a ~4s dead-service
+timeout to every normal startup if it lived in the tree that always runs.
+
 ## Package structure
 
 ```
@@ -30,6 +47,8 @@ src/
   trees/
     bringup.xml             Bringup tree — edit to change bringup order
     shutdown.xml             Shutdown tree — edit to change teardown order
+    slam_bringup.xml         Bringup tree for the opt-in slam_toolbox instance
+    slam_shutdown.xml        Shutdown tree for the opt-in slam_toolbox instance
     node_models.xml          Generated at startup, for Groot2's palette
 ```
 

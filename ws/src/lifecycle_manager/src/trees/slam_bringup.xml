@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4">
+  <BehaviorTree ID="Main">
+    <Sequence name="main">
+      <Sequence name="slam_sequence">
+        <Fallback name="configure_slam_fallback">
+          <Inverter>
+            <IsInState name="is_slam_inactive"
+                       node_name="slam_toolbox"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_slam"
+                             node_name="slam_toolbox"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_slam_fallback">
+          <Inverter>
+            <IsInState name="is_slam_active"
+                       node_name="slam_toolbox"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_slam"
+                             node_name="slam_toolbox"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="ChangeStateNode">
+      <input_port name="node_name"
+                  type="std::string"/>
+      <input_port name="transition"
+                  type="std::string"/>
+      <input_port name="service_name"
+                  type="std::string">Service name</input_port>
+    </Action>
+    <Action ID="IsInState">
+      <input_port name="node_name"
+                  type="std::string"/>
+      <input_port name="state"
+                  type="std::string"/>
+      <input_port name="service_name"
+                  type="std::string">Service name</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

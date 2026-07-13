@@ -1,0 +1,22 @@
+<root BTCPP_format="4">
+    <BehaviorTree ID="Shutdown">
+        <Sequence name="main">
+
+        <Sequence name="slam_sequence">
+            <Fallback name="shutdown_slam_fallback">
+                <IsInState
+                    name="is_slam_finalized"
+                    node_name="slam_toolbox"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_slam"
+                    node_name="slam_toolbox"
+                    transition="shutdown_active"
+                />
+            </Fallback>
+        </Sequence>
+
+        </Sequence>
+    </BehaviorTree>
+</root>

@@ -2,12 +2,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import EmitEvent, RegisterEventHandler
-from launch.events import matches_action
-from launch_ros.actions import LifecycleNode
-from launch_ros.event_handlers import OnStateTransition
-from launch_ros.events.lifecycle import ChangeState
-from lifecycle_msgs.msg import Transition
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -15,15 +10,10 @@ def generate_launch_description():
     params_file = os.path.join(interfaces_share, 'config', 'slam_toolbox_params.yaml')
 
     # slam_toolbox's own node is already a lifecycle node (same pattern as
-    # every mserve_* node) — no need to wrap it, just drive it through
-    # configure/activate ourselves. This is a single node with no bringup
-    # sequencing/retries needed, so plain launch_ros event handlers are
-    # enough; doesn't need the BT-based lifecycle_manager that manages the
-    # always-on drivechain/base/camera/lidar stack in mserve_min.launch.py.
-    # Kept as its own launch file (not folded into mserve_min.launch.py)
-    # because mapping is an occasional, opt-in session, not something you
-    # want running on every boot.
-    slam_toolbox_node = LifecycleNode(
+    # every mserve_* node). Launched as a plain Node (not launch_ros's
+    # LifecycleNode wrapper) because configure/activate/shutdown are driven
+    # externally via service calls below, not by launch itself.
+    slam_toolbox_node = Node(
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
         name='slam_toolbox',
@@ -32,31 +22,29 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
-    configure_on_start = EmitEvent(
-        event=ChangeState(
-            lifecycle_node_matcher=matches_action(slam_toolbox_node),
-            transition_id=Transition.TRANSITION_CONFIGURE,
-        )
-    )
-
-    activate_after_configure = RegisterEventHandler(
-        OnStateTransition(
-            target_lifecycle_node=slam_toolbox_node,
-            start_state='configuring',
-            goal_state='inactive',
-            entities=[
-                EmitEvent(
-                    event=ChangeState(
-                        lifecycle_node_matcher=matches_action(slam_toolbox_node),
-                        transition_id=Transition.TRANSITION_ACTIVATE,
-                    )
-                ),
-            ],
-        )
+    # Reuses the same BT-based lifecycle_manager that drives configure/
+    # activate/graceful-shutdown for drivechain/base/camera/lidar in
+    # mserve_min.launch.py — pointed at a separate slam_bringup.xml/
+    # slam_shutdown.xml pair (see ws/src/lifecycle_manager/src/trees/) so it
+    # only ever touches slam_toolbox, and given a distinct node name so it
+    # doesn't collide with the always-running instance. This replaces the
+    # previous plain launch_ros ChangeState event handlers, which had no
+    # shutdown path at all — Ctrl+C just SIGTERM'd slam_toolbox with no
+    # deactivate/cleanup transition. Kept as its own launch file (not folded
+    # into mserve_min.launch.py) because mapping is an occasional, opt-in
+    # session, not something you want running on every boot.
+    slam_lifecycle_manager = Node(
+        package='lifecycle_manager',
+        executable='lifecycle_manager',
+        name='slam_lifecycle_manager',
+        output='screen',
+        parameters=[{
+            'bringup_tree_file': 'slam_bringup.xml',
+            'shutdown_tree_file': 'slam_shutdown.xml',
+        }],
     )
 
     return LaunchDescription([
         slam_toolbox_node,
-        activate_after_configure,
-        configure_on_start,
+        slam_lifecycle_manager,
     ])

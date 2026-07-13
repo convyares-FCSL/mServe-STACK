@@ -150,12 +150,23 @@ void LifecycleManager::build() {
     std::string models_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/node_models.xml";
     std::ofstream(models_path) << BT::writeTreeNodesModelXML(factory);
 
+    // Which tree files to load — defaults match the always-on drivechain/
+    // base/camera/lidar bringup. Overridden via params by callers managing a
+    // different node set (e.g. mserve_slam.launch.py points a second,
+    // separately-named instance of this same executable at slam_bringup.xml/
+    // slam_shutdown.xml so opt-in nodes get the same retry/graceful-shutdown
+    // behavior without adding dead-service-lookup delay to every normal
+    // startup that isn't using them).
+    std::string bringup_tree_file = declare_parameter<std::string>("bringup_tree_file", "bringup.xml");
+    std::string shutdown_tree_file = declare_parameter<std::string>("shutdown_tree_file", "shutdown.xml");
+    std::string trees_dir = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/";
+
     // Load the behavior tree from an XML file
-    std::string tree_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/bringup.xml";
+    std::string tree_path = trees_dir + bringup_tree_file;
     tree_ = factory.createTreeFromFile(tree_path);
 
     // Load the shutdown tree from an XML file
-    std::string shutdown_path = ament_index_cpp::get_package_share_directory("lifecycle_manager") + "/trees/shutdown.xml";
+    std::string shutdown_path = trees_dir + shutdown_tree_file;
     shutdown_tree_ = factory.createTreeFromFile(shutdown_path);
 
     // Create a ZMQ publisher to visualize the tree in Groot2, if its default port is free.

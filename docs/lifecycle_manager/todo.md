@@ -40,6 +40,21 @@
   (native build already vendors it at `ws/src/third_party/BehaviorTree.ROS2/`,
   gitignored, `humble` branch — Dockerfile hasn't been touched to match).
 
+## Stage 4 — COMPLETE (2026-07-13)
+
+- [x] **Multi-instance support** — added `bringup_tree_file`/`shutdown_tree_file`
+  string params (default `bringup.xml`/`shutdown.xml`, resolved relative to
+  this package's own `share/lifecycle_manager/trees/`) so a second instance
+  can manage a different node with its own tree pair, given a distinct node
+  name via launch-time `-r __node:=...` remap. First real use: SLAM Toolbox
+  (`ws/src/launch/launch/mserve_slam.launch.py` launches a
+  `slam_lifecycle_manager` instance pointed at `trees/slam_bringup.xml`/
+  `trees/slam_shutdown.xml`), replacing plain `launch_ros` event handlers
+  that had no shutdown path. See README's "Running more than one instance".
+  Verified on real hardware: default (no override) bringup/shutdown
+  unaffected, `slam_toolbox` reaches `active` via the BT and gets a clean
+  `active → shutdown_active → finalized` transition on SIGINT.
+
 ## Next
 
 - Extend `bringup.xml`/`shutdown.xml` with new sequences as sensors are wired

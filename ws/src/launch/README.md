@@ -34,9 +34,23 @@ this distro, same situation as `mserve_lidar`'s RPLIDAR SDK). Params in
 
 `slam_toolbox`'s own node (`async_slam_toolbox_node`) is already a lifecycle
 node, same as every `mserve_*` node — this launch file drives it through
-configure/activate itself via `launch_ros`'s `ChangeState`/`OnStateTransition`
-event handlers, rather than pulling in the BT-based `lifecycle_manager` for
-what's a single node with no bringup sequencing/retries to coordinate.
+configure/activate/shutdown with a **second `lifecycle_manager` instance**
+(node name `slam_lifecycle_manager`, to avoid colliding with the always-on
+one from `mserve_min.launch.py`), pointed at its own
+`trees/slam_bringup.xml`/`trees/slam_shutdown.xml` pair via the
+`bringup_tree_file`/`shutdown_tree_file` params (see
+`ws/src/lifecycle_manager/`) — same retry-on-failure bringup and
+graceful-shutdown-on-SIGINT behavior as drivechain/base/camera/lidar get,
+just scoped to one node. This replaced an earlier version that used plain
+`launch_ros` `ChangeState`/`OnStateTransition` event handlers for
+configure/activate — that approach had no shutdown path at all, so Ctrl+C
+just SIGTERM'd `slam_toolbox` with no deactivate/cleanup transition.
+
+Kept as a *separate* `lifecycle_manager` instance rather than folding
+`slam_toolbox` into the main `bringup.xml`/`shutdown.xml`: since SLAM is
+opt-in (`--slam`), adding it to the tree that always runs would mean every
+normal startup pays a ~4s dead-service-lookup timeout (2s each for the
+configure/activate `IsInState` checks) waiting on a node that isn't there.
 
 Deliberately **not** part of `mserve_min.launch.py` or the boot service:
 mapping is an occasional, opt-in session, not something you want starting on
