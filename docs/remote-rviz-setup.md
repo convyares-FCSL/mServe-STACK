@@ -1,11 +1,11 @@
 # Hybrid RViz and Teleop from WSL with Gazebo on NVIDIA Thor
 
-> **Superseded.** This guide's premise — Gazebo on Thor, RViz on a WSL
-> laptop — no longer matches the current setup: RViz now also runs directly
-> on Thor alongside Gazebo, so there's no WSL leg for the DDS traffic to
-> cross anymore. Kept for reference (the discovery-server setup may still be
-> useful for remote monitoring from a laptop), but don't follow this as the
-> current normal workflow.
+> **Superseded — see [`remote-rviz-zenoh.md`](remote-rviz-zenoh.md) for the
+> current procedure.** This guide's premise — Gazebo on Thor, RViz on a WSL
+> laptop, Fast DDS discovery server — no longer matches the current setup:
+> RViz now also runs directly on Thor alongside Gazebo, so there's no WSL leg
+> for the DDS traffic to cross anymore, and the current stack uses a Zenoh
+> router instead of a Fast DDS discovery server. Kept for reference only.
 
 This guide covers the (now historical) hybrid setup:
 

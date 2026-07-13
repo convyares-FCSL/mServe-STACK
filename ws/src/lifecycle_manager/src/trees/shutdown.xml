@@ -47,6 +47,21 @@
             </Fallback>
         </Sequence>
 
+        <Sequence name="lidar_sequence">
+            <Fallback name="shutdown_lidar_fallback">
+                <IsInState
+                    name="is_lidar_finalized"
+                    node_name="mserve_lidar"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_lidar"
+                    node_name="mserve_lidar"
+                    transition="shutdown_active"
+                />
+            </Fallback>
+        </Sequence>
+
         </Sequence>
     </BehaviorTree>
 </root>

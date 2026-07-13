@@ -9,7 +9,8 @@ All project documentation should live in this folder unless it is a short root-l
 - `milestones.md`: staged build plan.
 - `testing-and-scripts.md`: script and test strategy.
 - `simulation_hil.md`: current simulation status, next steps, and hardware-in-loop plan.
-- `remote-rviz-setup.md`: guide to running RViz on a development laptop connected to ROS/Gazebo on a remote machine (e.g., NVIDIA Thor).
+- `remote-rviz-zenoh.md`: current guide to running RViz on a remote machine (e.g., NVIDIA Thor) connected to the Pi over a Zenoh router.
+- `remote-rviz-setup.md`: superseded — the earlier Fast DDS discovery server + WSL approach, kept for reference.
 - `TODO.md`: task tracker.
 - `session.md`: session notes, decisions, and what changed.
 
@@ -38,7 +39,7 @@ From `/home/ecm/mServe-STACK`:
 ```bash
 source /opt/ros/lyrical/setup.bash
 cd ws
-colcon build --symlink-install --packages-select interfaces utils mserve_base mserve_drivechain mserve_description
+colcon build --symlink-install --packages-select interfaces utils mserve_base mserve_drivechain mserve_camera mserve_lidar mserve_description lifecycle_manager launch btcpp_ros2_interfaces behaviortree_ros2
 source install/setup.bash
 ros2 launch launch mserve_min.launch.py
 ```
@@ -81,6 +82,12 @@ This current skeleton provides:
   ESP32 motor controller (Waveshare DDSM Driver HAT), which drives the DDSM115
   hub motors. Not a stub — this is the real hardware boundary. See
   `ws/src/mserve_drivechain/README.md` for the full protocol writeup.
+- `mserve_camera`: lifecycle node wrapping `v4l2_camera`'s device class directly
+  (USB UVC webcam), publishing `sensor_msgs/Image` + `CameraInfo`. See
+  `ws/src/mserve_camera/README.md`.
+- `mserve_lidar`: lifecycle node wrapping a vendored Slamtec RPLIDAR SDK
+  directly (RPLIDAR C1), publishing `sensor_msgs/LaserScan`. See
+  `ws/src/mserve_lidar/README.md`.
 - `launch`: the central bringup launch package (was planned as `mserve_bringup`;
   the actual folder/package name is `launch`).
 - `interfaces`: shared ROS messages, services, actions, and config (was planned
@@ -93,13 +100,13 @@ A simple browser UI is available under `web/` for lifecycle and drive command te
 
 The current entry point is `./scripts/run_stack.sh` (see above), which
 serves the UI on port **6240** — `http://<pi-ip>:6240/drivechain.html`,
-`.../base.html`, `.../camera.html`. `scripts/run_rosbridge.sh` and
-`scripts/run_web_only.sh` are standalone helpers for when the drive stack is
-already running some other way (see `web/README.md`).
+`.../base.html`, `.../camera.html`, `.../lidar.html`. `scripts/run_rosbridge.sh`
+and `scripts/run_web_only.sh` are standalone helpers for when the drive stack
+is already running some other way (see `web/README.md`).
 
 The UI connects to ROS via rosbridge at `ws://localhost:9090` and can:
 
-- query `/mserve_base`, `/mserve_drivechain`, `/mserve_camera` lifecycle state
+- query `/mserve_base`, `/mserve_drivechain`, `/mserve_camera`, `/mserve_lidar` lifecycle state
 - trigger lifecycle transitions
 - publish `/cmd_vel` commands
 

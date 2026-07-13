@@ -92,6 +92,36 @@
           </RetryUntilSuccessful>
         </Fallback>
       </Sequence>
+      <Sequence name="lidar_sequence">
+        <Fallback name="configure_lidar_fallback">
+          <Inverter>
+            <IsInState name="is_lidar_inactive"
+                       node_name="mserve_lidar"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_lidar"
+                             node_name="mserve_lidar"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_lidar_fallback">
+          <Inverter>
+            <IsInState name="is_lidar_active"
+                       node_name="mserve_lidar"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_lidar"
+                             node_name="mserve_lidar"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
     </Sequence>
   </BehaviorTree>
 

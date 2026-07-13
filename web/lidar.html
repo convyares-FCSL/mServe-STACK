@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mServe — LiDAR</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .back-link {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    /* Parameters table (reused from camera/drivechain) */
+    #params-table .param-name { font-family: 'Courier New', monospace; font-size: 0.8rem; }
+    #params-table input.param-input[type="text"] { width: 260px; }
+    .motor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+    .motor-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-bottom: 1px solid #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .motor-table td { padding: 5px 10px; border-bottom: 1px solid #1e293b; }
+    .motor-table input[type="text"] {
+      background: var(--surface-2);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 0.85rem;
+    }
+    .motor-cmd-empty { color: #64748b; font-size: 0.85rem; padding: 10px 0; }
+
+    /* Scan plot */
+    #scan-canvas-wrap {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 320px;
+      position: relative;
+    }
+    #scan-canvas { display: block; width: 100%; height: 320px; }
+    #scan-placeholder {
+      position: absolute; color: #64748b; font-size: 0.85rem;
+    }
+
+    /* Scan info grid (reused pattern from camera feedback-grid) */
+    .feedback-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .feedback-card {
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .feedback-card h4 {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+    }
+    .feedback-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .feedback-unit { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+
+    /* Log panel (reused from camera/drivechain) */
+    .log-toolbar {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .log-toolbar label { font-size: 0.85rem; color: #94a3b8; cursor: pointer; user-select: none; }
+    #log-box {
+      background: #0f172a; border-radius: 10px;
+      padding: 12px 14px; height: 240px; overflow-y: auto;
+      font-family: 'Courier New', monospace; font-size: 0.78rem;
+      line-height: 1.55; color: #cbd5e1;
+    }
+    .log-info  { color: #cbd5e1; }
+    .log-warn  { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-fatal { color: #f87171; font-weight: 700; }
+    .log-debug { color: #64748b; }
+    .log-ts    { color: #475569; margin-right: 6px; }
+    .log-node  { color: #60a5fa; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back-link" href="index.html">← mServe Debug Bridge</a>
+
+    <header>
+      <h1>LiDAR</h1>
+      <p>RPLIDAR C1 — Slamtec SDK wrapped as a lifecycle node</p>
+      <div class="status-row">
+        <span id="connection-status" class="status disconnected">ROS Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Node lifecycle ──────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Node</h2>
+      <div class="node-state" style="margin-bottom:12px">
+        State: <span id="node-state" class="state-label">?</span>
+      </div>
+      <div class="button-row">
+        <button id="btn-configure">Configure</button>
+        <button id="btn-activate">Activate</button>
+        <button id="btn-deactivate">Deactivate</button>
+        <button id="btn-cleanup">Cleanup</button>
+      </div>
+    </section>
+
+    <!-- Parameters ──────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Parameters</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        <code>device</code>/<code>baudrate</code> require the node to be
+        <strong>unconfigured</strong> to take effect.
+      </p>
+      <div class="button-row" style="margin-bottom:12px">
+        <button id="btn-params-refresh">Refresh</button>
+        <button id="btn-params-apply">Apply Changes</button>
+      </div>
+      <table class="motor-table" id="params-table">
+        <thead>
+          <tr><th>Parameter</th><th>Value</th></tr>
+        </thead>
+        <tbody id="params-table-body">
+          <tr><td colspan="2" class="motor-cmd-empty">Click Refresh to load parameters.</td></tr>
+        </tbody>
+      </table>
+      <div id="params-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
+    <!-- Scan ────────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Scan</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Top-down plot of <code>/scan</code>, robot at center, forward = up.
+        Scroll to zoom, or use the buttons.
+      </p>
+      <div class="button-row" style="margin-bottom:10px;align-items:center">
+        <button id="btn-zoom-out" style="padding:6px 14px">−</button>
+        <button id="btn-zoom-in" style="padding:6px 14px">+</button>
+        <span id="zoom-label" style="color:#94a3b8;font-size:0.85rem">6.0 m</span>
+      </div>
+      <div id="scan-canvas-wrap">
+        <canvas id="scan-canvas"></canvas>
+        <div id="scan-placeholder">Activate the node to see live scan data.</div>
+      </div>
+    </section>
+
+    <!-- Scan info ───────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Scan Info</h2>
+      <div class="feedback-grid">
+        <div class="feedback-card">
+          <h4>Points</h4>
+          <div class="feedback-value" id="info-points">—</div>
+          <div class="feedback-unit">samples in last scan</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Rate</h4>
+          <div class="feedback-value" id="info-rate">—</div>
+          <div class="feedback-unit">Hz, measured</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Range</h4>
+          <div class="feedback-value" id="info-range" style="font-size:1.1rem">—</div>
+          <div class="feedback-unit">min / max (m)</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Frame</h4>
+          <div class="feedback-value" id="info-frame-id" style="font-size:1.1rem">—</div>
+          <div class="feedback-unit">frame_id</div>
+        </div>
+      </div>
+      <p id="info-placeholder" style="color:#64748b;font-size:0.85rem;margin:12px 0 0">
+        Waiting for /scan… (Activate the node first)
+      </p>
+    </section>
+
+    <!-- Logs ────────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Logs</h2>
+      <div class="log-toolbar">
+        <button id="btn-log-clear" style="padding:4px 12px;font-size:0.8rem">Clear</button>
+        <label><input type="checkbox" id="chk-all-nodes"> Show all nodes</label>
+        <label><input type="checkbox" id="chk-debug"> Show DEBUG</label>
+      </div>
+      <div id="log-box"></div>
+    </section>
+  </div>
+
+  <script src="roslib.min.js"></script>
+  <script src="lidar_view.js"></script>
+  <script src="lidar.js"></script>
+</body>
+</html>

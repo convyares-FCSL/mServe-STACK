@@ -43,8 +43,16 @@
     }
     .dpad-btn .dpad-label { font-size: 0.7rem; }
 
-    /* Image preview (reused from camera page) */
-    #camera-image-wrap {
+    /* Drive controls + camera preview, side by side */
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 640px) {
+      .sensor-grid { grid-template-columns: 1fr; }
+    }
+    #camera-image-wrap, #scan-canvas-wrap {
       background: #000;
       border-radius: 12px;
       overflow: hidden;
@@ -52,9 +60,26 @@
       align-items: center;
       justify-content: center;
       min-height: 200px;
+      position: relative;
     }
     #camera-image { width: 100%; display: block; }
     #camera-image-placeholder { color: #64748b; font-size: 0.85rem; padding: 30px 0; }
+    /* LiDAR plot — full-width section below Drive/Camera, bigger than a mini preview */
+    #scan-canvas { display: block; width: 100%; height: 320px; }
+    #scan-placeholder { color: #64748b; font-size: 0.85rem; position: absolute; }
+    .service-status {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    .service-status.idle-sim      { background: var(--surface-2); color: var(--accent); }
+    .service-status.connected-sim { background: var(--success);   color: #0f172a; }
+    .service-status.idle-hw       { background: var(--surface-2); color: var(--accent-2); }
+    .service-status.connected-hw  { background: #22c55e;          color: #0f172a; }
+    .service-status.unknown       { background: var(--surface-2); color: var(--text); }
 
     /* Feedback grid (reused from drivechain) */
     .feedback-grid {
@@ -129,43 +154,70 @@
       </div>
     </section>
 
-    <!-- Drive controls ──────────────────────────────────────────────────── -->
+    <!-- Drive + Camera ──────────────────────────────────────────────────── -->
     <section class="panel">
       <h2>Drive</h2>
-      <div class="form-grid">
-        <label for="speed-linear">Linear speed</label>
-        <input id="speed-linear" type="range" min="0" max="1.0" step="0.05" value="0.3" />
-        <span id="speed-linear-val">0.30 m/s</span>
+      <div class="sensor-grid">
+        <div>
+          <div class="button-row" style="align-items:center;gap:12px;margin-bottom:14px">
+            <button id="btn-connect">Connect motors</button>
+            <span id="drive-status" class="service-status unknown">—</span>
+          </div>
 
-        <label for="speed-angular">Angular speed</label>
-        <input id="speed-angular" type="range" min="0" max="1.5" step="0.05" value="0.6" />
-        <span id="speed-angular-val">0.60 rad/s</span>
+          <div class="form-grid">
+            <label for="speed-linear">Linear speed</label>
+            <input id="speed-linear" type="range" min="0" max="1.0" step="0.05" value="0.3" />
+            <span id="speed-linear-val">0.30 m/s</span>
+
+            <label for="speed-angular">Angular speed</label>
+            <input id="speed-angular" type="range" min="0" max="1.5" step="0.05" value="0.6" />
+            <span id="speed-angular-val">0.60 rad/s</span>
+          </div>
+
+          <div class="dpad">
+            <button id="btn-fwd"   class="dpad-btn dpad-fwd">▲<span class="dpad-label">Forward</span></button>
+            <button id="btn-left"  class="dpad-btn dpad-left">◀<span class="dpad-label">Left</span></button>
+            <button id="btn-stop"  class="dpad-btn dpad-stop btn-danger">■<span class="dpad-label">Stop</span></button>
+            <button id="btn-right" class="dpad-btn dpad-right">▶<span class="dpad-label">Right</span></button>
+            <button id="btn-back"  class="dpad-btn dpad-back">▼<span class="dpad-label">Backward</span></button>
+          </div>
+
+          <p style="font-size:0.8rem;color:#64748b;margin:0">
+            Connect motors first (opens the UART port — activation alone doesn't).
+            Then press and hold a direction to drive; release to stop. Publishes
+            <code>/cmd_vel</code> at 10 Hz while held.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="font-size:0.85rem;color:#94a3b8;margin:0 0 8px">Camera</h3>
+          <div id="camera-image-wrap">
+            <img id="camera-image" alt="camera stream" />
+            <div id="camera-image-placeholder">No stream — activate mserve_camera first.</div>
+          </div>
+          <p style="font-size:0.8rem;color:#64748b;margin:8px 0 0">
+            See <a href="camera.html" style="color:var(--accent)">Camera →</a> for lifecycle/parameter controls.
+          </p>
+        </div>
       </div>
-
-      <div class="dpad">
-        <button id="btn-fwd"   class="dpad-btn dpad-fwd">▲<span class="dpad-label">Forward</span></button>
-        <button id="btn-left"  class="dpad-btn dpad-left">◀<span class="dpad-label">Left</span></button>
-        <button id="btn-stop"  class="dpad-btn dpad-stop btn-danger">■<span class="dpad-label">Stop</span></button>
-        <button id="btn-right" class="dpad-btn dpad-right">▶<span class="dpad-label">Right</span></button>
-        <button id="btn-back"  class="dpad-btn dpad-back">▼<span class="dpad-label">Backward</span></button>
-      </div>
-
-      <p style="font-size:0.8rem;color:#64748b;margin:0">
-        Press and hold a direction to drive at the selected speed; release to stop.
-        Publishes <code>/cmd_vel</code> at 10 Hz while held.
-      </p>
     </section>
 
-    <!-- Image ──────────────────────────────────────────────────────────── -->
+    <!-- LiDAR ───────────────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>Camera</h2>
+      <h2>LiDAR</h2>
       <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
-        Live feed while driving — see <a href="camera.html" style="color:var(--accent)">Camera page →</a>
+        Top-down plot of <code>/scan</code>, robot at center, forward = up. Scroll to
+        zoom, or use the buttons. See <a href="lidar.html" style="color:var(--accent)">LiDAR →</a>
         for lifecycle/parameter controls.
       </p>
-      <div id="camera-image-wrap">
-        <img id="camera-image" alt="camera stream" />
-        <div id="camera-image-placeholder">No stream — activate mserve_camera first.</div>
+      <div class="button-row" style="margin-bottom:10px;align-items:center">
+        <button id="btn-zoom-out" style="padding:6px 14px">−</button>
+        <button id="btn-zoom-in" style="padding:6px 14px">+</button>
+        <span id="zoom-label" style="color:#94a3b8;font-size:0.85rem">6.0 m</span>
+      </div>
+      <div id="scan-canvas-wrap">
+        <canvas id="scan-canvas"></canvas>
+        <div id="scan-placeholder">No scan — activate mserve_lidar first.</div>
       </div>
     </section>
 
@@ -201,6 +253,7 @@
   </div>
 
   <script src="roslib.min.js"></script>
+  <script src="lidar_view.js"></script>
   <script src="base.js"></script>
 </body>
 </html>

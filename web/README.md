@@ -8,17 +8,18 @@ The web UI connects to ROS 2 through `rosbridge_server` and uses `roslibjs`.
 
 ## Goals
 
-- display the lifecycle state of `mserve_base`, `mserve_drivechain`, and `mserve_camera`
+- display the lifecycle state of `mserve_base`, `mserve_drivechain`, `mserve_camera`, and `mserve_lidar`
 - allow lifecycle transitions from the browser
 - publish `/cmd_vel` commands to drive the robot from the browser
 - preview the camera stream (`camera.html`, plus a smaller preview on `base.html`)
+- plot the live `/scan` (`lidar.html`)
 
 ## Run
 
 The normal entry point is `../scripts/run_stack.sh`, which builds nothing
 itself but expects the workspace already built (see the top-level readme's
 Build section — `interfaces utils mserve_drivechain mserve_base
-lifecycle_manager mserve_camera` plus the vendored
+lifecycle_manager mserve_camera mserve_lidar` plus the vendored
 `btcpp_ros2_interfaces`/`behaviortree_ros2`), then starts rosbridge, launches
 the full stack via `launch/mserve_min.launch.py`, waits for the lifecycle
 nodes to reach `active`, and serves this folder on port 6240:
@@ -35,6 +36,7 @@ Then open:
 - `http://<pi-ip>:6240/drivechain.html`
 - `http://<pi-ip>:6240/base.html`
 - `http://<pi-ip>:6240/camera.html`
+- `http://<pi-ip>:6240/lidar.html`
 
 Press Ctrl+C to stop everything — this runs `lifecycle_manager`'s shutdown
 tree (deactivates the nodes) before tearing down rosbridge/web server.

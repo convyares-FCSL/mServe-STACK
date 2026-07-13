@@ -136,6 +136,74 @@ function startImageStream() {
 }
 startImageStream();
 
+// ── DriveChain connect (opens the UART port — activating the node alone doesn't) ──
+
+const connectSvc = new ROSLIB.Service({
+  ros,
+  name: '/mserve_drivechain/connect',
+  serviceType: 'std_srvs/srv/Trigger',
+});
+
+document.getElementById('btn-connect').addEventListener('click', () => {
+  connectSvc.callService(new ROSLIB.ServiceRequest({}), () => {}, (err) => console.error('connect error', err));
+});
+
+new ROSLIB.Topic({
+  ros,
+  name: '/mserve_drivechain/drive_status',
+  messageType: 'interfaces/msg/DriveStatus',
+}).subscribe((msg) => {
+  const s = msg.status ?? '—';
+  const elDriveStatus = document.getElementById('drive-status');
+  elDriveStatus.textContent = s;
+  elDriveStatus.className = `service-status ${s.replace('_', '-')}`;
+});
+
+// ── Scan (zoomable — see lidar_view.js for the shared renderer) ────────────────
+
+const elScanCanvas      = document.getElementById('scan-canvas');
+const elScanPlaceholder = document.getElementById('scan-placeholder');
+const elZoomLabel       = document.getElementById('zoom-label');
+const scanCtx = elScanCanvas.getContext('2d');
+
+let lastScanMsg = null;
+const ZOOM_MIN_M = 1, ZOOM_MAX_M = 15;
+let scanViewRangeM = 6;
+
+function resizeScanCanvas() {
+  const rect = elScanCanvas.parentElement.getBoundingClientRect();
+  elScanCanvas.width = rect.width;
+  elScanCanvas.height = 320;
+  if (lastScanMsg) drawLaserScan(scanCtx, elScanCanvas, lastScanMsg, scanViewRangeM);
+}
+window.addEventListener('resize', resizeScanCanvas);
+resizeScanCanvas();
+
+function setScanZoom(rangeM) {
+  scanViewRangeM = Math.min(ZOOM_MAX_M, Math.max(ZOOM_MIN_M, rangeM));
+  elZoomLabel.textContent = `${scanViewRangeM.toFixed(1)} m`;
+  if (lastScanMsg) drawLaserScan(scanCtx, elScanCanvas, lastScanMsg, scanViewRangeM);
+}
+
+document.getElementById('btn-zoom-in').addEventListener('click',  () => setScanZoom(scanViewRangeM * 0.8));
+document.getElementById('btn-zoom-out').addEventListener('click', () => setScanZoom(scanViewRangeM * 1.25));
+elScanCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  setScanZoom(scanViewRangeM * (e.deltaY > 0 ? 1.1 : 0.9));
+}, { passive: false });
+
+setScanZoom(scanViewRangeM);
+
+new ROSLIB.Topic({
+  ros,
+  name: '/scan',
+  messageType: 'sensor_msgs/msg/LaserScan',
+}).subscribe((msg) => {
+  elScanPlaceholder.style.display = 'none';
+  lastScanMsg = msg;
+  drawLaserScan(scanCtx, elScanCanvas, msg, scanViewRangeM);
+});
+
 // ── Status subscriptions ─────────────────────────────────────────────────────
 
 new ROSLIB.Topic({

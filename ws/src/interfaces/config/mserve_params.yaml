@@ -47,3 +47,11 @@ mserve_camera:
     width: 640                    # YUYV @ 640x480 hits 30fps on this USB webcam;
     height: 480                   # higher resolutions drop to 5-10fps in YUYV (MJPG would be needed for full-rate 1080p)
     frame_id: camera_link_optical # REP-103 optical frame — see mserve_camera.xacro/mserve_depth_camera.xacro
+
+mserve_lidar:
+  ros__parameters:
+    device: /dev/ttyUSB0
+    baudrate: 460800              # fixed for RPLIDAR C1 — not configurable on the device side
+    frame_id: lidar_link          # see mserve_lidar.xacro
+    scan_mode: ""                 # empty = device's typical/default scan mode
+    inverted: false

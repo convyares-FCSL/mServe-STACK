@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_lidar</name>
+  <version>0.1.0</version>
+  <description>
+    Lifecycle-managed LiDAR node for mServe. Wraps the vendored Slamtec RPLIDAR
+    SDK's sl::ILidarDriver directly (not the rplidar_ros node — no apt package
+    for it exists on this distro, and upstream's own build just globs the SDK
+    into its node executable) so bringup/shutdown is gated the same way as
+    mserve_drivechain/mserve_base/mserve_camera via lifecycle_manager.
+    Publishes standard sensor_msgs/LaserScan. Targets the RPLIDAR C1.
+  </description>
+  <maintainer email="ca99896@gmail.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>sensor_msgs</depend>
+  <depend>utils</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

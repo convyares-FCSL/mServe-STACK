@@ -95,9 +95,9 @@ const transitions = {
 
 const shutdownIds = { unconfigured: 5, inactive: 6, active: 7 };
 
-const nodeStates = { mserve_base: null, mserve_drivechain: null, mserve_camera: null };
+const nodeStates = { mserve_base: null, mserve_drivechain: null, mserve_camera: null, mserve_lidar: null };
 
-const nodePrefix = { base: 'mserve_base', drivechain: 'mserve_drivechain', camera: 'mserve_camera' };
+const nodePrefix = { base: 'mserve_base', drivechain: 'mserve_drivechain', camera: 'mserve_camera', lidar: 'mserve_lidar' };
 
 Object.keys(nodePrefix).forEach((prefix) => {
   ['configure', 'activate', 'deactivate', 'cleanup'].forEach((action) => {

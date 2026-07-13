@@ -57,6 +57,14 @@ def generate_launch_description():
         parameters=[params_file]
     )
 
+    lidar = Node(
+        package='mserve_lidar',
+        executable='lidar_node',
+        name='mserve_lidar',
+        output='screen',
+        parameters=[params_file]
+    )
+
     lifecycle_manager = Node(
         package='lifecycle_manager',
         executable='lifecycle_manager',
@@ -82,6 +90,7 @@ def generate_launch_description():
         drivechain,
         base,
         camera,
+        lidar,
         robot_state_publisher,
         TimerAction(period=2.0, actions=[lifecycle_manager])
     ])
