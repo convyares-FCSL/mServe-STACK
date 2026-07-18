@@ -29,9 +29,9 @@ scripts/
 │   ├── launch_mserve_description_rviz.sh     RViz-only sim view (Thor)
 │   └── stop_mserve_description_gazebo.sh     stop the above cleanly
 ├── docker/
-│   ├── docker_build_workspace.sh   build the workspace inside the legacy Docker container
-│   ├── docker_launch_mserve.sh     launch bringup inside the container
-│   └── docker_webbridge.sh         start rosbridge + web UI inside the container
+│   ├── docker_build_workspace.sh   build the workspace inside the Docker container (superseded by run_stack.sh's built-in build step)
+│   ├── docker_launch_mserve.sh     launch bringup inside the container (superseded by run_stack.sh)
+│   └── docker_webbridge.sh         start rosbridge + web UI inside the container (superseded by run_stack.sh)
 └── test/
     └── run_tests.sh      run unit tests for the current milestones
 ```
@@ -58,8 +58,8 @@ bash scripts/build/build_workspace.sh  # build all mServe packages
 e.g. `./scripts/run_stack.sh --sim --slam-map --foxglove` (`--slam-map` and
 `--slam-local` are mutually exclusive with each other, not with the others).
 All flags default off: without them, `run_stack.sh` only starts what it's
-always started (drivechain/base/camera/lidar + rosbridge + web UI) — same
-load as before any of them existed.
+always started (drivechain/base/camera/lidar/display + rosbridge + rosapi +
+web UI) — same load as before any of them existed.
 
 This is also what `mserve-drivechain.service` runs on boot — see the
 top-level `readme.md`'s "Running on boot" section.
@@ -74,9 +74,11 @@ the Fast-DDS discovery-server path if you need it again.
 
 ## Notes
 
-- Docker (`docker/`) is a legacy fallback only — `run_stack.sh` uses it
-  automatically if `ros2` isn't found on PATH, but it's not the primary
-  workflow on this Pi anymore (see root `readme.md`).
+- Docker is the primary and only workflow on this Pi (no native ROS install
+  at all) — `run_stack.sh` detects this automatically (`ros2` not on PATH)
+  and routes everything through `docker compose exec`. The `docker/` helper
+  scripts above are redundant with `run_stack.sh`'s own built-in
+  orchestration, not with Docker itself — see root `readme.md`.
 - The Docker workspace is mounted at `/ws`. If you build in Docker with
   `--symlink-install`, do not source that same `ws/install/setup.bash` from
   the host filesystem path — rebuild in the environment you intend to run

@@ -16,13 +16,14 @@ The web UI connects to ROS 2 through `rosbridge_server` and uses `roslibjs`.
 
 ## Run
 
-The normal entry point is `../scripts/run_stack.sh`, which builds nothing
-itself but expects the workspace already built (see the top-level readme's
-Build section — `interfaces utils mserve_drivechain mserve_base
-lifecycle_manager mserve_camera mserve_lidar` plus the vendored
-`btcpp_ros2_interfaces`/`behaviortree_ros2`), then starts rosbridge, launches
-the full stack via `launch/mserve_min.launch.py`, waits for the lifecycle
-nodes to reach `active`, and serves this folder on port 6240:
+The normal entry point is `../scripts/run_stack.sh`, which builds the
+workspace inside the `robot-mserve` Docker container itself on every run
+(see the top-level readme's Build section — `interfaces utils
+mserve_drivechain mserve_base lifecycle_manager mserve_camera mserve_lidar
+mserve_display` plus the vendored `btcpp_ros2_interfaces`/`behaviortree_ros2`),
+then starts rosbridge, launches the full stack via `launch/mserve_min.launch.py`,
+waits for the lifecycle nodes to reach `active`, and serves this folder on
+port 6240:
 
 ```bash
 cd /home/ecm/mServe-STACK
@@ -49,5 +50,8 @@ have the drive stack running some other way — most of the time you want
 ## Notes
 
 - This web UI is development-only.
-- If `rosbridge_server` is not installed: `sudo apt install ros-lyrical-rosbridge-server`.
+- `rosbridge_server` and `rosapi` come baked into the Docker image
+  (`Dockerfile`: `ros-jazzy-rosbridge-server`) — nothing to install by hand
+  on this Pi. If running natively instead, install the equivalent
+  `ros-<distro>-rosbridge-server`/`ros-<distro>-rosapi` packages.
 - Camera preview uses `web_video_server` (MJPEG transcode) on port 8080 — see `ws/src/mserve_camera/README.md`.

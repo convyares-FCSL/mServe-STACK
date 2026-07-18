@@ -1,6 +1,6 @@
 # mServe Stack
 
-ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — see `transfer.md` for the full history if anything below looks inconsistent with a native-Lyrical setup you remember from mid-July.
+ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — there is no native ROS install on this Pi.
 
 Camera (`mserve_camera`), lidar (`mserve_lidar`), Foxglove Bridge
 (`--foxglove`), and SLAM Toolbox (`--slam-map`/`--slam-local`) are all wired
@@ -25,6 +25,7 @@ The design philosophy is learning-first: every control boundary, kinematic calcu
 - DDSM115 hub motors × 2, driven via a Waveshare DDSM Driver HAT — its onboard ESP32 speaks JSON over UART on the Pi 5 GPIO header (`/dev/ttyAMA0`) and handles the raw DDSM115 protocol itself; the ESP32 firmware lives in `ws/src/mserve_drivechain/drive_firmware/`
 - Generic USB UVC webcam (`/dev/video0`) — driven by `mserve_camera`
 - SLAMTEC RPLIDAR C1, USB-serial (`/dev/ttyUSB0`, 460800 baud) — driven by `mserve_lidar`
+- ELEGOO 3.5" SPI TFT touchscreen (ILI9486 display + ADS7846 resistive touch) — driven by `mserve_display`, a small status/control UI (face, connect/info/calibrate menu)
 - Gazebo + RViz simulation run on the NVIDIA Thor — the Pi 5 has no compute GPU and stays hardware-only
 
 ## Workspace
@@ -37,8 +38,9 @@ ws/src/
   mserve_drivechain/     diff-drive kinematics + JSON/UART protocol to the ESP32 motor controller
   mserve_camera/         lifecycle node wrapping v4l2_camera's device class directly (USB webcam)
   mserve_lidar/          lifecycle node wrapping a vendored RPLIDAR SDK directly (RPLIDAR C1)
+  mserve_display/        plain node (not lifecycle) driving the ELEGOO touchscreen UI
   mserve_description/    URDF robot model
-  lifecycle_manager/     BehaviorTree.CPP-driven configure/activate/shutdown of all four nodes
+  lifecycle_manager/     BehaviorTree.CPP-driven configure/activate/shutdown of the four lifecycle nodes
   launch/                launch files
   third_party/           vendored source deps (BehaviorTree.ROS2, slam_toolbox) — gitignored, see third_party/README.md
 ```
@@ -55,9 +57,10 @@ ws/src/
 | `mserve_drivechain` | Subscribes `/mserve/cmd_vel_safe`, runs diff-drive kinematics, owns the JSON-over-UART link to the onboard ESP32 (Waveshare DDSM Driver HAT) — the ESP32 itself handles the raw DDSM115 protocol |
 | `mserve_camera` | Wraps `v4l2_camera`'s `V4l2CameraDevice` directly (not the whole `v4l2_camera_node`), publishes `sensor_msgs/Image` + `CameraInfo` — see `ws/src/mserve_camera/README.md` |
 | `mserve_lidar` | Wraps a vendored Slamtec RPLIDAR SDK directly (no apt package exists for `rplidar_ros` on this distro), publishes `sensor_msgs/LaserScan` — see `ws/src/mserve_lidar/README.md` |
+| `mserve_display` | Plain node (not lifecycle-managed) driving the ELEGOO touchscreen — face w/ eyes tracking cmd_vel, connect/info/calibrate menu — see `ws/src/mserve_display/README.md` |
 | `mserve_description` | URDF robot description |
-| `lifecycle_manager` | BT-driven configure/activate on bringup, deactivate/shutdown on SIGINT, for all four lifecycle nodes above — see `ws/src/lifecycle_manager/README.md` |
-| `launch` | `mserve_min.launch.py` — starts drivechain + base + camera + lidar + `robot_state_publisher` + `lifecycle_manager` together |
+| `lifecycle_manager` | BT-driven configure/activate on bringup, deactivate/shutdown on SIGINT, for the four lifecycle nodes above (`mserve_display` isn't lifecycle-managed) — see `ws/src/lifecycle_manager/README.md` |
+| `launch` | `mserve_min.launch.py` — starts drivechain + base + camera + lidar + display + `robot_state_publisher` + `lifecycle_manager` together |
 
 ## Files
 
@@ -98,9 +101,8 @@ The full stack (rosbridge + `mserve_drivechain` + `mserve_base` + `mserve_camera
 - `http://<pi-ip>:6240/lidar.html`
 
 e.g. on this Pi (Wi-Fi IP as of 2026-07-18): `http://172.16.68.73:6240/drivechain.html`.
-Off-network access is via Raspberry Pi Connect now, not Tailscale (see
-`transfer.md`) — `rpi-connect` is installed but not yet signed in
-(`rpi-connect signin`).
+Off-network access is via Raspberry Pi Connect now, not Tailscale —
+`rpi-connect` is installed but not yet signed in (`rpi-connect signin`).
 
 ## Running manually
 
@@ -185,45 +187,41 @@ using `scripts/run_slam.sh`, not for the core drive stack. Full clone/apt/
 build commands for both: **[`ws/src/third_party/README.md`](ws/src/third_party/README.md)**
 — or just run `scripts/setup/deps_setup.sh`, which does all of it.
 
-`mserve_camera` and `mserve_lidar` need their own system deps — camera wraps
-an apt-installed driver package, lidar vendors its SDK as source (no apt
-package for it exists on this distro), and the web UI needs rosbridge +
-image transcoding:
+`mserve_camera` and `mserve_lidar`'s system deps (camera's apt-installed
+driver package, lidar's SDK build tools) and the web UI's rosbridge/image
+transcoding are all baked into `Dockerfile` already — nothing to install by
+hand on this Pi.
+
+`run_stack.sh` does the build automatically inside the `robot-mserve` Docker
+container on every run (`docker compose build robot-mserve` once to build
+the image itself, first, which `docker compose up` does automatically if the
+image doesn't exist yet). The equivalent manual build, run inside the
+container (`docker compose exec robot-mserve bash`, or see what `run_stack.sh`
+itself runs):
 
 ```bash
-sudo apt install ros-lyrical-v4l2-camera ros-lyrical-rosbridge-server ros-lyrical-web-video-server
-```
-
-Then, from `/home/ecm/mServe-STACK/ws`, natively (no Docker), build
-everything the stack actually launches:
-
-```bash
-source /opt/ros/lyrical/setup.bash
+source /opt/ros/jazzy/setup.bash
+cd /ws
 colcon build \
   --packages-select interfaces utils mserve_drivechain mserve_base \
-    mserve_camera mserve_lidar mserve_description lifecycle_manager launch \
-    btcpp_ros2_interfaces behaviortree_ros2 \
+    mserve_camera mserve_lidar mserve_display mserve_description \
+    lifecycle_manager launch btcpp_ros2_interfaces behaviortree_ros2 \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
-**CMake note (Jazzy → Lyrical):** `ament_target_dependencies()` was removed
-entirely in ROS 2 Lyrical (not just deprecated — the macro doesn't exist).
-The CMakeLists for `utils`, `mserve_drivechain`, `mserve_base`,
-`mserve_camera`, `mserve_lidar`, and `lifecycle_manager` all use
-`target_link_libraries()` with modern
-imported targets instead (`rclcpp::rclcpp`, `interfaces::interfaces`, etc. —
-message packages export a `<pkg>::<pkg>` aggregate target automatically via
-`rosidl_cmake_aggregate_target-extras.cmake`, no extra `find_package` needed).
-If you're building this from scratch on an even newer distro and hit
-`Unknown CMake command "ament_target_dependencies"`, this is why.
+`utils`, `mserve_drivechain`, `mserve_base`, `mserve_camera`, `mserve_lidar`,
+`mserve_display`, and `lifecycle_manager` all use `target_link_libraries()`
+with modern imported targets (`rclcpp::rclcpp`, `interfaces::interfaces`,
+etc. — message packages export a `<pkg>::<pkg>` aggregate target
+automatically via `rosidl_cmake_aggregate_target-extras.cmake`, no extra
+`find_package` needed) rather than `ament_target_dependencies()` — a
+portability choice, not a distro requirement.
 
-**This is all native-build reference** (useful if you're ever building on a
-machine with ROS 2 installed directly) — on this Pi, `run_stack.sh` does the
-equivalent build automatically inside the `robot-mserve` Docker container on
-every run (`docker compose build robot-mserve` once to build the image
-itself, first). See `Dockerfile` for the current package list — it's smaller
-than the native one above since camera/lidar/SLAM aren't wired into Docker
-yet (known gap, see the top of this file).
+If you're building on a machine with ROS 2 installed natively instead of in
+Docker, the same `colcon build` command above works unchanged from that
+machine's workspace root — just make sure `mserve_camera`/`mserve_lidar`'s
+system deps (see `Dockerfile` for the exact apt package list) are installed
+first.
 
 ## Runtime parameter updates (no restart needed)
 

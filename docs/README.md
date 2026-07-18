@@ -32,25 +32,15 @@ The C++ lessons in `/home/ecm/ros2-systems-operability/src/2_cpp` are the main s
 
 ## Running the Current Skeleton
 
-**As of the July 2026 SD-card migration, this Pi runs the stack natively — no
-Docker.** The Docker workflow below is kept as a documented fallback only
-(`run_stack.sh` uses it automatically if `ros2` isn't found on PATH);
-it is no longer the recommended path on this machine.
+**As of the 2026-07-18 platform revert, this Pi runs the stack in Docker (ROS
+2 Jazzy) — there is no native ROS install on this Pi at all.** `run_stack.sh`
+detects this (`command -v ros2` fails) and routes every command through
+`docker compose exec robot-mserve`.
 
-### Host-native workflow (recommended)
+### Docker workflow (the only path on this Pi)
 
-From `/home/ecm/mServe-STACK`:
-
-```bash
-source /opt/ros/lyrical/setup.bash
-cd ws
-colcon build --symlink-install --packages-select interfaces utils mserve_base mserve_drivechain mserve_camera mserve_lidar mserve_description lifecycle_manager launch btcpp_ros2_interfaces behaviortree_ros2
-source install/setup.bash
-ros2 launch launch mserve_min.launch.py
-```
-
-Or use the one-command launcher, which builds, starts rosbridge, activates
-both lifecycle nodes, and serves the debug web UI:
+The one-command launcher builds, starts rosbridge, activates the lifecycle
+nodes, and serves the debug web UI, all inside the container:
 
 ```bash
 cd /home/ecm/mServe-STACK
@@ -58,27 +48,25 @@ cd /home/ecm/mServe-STACK
 ./scripts/run_stack.sh --sim    # sim backend, no hardware needed
 ```
 
-**Note on ROS distro:** this was originally built against ROS 2 Jazzy; it now
-builds natively against ROS 2 Lyrical. `ament_target_dependencies()` was
-removed in Lyrical — see the CMake note in the root `readme.md` Build section
-if you're building from scratch on a newer distro.
-
-### Docker workflow (legacy fallback)
+If you want to run the raw command instead, from inside the container
+(`docker compose exec robot-mserve bash`):
 
 ```bash
-docker compose up -d --build robot-mserve
-scripts/docker/docker_build_workspace.sh
-scripts/docker/docker_launch_mserve.sh
-scripts/docker/docker_webbridge.sh both
+source /opt/ros/jazzy/setup.bash
+cd /ws
+colcon build --symlink-install --packages-select interfaces utils mserve_base mserve_drivechain mserve_camera mserve_lidar mserve_display mserve_description lifecycle_manager launch btcpp_ros2_interfaces behaviortree_ros2
+source install/setup.bash
+ros2 launch launch mserve_min.launch.py
 ```
 
-This launches rosbridge inside the `robot-mserve` container and serves the web UI at `http://localhost:8080`.
+`scripts/docker/docker_build_workspace.sh`, `docker_launch_mserve.sh`, and
+`docker_webbridge.sh` still exist on disk but are superseded by
+`run_stack.sh`'s own built-in Docker orchestration above — no need to run
+them separately.
 
-If you want to run the raw command instead of the helper, use:
-
-```bash
-docker compose exec robot-mserve bash -lc "cd /ws && source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 launch launch mserve_min.launch.py"
-```
+If you're building on a machine with ROS 2 installed natively instead of in
+Docker, the same `colcon build`/`ros2 launch` commands above work unchanged
+from that machine's own workspace root.
 
 This current skeleton provides:
 
@@ -93,6 +81,9 @@ This current skeleton provides:
 - `mserve_lidar`: lifecycle node wrapping a vendored Slamtec RPLIDAR SDK
   directly (RPLIDAR C1), publishing `sensor_msgs/LaserScan`. See
   `ws/src/mserve_lidar/README.md`.
+- `mserve_display`: plain node (not lifecycle-managed) driving the ELEGOO
+  3.5" SPI touchscreen — face w/ eyes tracking `cmd_vel`, connect/info/
+  calibrate menu. See `ws/src/mserve_display/README.md`.
 - `launch`: the central bringup launch package (was planned as `mserve_bringup`;
   the actual folder/package name is `launch`).
 - `interfaces`: shared ROS messages, services, actions, and config (was planned

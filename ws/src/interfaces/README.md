@@ -1,255 +1,79 @@
-# mserve_interfaces
+# interfaces
 
-Shared ROS 2 interfaces for the mServe and HyFleet stack.
-All messages, services, and actions used across packages are defined here.
+Shared ROS 2 messages, services, actions, and central YAML config for the
+mServe stack. Package name is `interfaces` (dropped the originally-planned
+`mserve_interfaces` prefix, like `utils` and `launch` — see root `readme.md`).
 
----
+Everything below is what's actually defined here today. (An earlier version
+of this README documented a HyFleet compressor/booster interface set —
+`ControlCompressor`/`ControlBooster` actions, `BoosterCmd`/`CompressorCmd`/
+`SetMode`/`DispenserCmd`/`GasRouterCmd` services, `CompressorTelemetry` — none
+of that exists anymore; it was removed as unrelated HyFleet-derived
+scaffolding, see `docs/TODO.md`'s "Now" section.)
 
-## Interface boundary principle
+## Messages (`msg/`)
 
-The PLC uses a fixed hardware command contract (TwinCAT function block):
+- **`DriveStatus.msg`** — `string status`, `float32 battery_level`, `bool
+  board_alive`. Published by both `mserve_drivechain` and `mserve_base`
+  (`status` values like `connected_hw`/`connected_sim`/`idle_hw`/`idle_sim`
+  for drivechain — see `mserve_drivechain/src/drivechain_bt_nodes.cpp`).
+- **`MotorState.msg`** — per-motor feedback: `motor_id`, `name`,
+  `velocity_rpm`, `velocity_rads`, `position_rad`, `current_a`,
+  `temperature_c`, `fault_code`.
+- **`DriveMotorFeedback.msg`** — `builtin_interfaces/Time stamp` + an array
+  of `MotorState` (one per motor). Published by `mserve_drivechain`.
+- **`MotorCommand.msg`** — `motor_id`, `int16 rpm`. Used inside
+  `srv/Drive.srv`'s request array, not published standalone.
+- **`DisplayStatus.msg`** — `string mode`, `string text`. Published by
+  `mserve_display` on `~/status` (mode = current screen name, text = a
+  short status string).
+- **`Esp32Status.msg`** — `bool connected`, `float32 temperature`, `string
+  firmware_version`. Reserved for future ESP32 health reporting; not yet
+  published anywhere.
 
-```
-id       : UDINT   — target device/booster identifier
-cmd      : UDINT   — encoded command enum (E_Cmd)
-payload  : ARRAY [1..5] OF UDINT — command-specific data
-ackID    : UDINT   — echoed back on acknowledgement
-result   : HRESULT — signed 32-bit result code
-```
+## Services (`srv/`)
 
-**This contract is never exposed inside ROS.** The ADS bridge node is the only
-place that knows about `id/cmd/payload` encoding. Inside ROS, all interfaces use
-named, typed fields. The bridge translates in both directions.
+- **`Drive.srv`** — request: `MotorCommand[] motor_commands`; response:
+  `bool success`, `string message`. `mserve_drivechain`'s low-level motor
+  command interface.
+- **`SetDisplayMode.srv`** — request: `string mode`; response: `bool
+  success`, `string message`. `mserve_display`'s `~/set_display_mode` —
+  forces a screen change (`face`/`menu`/`info`/`calibrate`) independent of
+  touch navigation.
+- **`SetMotorId.srv`** — request: `uint8 motor_id`, `uint8 new_id`;
+  response: `bool success`, `string message`. Reassigns a DDSM115 motor's
+  hardware ID.
 
-```
-ROS node  →  clean typed service  →  ADS bridge  →  id/cmd/payload  →  PLC
-ROS node  ←  bool success/message ←  ADS bridge  ←  ackID/result    ←  PLC
-```
+`mserve_drivechain`'s `~/connect` and `mserve_base`/`mserve_drivechain`'s
+`~/get_state` use the standard `std_srvs/srv/Trigger` and
+`lifecycle_msgs/srv/GetState` — not custom interfaces, nothing to define
+here.
 
----
+## Actions (`action/`)
 
-## HyFleet compression interfaces
+- **`Dock.action`** — goal: `string dock_point`; result: `bool success`,
+  `string message`; feedback: `float32 progress`. Reserved for future
+  docking behavior; not yet implemented by any node.
 
-### Actions
+## Central config (`config/`)
 
-#### `action/ControlCompressor.action`
-External entry point. Sent by the orchestrator to `hyfleet_compression`.
-
-```
-Goal:
-  uint8 START      = 1
-  uint8 STOP       = 2
-  uint8 FORCE_STOP = 3
-
-  uint8 LOW_BOOSTER   = 1
-  uint8 HIGH_BOOSTER  = 2
-  uint8 SYNC_BOOSTERS = 3
-
-  uint8   command
-  uint8   target
-  float64 target_pressure
-
-Result:
-  bool   accepted
-  string message
-
-Feedback:
-  float64 pressure
-  float64 percent_complete
-```
-
-Mode (PERFORMANCE / ECO) is not a goal field — it is persistent coordinator state
-set via the `~/set_mode` service before a fill begins.
-
-#### `action/ControlBooster.action`
-Sent by `hyfleet_compression` coordinator to each `hyfleet_booster` instance.
-
-`ON_TARGET_HOLD` compresses to target then holds in a maintain band — PCSV off when
-at pressure, re-engage when outlet drops below `reenable_pressure_bar`. VFD stays
-running throughout. Used for interstage band-control in SYNC mode.
-
-`INLET_STARVE_PAUSE` blocks PCSV (returns RUNNING) while inlet pressure is below
-`inlet_starve_bar`, resuming when it recovers above `inlet_resume_bar`. Used by the
-high booster in SYNC to pause while the low booster recovers interstage pressure.
-
-```
-Goal:
-  uint8 COMPRESS   = 1
-  uint8 STOP       = 2
-  uint8 FORCE_STOP = 3
-
-  uint8 ON_TARGET_SUCCEED = 0   ← return SUCCESS when target reached (one-shot)
-  uint8 ON_TARGET_HOLD    = 1   ← maintain band; loop until preempted then STOP
-
-  uint8 INLET_STARVE_ABORT = 0  ← abort goal if inlet drops below starve threshold
-  uint8 INLET_STARVE_PAUSE = 1  ← pause PCSV while starved; resume on recovery
-
-  uint8   command
-  float64 target_pressure       ← validated against per-instance min/max on goal-accept
-  float64 cpm          16.0     ← coordinator-decided; validated against CPM_MAX constexpr
-  float64 speed_rpm    1500.0   ← coordinator-decided; validated against SPEED_MAX_RPM
-  uint8   on_target       0     ← 0 = succeed once, 1 = hold band
-  uint8   on_inlet_starve 0     ← 0 = abort, 1 = pause
-  float64 inlet_starve_bar -1.0 ← starvation threshold (-1 = not used)
-  float64 inlet_resume_bar -1.0 ← recovery threshold (-1 = not used)
-
-Result:
-  bool   accepted
-  string message
-
-Feedback:
-  float64 pressure
-  float64 percent_complete
-```
-
----
-
-### Compression control services
-
-#### `srv/BoosterCmd.srv`
-Single multiplexed service for all booster hardware commands. One instance per
-booster, namespaced: `/low_booster/booster_cmd`, `/high_booster/booster_cmd`.
-The ADS bridge advertises these and translates named fields to the PLC wire format.
-
-```
-uint8 START_VFD  = 1    # Start VFD at setpoint (rpm)
-uint8 STOP_VFD   = 2    # Stop VFD
-uint8 SET_PCSV   = 3    # Enable/disable PCSV; setpoint = cpm
-uint8 CONTROL_SV = 4    # Open/close solenoid valve at index
-
-uint8   cmd
-bool    enable      # SET_PCSV / CONTROL_SV — energise the targeted device
-uint8   index       # CONTROL_SV — index into CompressorTelemetry::sv[5]
-float64 setpoint    # START_VFD: speed (rpm) / SET_PCSV: compression rate (cpm)
----
-bool   success
-string message
-```
-
-#### `srv/CompressorCmd.srv`
-Coordinator-level service for system-wide actuation: interstage solenoid valve
-and oil heater. Advertised at `/hyfleet_compression/compressor_cmd`.
-
-```
-uint8 INVALID        = 0
-uint8 CONTROL_SV     = 1    # Open/close a solenoid valve by index
-uint8 CONTROL_HEATER = 2    # Enable/disable oil heater; setpoint = target °C
-
-uint8   cmd
-bool    enable      # CONTROL_SV / CONTROL_HEATER — energise the device
-uint8   index       # CONTROL_SV — index into CompressorTelemetry::sv[5]
-float64 setpoint    # CONTROL_HEATER — temperature setpoint (°C)
----
-bool   success
-string message
-```
-
-#### `srv/SetMode.srv`
-Sets the compression mode on `hyfleet_compression`. Mode persists across fills —
-set once before a session begins. Replaces the per-goal `mode` field that was
-previously on `ControlCompressor.action`.
-
-```
-uint8 PERFORMANCE = 1
-uint8 ECO         = 2
-
-uint8 mode
----
-bool   success
-string message
-```
-
-#### `srv/DispenserCmd.srv`
-Dispenser control — start/stop dispensing, user session management.
-```
-uint8 START   = 1
-uint8 STOP    = 2
-uint8 LOGIN   = 3
-uint8 LOGOUT  = 4
-uint8 PAYMENT = 5
-
-uint8   cmd
-bool    enable
-string  guid        # user/session identifier
-float64 pressure    # target dispensing pressure
----
-bool   success
-string message
-```
-
-#### `srv/GasRouterCmd.srv`
-Open or close a named gas routing path.
-```
-uint8 OPEN_PATH  = 1
-uint8 CLOSE_PATH = 2
-
-uint8  cmd
-string path_id    # bridge owns the valve mapping for this path
----
-bool   success
-string message
-```
-
----
-
-### Telemetry
-
-#### `msg/CompressorTelemetry.msg`
-Published by the ADS bridge at ~10 Hz. Single topic for the entire compressor
-subsystem — all pressure transducers, temperatures, VFD data, and valve states
-in one message. Both `BoosterNode` instances and `CompressorNode` subscribe and
-extract their slice using config-driven array indices.
-
-```
-Topic:  compressor_telemetry
-Rate:   ~10 Hz
-
-uint8 mode                  # PLC operating state: OFF/STARTUP/AUTO/MANUAL/LOCKOUT
-
-float64[16] pt_bar          # all pressure transducers (bar)
-float64[12] tt_celsius      # all temperature transducers (°C)
-bool[5]     sv              # solenoid valve states
-bool[4]     ps              # end-of-travel position switches
-
-uint8[2]   vfd_state        # VFD_OFFLINE=0 VFD_IDLE=1 VFD_RUNNING=2 VFD_FAULT=3
-float64[2] vfd_speed_rpm    # VFD speed (rpm)
-float64[2] vfd_energy_kj    # VFD energy (kJ)
-float64[2] vfd_power_kw     # VFD power (kW)
-
-bool    heater_on           # PLC handles both physical heaters in parallel
-float64 hpu_tt_celsius      # Hydraulic tank temperature (°C)
-float64 hpu_ls_percent      # Hydraulic tank fill level (%)
-
-builtin_interfaces/Time timestamp
-```
-
-Array index mapping (from per-instance config params, not hardcoded):
-
-| Signal | `low_booster` | `high_booster` | `hyfleet_compression` |
-|---|---|---|---|
-| Inlet PT | `pt_bar[0]` | `pt_bar[1]` | `pt_bar[0]` |
-| Outlet / interstage PT | `pt_bar[7]` | `pt_bar[2]` | `pt_bar[7]` |
-| VFD | `vfd_*[0]` | `vfd_*[1]` | — |
-| Interstage SV | — | — | `sv[4]` |
-
----
-
-## Mobile base interfaces
-
-- `msg/DriveStatus`, `msg/WheelCommand`, `msg/WheelFeedback`
-- `msg/DisplayStatus`, `msg/Esp32Status`
-- `srv/SetDisplayMode`
-- `action/Dock`
-
----
+- **`mserve_params.yaml`** — every node's runtime parameters in one file,
+  nested by node name (`mserve_base`, `mserve_drivechain`, `mserve_camera`,
+  `mserve_lidar`, `mserve_display`), dot-notation nested keys. Loaded via
+  `--params-file` in the launch files.
+- **`qos.yaml`** / **`topics.yaml`** — named QoS profiles and topic names,
+  read by `utils`' `mserve_qos`/`mserve_topics` helpers rather than hardcoded
+  per-node.
+- **`slam_params_map.yaml`** / **`slam_params_local.yaml`** — SLAM Toolbox
+  params, split by mode (`mserve_slam.launch.py`'s `mode:=map`/`mode:=local`).
 
 ## Build
 
 ```bash
-colcon build --packages-select mserve_interfaces
+colcon build --packages-select interfaces
 source install/setup.bash
 
 # Inspect any interface
-ros2 interface show mserve_interfaces/action/ControlBooster
-ros2 interface show mserve_interfaces/srv/SetMode
+ros2 interface show interfaces/srv/SetDisplayMode
+ros2 interface show interfaces/msg/DriveStatus
 ```

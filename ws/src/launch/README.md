@@ -4,7 +4,7 @@ Launch package for mServe. Starts all nodes and the lifecycle manager in the cor
 
 ## Launch files
 
-- `launch/mserve_min.launch.py` — minimal runtime: drivechain + base + camera + lidar + robot_state_publisher + lifecycle manager
+- `launch/mserve_min.launch.py` — minimal runtime: drivechain + base + camera + lidar + display + robot_state_publisher + lifecycle manager
 - `launch/mserve_slam.launch.py` — SLAM Toolbox, see its own section below
 
 ## What gets started (`mserve_min.launch.py`)
@@ -13,15 +13,19 @@ Launch package for mServe. Starts all nodes and the lifecycle manager in the cor
 |---|---|---|---|
 | `mserve_drivechain` | `mserve_drivechain` | `drivechain_node` | immediate |
 | `mserve_base` | `mserve_base` | `base_node` | immediate |
-| `mserve_camera` | `mserve_camera` | `camera_node` | immediate |
-| `mserve_lidar` | `mserve_lidar` | `lidar_node` | immediate |
+| `mserve_camera` | `mserve_camera` | `camera_node` | immediate (gated by `with_camera`) |
+| `mserve_lidar` | `mserve_lidar` | `lidar_node` | immediate (gated by `with_lidar`) |
+| `mserve_display` | `mserve_display` | `display_node` | immediate (gated by `with_display`) |
 | `robot_state_publisher` | `robot_state_publisher` | `robot_state_publisher` | immediate |
 | `lifecycle_manager` | `lifecycle_manager` | `lifecycle_manager` | 2s (waits for nodes to come up) |
 
-The lifecycle manager automatically configures and activates all four lifecycle
-nodes above via BT (see `ws/src/lifecycle_manager/`), and runs a shutdown tree
-on SIGINT/SIGTERM. `robot_state_publisher` isn't lifecycle-managed — it's a
-plain topic publisher with nothing to configure/activate.
+The lifecycle manager automatically configures and activates the four lifecycle
+nodes above (drivechain/base/camera/lidar) via BT (see
+`ws/src/lifecycle_manager/`), and runs a shutdown tree on SIGINT/SIGTERM.
+`robot_state_publisher` and `mserve_display` aren't lifecycle-managed — both
+are plain nodes with nothing to configure/activate (see
+`ws/src/mserve_display/README.md`'s "Why not a lifecycle node?" for the
+reasoning).
 
 ## SLAM Toolbox (`mserve_slam.launch.py`)
 
@@ -84,6 +88,9 @@ path (no extension) before using `local` mode.
 
 - `backend` (default `hardware`) — `mserve_drivechain` backend, `hardware` or `sim`
 - `uart_device` (default `/dev/ttyAMA0`) — UART device for the hardware backend
+- `with_camera` (default `true`) — include `mserve_camera`
+- `with_lidar` (default `true`) — include `mserve_lidar`
+- `with_display` (default `true`) — include `mserve_display`
 
 ## Run
 

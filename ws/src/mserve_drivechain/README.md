@@ -250,19 +250,22 @@ cd ~/mServe-STACK
 
 The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell at a glance which mode is running.
 
-### Running on this Pi (native, as of the July 2026 SD-card migration)
+### Running on this Pi (Docker, as of the 2026-07-18 platform revert)
 
-This Pi now has ROS 2 (Lyrical) and a C++ toolchain installed natively — no
-Docker needed. `run_stack.sh` detects `ros2` on PATH and runs
-everything as native processes, including the web UI on port **6240**
-(`http://<pi-ip>:6240/drivechain.html`). `mserve-drivechain.service`
-(systemd, native, runs as the `ecm` user) starts this automatically on boot.
+This Pi has no native ROS install at all — everything runs in Docker
+(`mserve-robot:jazzy`, ROS 2 Jazzy). `run_stack.sh` detects that `ros2` isn't
+on PATH and routes every command through `docker compose exec`, including
+serving the web UI natively on port **6240**
+(`http://<pi-ip>:6240/drivechain.html`) — Python is always available on
+Debian, so that one piece doesn't need the container. `mserve-drivechain.service`
+(systemd, `Requires=docker.service`, runs as the `ecm` user) starts this
+automatically on boot.
 
-The section below (Docker) is kept for reference — it's what `run_stack.sh`
-falls back to automatically on a *different* Pi/Debian box that has no ROS
-installation at all.
+If you're ever running this on a machine with ROS 2 installed natively
+instead, `run_stack.sh` detects `ros2` on PATH and runs everything as native
+processes instead — no code changes needed, same script either way.
 
-### Running on a Raspberry Pi with no native ROS (Docker fallback)
+### Running in Docker (what this Pi actually does)
 
 **Prerequisites (one-time):**
 ```bash

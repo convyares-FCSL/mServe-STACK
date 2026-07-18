@@ -5,16 +5,17 @@
 mServe is a learning-first ROS 2 C++ differential-drive robot stack running on a
 Raspberry Pi 5. Full design philosophy: `readme.md` and `docs/architecture.md`.
 
-## Runtime environment (as of the July 2026 SD-card migration)
+## Runtime environment (as of the 2026-07-18 platform revert)
 
-- Runs **natively** on ROS 2 **Lyrical** (Ubuntu 26.04 "Resolute") — no Docker.
-  `Dockerfile`/`docker-compose.yml` are legacy fallback only; `run_stack.sh`
-  uses them automatically only if `ros2` isn't found on PATH.
-- Originally built against ROS 2 Jazzy. If building from scratch on a newer distro
-  and `ament_target_dependencies()` errors as an unknown CMake command, see Build below.
-- Boots via `mserve-drivechain.service` (systemd, native — sources
-  `/opt/ros/lyrical/setup.bash` + `ws/install/setup.bash`, then runs
-  `scripts/run_stack.sh`).
+- Runs in **Docker** (image `mserve-robot:jazzy`, ROS 2 **Jazzy**) on fresh
+  Raspberry Pi OS — no native ROS install on this Pi at all.
+  `docker-compose.yml` builds `Dockerfile` (`FROM ros:jazzy-ros-base`).
+  `run_stack.sh` auto-detects this (`command -v ros2` fails) and routes
+  every command through `docker compose exec robot-mserve`.
+- Boots via `mserve-drivechain.service` (systemd, `Requires=docker.service`,
+  runs as user `ecm`, `ExecStart=scripts/run_stack.sh`). A `boot_splash.py`
+  `ExecStartPre` paints an initial state (closed eyes + IP) to `/dev/fb0`
+  before the container is even up.
 - Gazebo + RViz simulation run on the NVIDIA Thor — not a PC/WSL2, and not the Pi
   itself (Pi 5 has no compute GPU and stays hardware-only).
 
@@ -26,13 +27,18 @@ ws/src/
   utils/                shared C++ helpers: params, QoS profiles, topic names
   mserve_base/          command arbiter + safety clamp lifecycle node
   mserve_drivechain/    diff-drive kinematics + JSON/UART link to the ESP32 motor controller
+  mserve_camera/        lifecycle node, USB webcam (wraps v4l2_camera's device class)
+  mserve_lidar/         lifecycle node, RPLIDAR C1 (vendored SDK, no apt package exists)
+  mserve_display/       ELEGOO 3.5" SPI touchscreen UI (plain node, not lifecycle-managed)
   mserve_description/   URDF robot model
-  launch/               launch files (mserve_min.launch.py)
+  launch/               launch files (mserve_min.launch.py, mserve_slam.launch.py)
+  lifecycle_manager/    BT.CPP-driven configure/activate/shutdown for drivechain/base
 ```
 
-`mserve_base_archive/` and `template/` (an old `hyfleet_subsystem` scaffold from
-an unrelated project, left in the tree) carry `COLCON_IGNORE` and are excluded
-from the build. `lifecycle_manager/` does **not** — it's a required runtime
+`template/` (an old `hyfleet_subsystem` scaffold from an unrelated project,
+left in the tree) carries `COLCON_IGNORE` and is excluded from the build.
+(`mserve_base_archive/` — previously also excluded — has since been deleted
+outright, not just ignored.) `lifecycle_manager/` is a required runtime
 package (drives `mserve_drivechain`/`mserve_base` through configure/activate
 via BT.CPP, wired into `launch/mserve_min.launch.py`) and must be built like
 any other package.
@@ -51,19 +57,26 @@ BehaviorTree.CPP trees (`src/trees/*.xml`).
 
 ## Build
 
+Runs inside the Docker container — `run_stack.sh` does this automatically on
+every invocation:
+
 ```bash
-source /opt/ros/lyrical/setup.bash
-cd ws
+source /opt/ros/jazzy/setup.bash
+cd /ws
 colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
+  launch mserve_description lifecycle_manager btcpp_ros2_interfaces \
+  behaviortree_ros2 mserve_camera mserve_lidar mserve_display \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
-`ament_target_dependencies()` does not exist in Lyrical (fully removed, not just
-deprecated). Use `target_link_libraries()` with modern imported targets instead —
-`rclcpp::rclcpp`, and `<pkg>::<pkg>` aggregate targets for message packages
-(auto-generated via `rosidl_cmake_aggregate_target-extras.cmake`, no extra
-`find_package` needed). Already fixed in the current CMakeLists for `utils`,
-`mserve_drivechain`, `mserve_base` — keep new packages consistent with this pattern.
+`utils`, `mserve_drivechain`, `mserve_base`, `mserve_camera`, `mserve_lidar`,
+`mserve_display`, and `lifecycle_manager` all use `target_link_libraries()`
+with modern imported targets (`rclcpp::rclcpp`, `<pkg>::<pkg>` aggregate
+targets for message packages, auto-generated via
+`rosidl_cmake_aggregate_target-extras.cmake`, no extra `find_package` needed)
+rather than `ament_target_dependencies()` — a portability choice, not a
+distro requirement (Jazzy still has the macro). Keep new packages consistent
+with this pattern.
 
 ## Run
 

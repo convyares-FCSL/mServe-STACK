@@ -15,7 +15,7 @@ Two reasons, one of them stronger than the equivalent case for `mserve_camera`:
    configured/activated in step with the rest of the stack or included in
    `lifecycle_manager`'s bringup/shutdown trees.
 2. **Unlike camera, there's no apt package to link against at all.** This
-   distro's ROS apt repo has no `ros-lyrical-rplidar-ros` (verified against
+   distro's ROS apt repo has no `ros-jazzy-rplidar-ros` (verified against
    `packages.ros.org`) — and even upstream's own `CMakeLists.txt` doesn't
    build the SDK as a reusable library; it just globs `sdk/src/*.cpp` straight
    into its node executable. There's nothing to `find_package()`.

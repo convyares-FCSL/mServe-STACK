@@ -68,10 +68,10 @@ fine against it). `btcpp_ros2_samples` inside that clone carries a
 
 ```bash
 # BT.CPP core (apt)
-sudo apt install ros-lyrical-behaviortree-cpp
+sudo apt install ros-jazzy-behaviortree-cpp
 
 # behaviortree_ros2 build deps (apt)
-sudo apt install libboost-dev ros-lyrical-generate-parameter-library
+sudo apt install libboost-dev ros-jazzy-generate-parameter-library
 
 # behaviortree_ros2 source build
 cd ~/mServe-STACK/ws/src/third_party
@@ -154,7 +154,7 @@ For a shutdown-tree entry, use one of the `shutdown_*` transitions below —
 
 ## Dependencies
 
-- `behaviortree_cpp` — `ros-lyrical-behaviortree-cpp` (apt)
+- `behaviortree_cpp` — `ros-jazzy-behaviortree-cpp` (apt)
 - `behaviortree_ros2` — vendored source build (`ws/src/third_party/BehaviorTree.ROS2/`, `humble` branch)
 - `btcpp_ros2_interfaces` — vendored source build (same repo)
 - `utils` — transition name lookup (`mserve_utils/lifecycle.hpp`)
