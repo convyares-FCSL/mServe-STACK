@@ -22,66 +22,77 @@ services:
       # path typing — see map/README.md. Container's $HOME is /root, not
       # /home/ecm, so that path only exists here via this mount.
       - ./map:/root/mServe-STACK/map
+      # USB webcam (mserve_camera) / RPLIDAR C1 (mserve_lidar) — optional
+      # peripherals that can be unplugged. Bind-mounted rather than listed
+      # under `devices:` below, because `devices:` resolves each host path
+      # to a specific major:minor ONCE, at container-CREATE time, and if
+      # that path doesn't exist at that moment `docker compose up` fails
+      # outright — for the *entire* container, not just the one missing
+      # device (confirmed the hard way: an unplugged RPLIDAR crash-looped
+      # the whole systemd service, taking drivechain/base/camera/display
+      # down with it, none of which even depend on the lidar). A bind-mount
+      # has no such eager check and stays live afterwards — a device that
+      # appears or disappears after container start is reflected
+      # immediately, no `--force-recreate` needed (this also fixes the
+      # earlier by-id staleness problem, not just the startup failure).
+      #
+      # Mounted at /dev/host, not at /dev/v4l or /dev/serial directly: the
+      # by-id/by-path entries under those directories are symlinks with
+      # *relative* targets (e.g. `../../video0`), which point outside
+      # /dev/v4l itself, into plain /dev. Bind-mounting only /dev/v4l left
+      # those symlinks dangling in the container's mount namespace (by-id
+      # path visible via `ls`, but open() failed ENOENT — caught this the
+      # hard way on first test with the lidar unplugged: the camera, which
+      # *was* physically present, failed to open too). Mounting the whole
+      # host /dev at a side path means every by-id symlink's relative target
+      # resolves inside that same mounted tree. mserve_params.yaml's
+      # mserve_camera.device / mserve_lidar.device point at
+      # /dev/host/v4l/by-id/... and /dev/host/serial/by-id/... accordingly.
+      #
+      # Doesn't shadow the container's own /dev (that stays exactly as
+      # Docker set it up, including its real /dev/shm tmpfs for DDS shared
+      # memory) — /dev/host is a distinct, additional path, so the
+      # full-/dev-mount-breaks-DDS problem from an earlier attempt (mounting
+      # host /dev directly onto the container's /dev) doesn't apply here.
+      - /dev:/dev/host
       # ELEGOO touchscreen (ADS7846) input event device (mserve_display).
-      # Bind-mounted (not a `devices:` entry) because unlike the USB camera/
-      # lidar there is no stable udev by-id path for this — the
-      # /dev/input/eventN NUMBER itself is what's unstable (has shifted
-      # before), and `devices:` resolves a fixed major:minor once at
-      # container-create time with no live tracking (see the camera/lidar
-      # comment below). A live bind-mount of the whole directory lets
-      # mserve_display's runtime /proc/bus/input/devices lookup (inside the
-      # container) always see whatever eventN currently exists, including a
-      # renumbering that happens after the container is already running.
-      # Scoped to /dev/input only, not the full host /dev — doesn't touch
-      # /dev/shm (rejected for the full-/dev approach below, for that DDS
-      # shared-memory reason), so it's a much smaller blast radius.
+      # Real device nodes (not symlinks) live directly under /dev/input
+      # itself, so this one doesn't have the dangling-symlink problem above
+      # — a direct bind-mount at the same path works. Kept separate from the
+      # /dev/host mount above (rather than switching mserve_display to read
+      # /dev/host/input/eventN) since /proc/bus/input/devices' own handler
+      # names assume a plain /dev/input/eventN path.
       - /dev/input:/dev/input
     working_dir: /ws
     devices:
       # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md.
-      # Not USB — no enumeration instability, a plain devices: entry is fine.
+      # Not USB, always present on this board — no enumeration instability
+      # and no unplug risk, a plain devices: entry is fine (and unlike the
+      # peripherals above, we *want* a hard failure if this is ever missing,
+      # since drivechain can't function at all without it).
       - /dev/ttyAMA0:/dev/ttyAMA0
-      # USB webcam (mserve_camera) / RPLIDAR C1 (mserve_lidar). Host side is
-      # the udev by-id stable path, not a raw /dev/videoN or /dev/ttyUSBN —
-      # confirmed on this Pi that plain indices renumber on their own (the
-      # webcam has been at video0, video1, *and* video2 across container
-      # restarts in one session; a USB bus reset separately turned the
-      # lidar's /dev/ttyUSB0 into /dev/ttyUSB1). Container-internal path
-      # stays fixed (/dev/video1, /dev/ttyUSB0) regardless of host-side
-      # churn, matching mserve_params.yaml's device params.
-      #
-      # `devices:` resolves the by-id symlink to a major:minor ONCE, at
-      # container-CREATE time — it does not track the symlink live. If the
-      # physical device gets reassigned a new major:minor after that
-      # (another USB reset, a reboot) while this container is still
-      # running, the mapped node goes stale (ENXIO on open). Tried bind-
-      # mounting the whole host /dev instead so it'd always resolve fresh —
-      # rejected: it shadows Docker's own /dev/shm tmpfs with a read-only
-      # view, which would break DDS's shared-memory transport. Mitigation
-      # instead: run_stack.sh always `--force-recreate`s this container, so
-      # the snapshot is refreshed on every run even though it's still a
-      # snapshot, not a live view.
-      - /dev/v4l/by-id/usb-Ingenic_Semiconductor_CO.__LTD._HD_Web_Camera_Ucamera001-video-index0:/dev/video1
-      - /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_d656b5b6075ef01187795a401045c30f-if00-port0:/dev/ttyUSB0
       # ELEGOO 3.5" SPI TFT framebuffer (mserve_display). SPI/GPIO-attached,
-      # fixed to this Pi — no USB-style re-enumeration risk (see the touch
-      # input device's own comment above for why that one's handled
-      # differently, as a directory bind-mount instead of here).
+      # fixed to this Pi — no USB-style re-enumeration or unplug risk (see
+      # the touch input device's own comment above for why that one's
+      # handled differently, as a directory bind-mount instead of here).
       - /dev/fb0:/dev/fb0
-    # /dev/input's bind-mount (above, under volumes:) only makes the event
-    # device files VISIBLE in the container's filesystem — it does NOT
-    # grant cgroup device access, which is Docker's separate mechanism for
-    # actual open()/read() permission. Confirmed the hard way: opening
-    # /dev/input/eventN inside the container failed with EPERM ("Operation
-    # not permitted"), not EACCES — that's the cgroup device whitelist
-    # blocking it, unrelated to Unix file permissions/groups (root inside
-    # the container already bypasses those). `devices:` entries get this
-    # grant automatically; a directory volume bind-mount does not, so it
-    # has to be added explicitly. Major 13 = Linux input event devices
-    # (`c 13:* rmw` — wildcarded on minor, since that's the part that
-    # shifts).
+    # The three directory bind-mounts above (volumes:) only make the device
+    # files VISIBLE in the container's filesystem — they do NOT grant cgroup
+    # device access, which is Docker's separate mechanism for actual
+    # open()/read() permission. Confirmed the hard way for /dev/input:
+    # opening /dev/input/eventN inside the container failed with EPERM
+    # ("Operation not permitted"), not EACCES — that's the cgroup device
+    # whitelist blocking it, unrelated to Unix file permissions/groups (root
+    # inside the container already bypasses those). `devices:` entries get
+    # this grant automatically; a directory volume bind-mount does not, so
+    # it has to be added explicitly per device major, wildcarded on minor
+    # since that's the part that shifts: 13 = input event devices, 81 =
+    # video4linux (USB webcam), 188 = USB-serial converters (RPLIDAR's
+    # CP2102N adapter).
     device_cgroup_rules:
       - 'c 13:* rmw'
+      - 'c 81:* rmw'
+      - 'c 188:* rmw'
     group_add:
       - dialout
       - video
