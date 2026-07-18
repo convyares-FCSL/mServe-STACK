@@ -115,6 +115,7 @@ cleanup() {
   if [[ "$USE_DOCKER" == true ]]; then
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge     2>/dev/null || true
   else
     pkill -f rosbridge_websocket    2>/dev/null || true
     pkill -f web_video_server       2>/dev/null || true
@@ -138,6 +139,7 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
   else
     pkill -9 -f drivechain_node       2>/dev/null || true
     pkill -9 -f base_node             2>/dev/null || true
@@ -231,6 +233,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   # See note in cleanup() — one exec per pkill so each pattern actually runs.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket   2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server      2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node           2>/dev/null || true
@@ -242,6 +245,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   # /mserve_base or /mserve_drivechain registrations.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
@@ -304,14 +308,18 @@ sleep 1
 # frontend at all, so it sidesteps the collision rather than working around
 # it with extra sourcing gymnastics.
 if [[ "$FOXGLOVE" == true ]]; then
+  echo "Starting Foxglove Bridge on ws://0.0.0.0:8765…"
   if [[ "$USE_DOCKER" == true ]]; then
-    echo "NOTE: --foxglove is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+      source /opt/ros/jazzy/setup.bash
+      source /ws/install/setup.bash
+      ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 > /tmp/foxglove_bridge.log 2>&1
+    "
   else
-    echo "Starting Foxglove Bridge on ws://0.0.0.0:8765…"
     ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 > /tmp/foxglove_bridge.log 2>&1 &
     NATIVE_PIDS+=($!)
-    sleep 1
   fi
+  sleep 1
 fi
 
 # ── Launch drivechain + base + lifecycle_manager ─────────────────────────────

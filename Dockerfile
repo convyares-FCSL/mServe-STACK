@@ -28,4 +28,6 @@ RUN apt-get update \
         libopencv-dev \
         # MJPEG transcode for camera.html/base.html <img> tags
         ros-jazzy-web-video-server \
+        # Foxglove Bridge, ws://<pi-ip>:8765 (--foxglove)
+        ros-jazzy-foxglove-bridge \
     && rm -rf /var/lib/apt/lists/*
