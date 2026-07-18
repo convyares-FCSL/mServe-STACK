@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_display</name>
+  <version>0.1.0</version>
+  <description>
+    Drives the ELEGOO 3.5" SPI touchscreen (ILI9486 + ADS7846 resistive
+    touch) directly via /dev/fb0 and evdev — a plain rclcpp::Node, not
+    lifecycle-managed (no hardware "connect" step worth gating, same as
+    robot_state_publisher). Shows a default face screen with eyes that
+    track /mserve/cmd_vel_safe's steering direction, and a menu (Connect /
+    Info / Face) for opening the drivechain's UART and viewing IP/drive
+    status. Framebuffer and touch input access is plain Linux syscalls
+    (mmap/ioctl/evdev) — no graphics library dependency.
+  </description>
+  <maintainer email="ca99896@gmail.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_srvs</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>utils</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -38,7 +38,7 @@ def test_bringup_declares_backend_and_uart_args():
     ld = module.generate_launch_description()
 
     arg_names = {e.name for e in ld.entities if isinstance(e, DeclareLaunchArgument)}
-    assert {'backend', 'uart_device', 'with_camera', 'with_lidar'}.issubset(arg_names)
+    assert {'backend', 'uart_device', 'with_camera', 'with_lidar', 'with_display'}.issubset(arg_names)
 
 
 def test_bringup_includes_expected_nodes():
@@ -60,6 +60,7 @@ def test_bringup_includes_expected_nodes():
         ('mserve_base', 'base_node'),
         ('mserve_camera', 'camera_node'),
         ('mserve_lidar', 'lidar_node'),
+        ('mserve_display', 'display_node'),
         ('robot_state_publisher', 'robot_state_publisher'),
         ('lifecycle_manager', 'lifecycle_manager'),
     }

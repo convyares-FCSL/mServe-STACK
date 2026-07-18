@@ -136,6 +136,7 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lidar_node            2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f display_node          2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
@@ -147,6 +148,7 @@ cleanup() {
     pkill -9 -f base_node             2>/dev/null || true
     pkill -9 -f camera_node           2>/dev/null || true
     pkill -9 -f lidar_node            2>/dev/null || true
+    pkill -9 -f display_node          2>/dev/null || true
     pkill -9 -f robot_state_publisher 2>/dev/null || true
     pkill -9 -f lifecycle_manager     2>/dev/null || true
     pkill -9 -f rosbridge_websocket   2>/dev/null || true
@@ -190,7 +192,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     cd /ws
     colcon build \
       --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
-        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar $DOCKER_SLAM_PKG \
+        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar mserve_display $DOCKER_SLAM_PKG \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "
@@ -255,6 +257,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node           2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lidar_node            2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f display_node          2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f robot_state_publisher 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager     2>/dev/null || true
   sleep 1
@@ -268,6 +271,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lidar_node            2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f display_node          2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
 else
@@ -279,6 +283,7 @@ else
   pkill -f base_node             2>/dev/null || true
   pkill -f camera_node           2>/dev/null || true
   pkill -f lidar_node            2>/dev/null || true
+  pkill -f display_node          2>/dev/null || true
   pkill -f robot_state_publisher 2>/dev/null || true
   pkill -f lifecycle_manager    2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting

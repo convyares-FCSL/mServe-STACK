@@ -22,6 +22,20 @@ services:
       # path typing — see map/README.md. Container's $HOME is /root, not
       # /home/ecm, so that path only exists here via this mount.
       - ./map:/root/mServe-STACK/map
+      # ELEGOO touchscreen (ADS7846) input event device (mserve_display).
+      # Bind-mounted (not a `devices:` entry) because unlike the USB camera/
+      # lidar there is no stable udev by-id path for this — the
+      # /dev/input/eventN NUMBER itself is what's unstable (has shifted
+      # before), and `devices:` resolves a fixed major:minor once at
+      # container-create time with no live tracking (see the camera/lidar
+      # comment below). A live bind-mount of the whole directory lets
+      # mserve_display's runtime /proc/bus/input/devices lookup (inside the
+      # container) always see whatever eventN currently exists, including a
+      # renumbering that happens after the container is already running.
+      # Scoped to /dev/input only, not the full host /dev — doesn't touch
+      # /dev/shm (rejected for the full-/dev approach below, for that DDS
+      # shared-memory reason), so it's a much smaller blast radius.
+      - /dev/input:/dev/input
     working_dir: /ws
     devices:
       # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md.
@@ -49,9 +63,33 @@ services:
       # snapshot, not a live view.
       - /dev/v4l/by-id/usb-Ingenic_Semiconductor_CO.__LTD._HD_Web_Camera_Ucamera001-video-index0:/dev/video1
       - /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_d656b5b6075ef01187795a401045c30f-if00-port0:/dev/ttyUSB0
+      # ELEGOO 3.5" SPI TFT framebuffer (mserve_display). SPI/GPIO-attached,
+      # fixed to this Pi — no USB-style re-enumeration risk (see the touch
+      # input device's own comment above for why that one's handled
+      # differently, as a directory bind-mount instead of here).
+      - /dev/fb0:/dev/fb0
+    # /dev/input's bind-mount (above, under volumes:) only makes the event
+    # device files VISIBLE in the container's filesystem — it does NOT
+    # grant cgroup device access, which is Docker's separate mechanism for
+    # actual open()/read() permission. Confirmed the hard way: opening
+    # /dev/input/eventN inside the container failed with EPERM ("Operation
+    # not permitted"), not EACCES — that's the cgroup device whitelist
+    # blocking it, unrelated to Unix file permissions/groups (root inside
+    # the container already bypasses those). `devices:` entries get this
+    # grant automatically; a directory volume bind-mount does not, so it
+    # has to be added explicitly. Major 13 = Linux input event devices
+    # (`c 13:* rmw` — wildcarded on minor, since that's the part that
+    # shifts).
+    device_cgroup_rules:
+      - 'c 13:* rmw'
     group_add:
       - dialout
       - video
+      # "input" (for /dev/input/event*) isn't a predefined group name in
+      # this base image — numeric gid, matching this host's `getent group
+      # input`. If that ever changes on a different Pi, this needs updating
+      # too (a name would auto-resolve; a number won't).
+      - "996"
     command:
       - bash
       - -lc

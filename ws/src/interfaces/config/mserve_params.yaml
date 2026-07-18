@@ -65,3 +65,42 @@ mserve_lidar:
     frame_id: lidar_link          # see mserve_lidar.xacro
     scan_mode: ""                 # empty = device's typical/default scan mode
     inverted: false
+
+mserve_display:
+  ros__parameters:
+    fb_device: /dev/fb0
+    touch:
+      device_name_match: "ADS7846 Touchscreen"
+      poll_rate_hz: 40.0
+      tap_max_move: 200            # raw ABS units (0-4095 range) — NEEDS LIVE TUNING
+      tap_min_hold_ms: 30
+      tap_max_hold_ms: 800
+    # IDENTITY PASSTHROUGH — NOT YET CALIBRATED. Raw ABS_X/Y (0-4095) map
+    # directly to screen pixels with no invert/swap. Calibrate live: touch
+    # known screen corners, read the raw coords logged via RCLCPP_INFO on
+    # every tap, update these, restart. See mserve_display/README.md.
+    touch_calib:
+      x_min: 0
+      x_max: 4095
+      y_min: 0
+      y_max: 4095
+      invert_x: false
+      invert_y: false
+      swap_xy: false
+    eye_follow:
+      max_angular_for_full_deflection: 1.2   # matches mserve_base's default max_angular_speed
+      deadzone: 0.08
+      smoothing: 0.7
+    info_refresh_hz: 1.0
+    status_publish_hz: 1.0
+    lifecycle_poll_hz: 1.0
+    ip_refresh_sec: 15.0
+    topic_names:
+      cmd_vel_safe: /mserve/cmd_vel_safe
+      motor_feedback: /mserve_drivechain/motor_feedback
+      drivechain_status: /mserve_drivechain/drive_status
+      base_status: /mserve_base/base_status
+    service_names:
+      connect: /mserve_drivechain/connect
+      drivechain_get_state: /mserve_drivechain/get_state
+      base_get_state: /mserve_base/get_state

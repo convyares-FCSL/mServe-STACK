@@ -44,6 +44,10 @@ def generate_launch_description():
         'with_lidar', default_value='true',
         description='Start mserve_lidar'
     )
+    with_display_arg = DeclareLaunchArgument(
+        'with_display', default_value='true',
+        description='Start mserve_display'
+    )
 
     drivechain = Node(
         package='mserve_drivechain',
@@ -115,6 +119,18 @@ def generate_launch_description():
         condition=UnlessCondition(camera_or_lidar_enabled),
     )
 
+    # Not a lifecycle node — same reasoning as robot_state_publisher below,
+    # no hardware "connect" step worth gating (just opens /dev/fb0 + finds
+    # the touch input device at startup). See mserve_display/README.md.
+    display = Node(
+        package='mserve_display',
+        executable='display_node',
+        name='mserve_display',
+        output='screen',
+        parameters=[params_file],
+        condition=IfCondition(LaunchConfiguration('with_display')),
+    )
+
     # Publishes /robot_description + /tf_static /tf from the URDF — needed so
     # a remote RViz (e.g. on Thor) can place camera_link_optical relative to
     # base_link. Not a lifecycle node — robot_state_publisher is a plain
@@ -132,10 +148,12 @@ def generate_launch_description():
         uart_device_arg,
         with_camera_arg,
         with_lidar_arg,
+        with_display_arg,
         drivechain,
         base,
         camera,
         lidar,
+        display,
         robot_state_publisher,
         TimerAction(period=2.0, actions=[lifecycle_manager, lifecycle_manager_min])
     ])
