@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  drivechain + base only — no camera_sequence/lidar_sequence. Used instead of
+  bringup.xml whenever mserve_camera/mserve_lidar aren't launched at all (the
+  Docker path today, see launch/mserve_min.launch.py's with_camera/with_lidar
+  args): reaching those sequences with no such node running would just burn
+  ~25s on dead-service retries (RetryUntilSuccessful x3, each leaf trying a
+  ROS service that will never come up) before drivechain/base even get
+  touched — the same tradeoff lifecycle_manager/README.md's "Running more
+  than one instance" section already documents for why SLAM runs as an
+  opt-in second instance instead of living in the always-on tree.
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="Main">
+    <Sequence name="main">
+      <Sequence name="drivechain_sequence">
+        <Fallback name="configure_drivechain_fallback">
+          <Inverter>
+            <IsInState name="is_drivechain_inactive"
+                       node_name="mserve_drivechain"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_drivechain"
+                             node_name="mserve_drivechain"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_drivechain_fallback">
+          <Inverter>
+            <IsInState name="is_drivechain_active"
+                       node_name="mserve_drivechain"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_drivechain"
+                             node_name="mserve_drivechain"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
+      <Sequence name="base_sequence">
+        <Fallback name="configure_base_fallback">
+          <Inverter>
+            <IsInState name="is_base_inactive"
+                       node_name="mserve_base"
+                       state="unconfigured"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="configure_base"
+                             node_name="mserve_base"
+                             transition="configure"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+        <Fallback name="activate_base_fallback">
+          <Inverter>
+            <IsInState name="is_base_active"
+                       node_name="mserve_base"
+                       state="inactive"
+                       service_name=""/>
+          </Inverter>
+          <RetryUntilSuccessful num_attempts="3">
+            <ChangeStateNode name="activate_base"
+                             node_name="mserve_base"
+                             transition="activate"
+                             service_name=""/>
+          </RetryUntilSuccessful>
+        </Fallback>
+      </Sequence>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="ChangeStateNode">
+      <input_port name="node_name"
+                  type="std::string"/>
+      <input_port name="transition"
+                  type="std::string"/>
+      <input_port name="service_name"
+                  type="std::string">Service name</input_port>
+    </Action>
+    <Action ID="IsInState">
+      <input_port name="node_name"
+                  type="std::string"/>
+      <input_port name="state"
+                  type="std::string"/>
+      <input_port name="service_name"
+                  type="std::string">Service name</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

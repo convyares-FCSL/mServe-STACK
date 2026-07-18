@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- drivechain + base only — pairs with bringup_min.xml, see that file's comment. -->
+<root BTCPP_format="4">
+    <BehaviorTree ID="Shutdown">
+        <Sequence name="main">
+
+        <Sequence name="base_sequence">
+            <Fallback name="shutdown_base_fallback">
+                <IsInState
+                    name="is_base_finalized"
+                    node_name="mserve_base"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_base"
+                    node_name="mserve_base"
+                    transition="shutdown_active"
+                />
+            </Fallback>
+        </Sequence>
+
+        <Sequence name="drivechain_sequence">
+            <Fallback name="shutdown_drivechain_fallback">
+                <IsInState
+                    name="is_drivechain_finalized"
+                    node_name="mserve_drivechain"
+                    state="finalized"
+                />
+                <ChangeStateNode
+                    name="shutdown_drivechain"
+                    node_name="mserve_drivechain"
+                    transition="shutdown_active"
+                />
+            </Fallback>
+        </Sequence>
+
+        </Sequence>
+    </BehaviorTree>
+</root>

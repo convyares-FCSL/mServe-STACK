@@ -79,7 +79,20 @@ ros_exec_bg() {
 
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
 NATIVE_PIDS=()
+CLEANING_UP=false
 cleanup() {
+  # A second SIGINT/SIGTERM arriving mid-cleanup (someone hitting Ctrl+C
+  # again while this is already tearing things down — the shutdown sequence
+  # below takes a few seconds) re-entered this function via the trap and
+  # corrupted bash's own function-call stack (`pop_var_context: head of
+  # shell_variables not a function context`), not just this script's state.
+  # Disarm the trap and bail out on re-entry instead.
+  if [[ "$CLEANING_UP" == true ]]; then
+    return
+  fi
+  CLEANING_UP=true
+  trap - SIGINT SIGTERM EXIT
+
   echo ""
   echo "Shutting down…"
   # Signal lifecycle_manager directly (SIGINT) so its shutdown tree can
