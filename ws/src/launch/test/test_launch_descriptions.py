@@ -38,7 +38,7 @@ def test_bringup_declares_backend_and_uart_args():
     ld = module.generate_launch_description()
 
     arg_names = {e.name for e in ld.entities if isinstance(e, DeclareLaunchArgument)}
-    assert {'backend', 'uart_device'}.issubset(arg_names)
+    assert {'backend', 'uart_device', 'with_camera', 'with_lidar'}.issubset(arg_names)
 
 
 def test_bringup_includes_expected_nodes():

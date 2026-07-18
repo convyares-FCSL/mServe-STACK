@@ -158,7 +158,8 @@ if [[ "$USE_DOCKER" == true ]]; then
     source /opt/ros/jazzy/setup.bash
     cd /ws
     colcon build \
-      --packages-select interfaces utils mserve_drivechain mserve_base \
+      --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
+        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "
@@ -307,12 +308,17 @@ fi
 BACKEND=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware")
 echo "Launching drivechain + base + lifecycle_manager (backend=$BACKEND)…"
 LAUNCH_ARGS="backend:=$BACKEND uart_device:=$UART_DEVICE"
+if [[ "$USE_DOCKER" == true ]]; then
+  # camera/lidar driver deps aren't in the Docker image yet — see
+  # transfer.md's "Known gaps" (real new work, not a restore).
+  LAUNCH_ARGS="$LAUNCH_ARGS with_camera:=false with_lidar:=false"
+fi
 
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
     source /opt/ros/jazzy/setup.bash
     source /ws/install/setup.bash
-    ros2 launch launch mserve_min.launch.py $LAUNCH_ARGS
+    ros2 launch launch mserve_min.launch.py $LAUNCH_ARGS > /tmp/mserve_launch.log 2>&1
   "
 else
   ros2 launch launch mserve_min.launch.py $LAUNCH_ARGS > /tmp/mserve_launch.log 2>&1 &
@@ -338,7 +344,11 @@ wait_for_active() {
     echo "  ($i/30) $node_name not active yet…"
     sleep 1
   done
-  echo "ERROR: $node_name did not reach 'active' after 30 s. Check logs (/tmp/mserve_launch.log)."
+  if [[ "$USE_DOCKER" == true ]]; then
+    echo "ERROR: $node_name did not reach 'active' after 30 s. Check logs (docker compose exec robot-mserve cat /tmp/mserve_launch.log)."
+  else
+    echo "ERROR: $node_name did not reach 'active' after 30 s. Check logs (/tmp/mserve_launch.log)."
+  fi
   exit 1
 }
 

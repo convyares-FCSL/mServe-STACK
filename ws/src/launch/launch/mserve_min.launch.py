@@ -4,6 +4,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -30,6 +31,20 @@ def generate_launch_description():
         description='UART device used by the hardware backend'
     )
 
+    # Default true (unchanged native behavior). The Docker path doesn't have
+    # the camera/lidar driver deps built into the image yet (see
+    # transfer.md's "Known gaps" — real new work, not a restore), so
+    # run_stack.sh passes these false there to keep drivechain+base+rosbridge
+    # bringup working without them.
+    with_camera_arg = DeclareLaunchArgument(
+        'with_camera', default_value='true',
+        description='Start mserve_camera'
+    )
+    with_lidar_arg = DeclareLaunchArgument(
+        'with_lidar', default_value='true',
+        description='Start mserve_lidar'
+    )
+
     drivechain = Node(
         package='mserve_drivechain',
         executable='drivechain_node',
@@ -54,7 +69,8 @@ def generate_launch_description():
         executable='camera_node',
         name='mserve_camera',
         output='screen',
-        parameters=[params_file]
+        parameters=[params_file],
+        condition=IfCondition(LaunchConfiguration('with_camera')),
     )
 
     lidar = Node(
@@ -62,7 +78,8 @@ def generate_launch_description():
         executable='lidar_node',
         name='mserve_lidar',
         output='screen',
-        parameters=[params_file]
+        parameters=[params_file],
+        condition=IfCondition(LaunchConfiguration('with_lidar')),
     )
 
     lifecycle_manager = Node(
@@ -87,6 +104,8 @@ def generate_launch_description():
     return LaunchDescription([
         backend_arg,
         uart_device_arg,
+        with_camera_arg,
+        with_lidar_arg,
         drivechain,
         base,
         camera,
