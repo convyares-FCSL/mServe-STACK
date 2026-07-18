@@ -13,8 +13,8 @@
 
 namespace mserve_display {
 
-Framebuffer::Framebuffer(std::string device)
-: device_(std::move(device)) {}
+Framebuffer::Framebuffer(std::string device, bool flip_180)
+: device_(std::move(device)), flip_180_(flip_180) {}
 
 Framebuffer::~Framebuffer() {close();}
 
@@ -86,22 +86,47 @@ void Framebuffer::present()
     return;
   }
 
+  // flip_180_: on this hardware the panel needs a full 180-degree rotation
+  // to render right-side up (confirmed live — a Y-only mirror, tried first,
+  // left the menu screen still upside down). Source is (W*H-1-i), i.e. the
+  // whole buffer reversed. Left/right on the Face screen turned out to be a
+  // separate bug, unrelated to this transform — see DisplayNode::onCmdVel.
   if (use_mmap_ && mmap_base_ != nullptr) {
     for (int y = 0; y < height_; ++y) {
-      std::memcpy(
-        mmap_base_ + static_cast<size_t>(y) * stride_px_,
-        back_buffer_.data() + static_cast<size_t>(y) * width_,
-        static_cast<size_t>(width_) * sizeof(uint16_t));
+      uint16_t * dst = mmap_base_ + static_cast<size_t>(y) * stride_px_;
+      if (flip_180_) {
+        const uint16_t * src = back_buffer_.data() + static_cast<size_t>(height_ - 1 - y) * width_;
+        for (int x = 0; x < width_; ++x) {
+          dst[x] = src[width_ - 1 - x];
+        }
+      } else {
+        std::memcpy(
+          dst, back_buffer_.data() + static_cast<size_t>(y) * width_,
+          static_cast<size_t>(width_) * sizeof(uint16_t));
+      }
     }
     return;
   }
 
   // write() fallback — one row at a time so a padded stride on the device
   // side doesn't corrupt adjacent rows.
+  std::vector<uint16_t> flipped_row;
+  if (flip_180_) {
+    flipped_row.resize(static_cast<size_t>(width_));
+  }
   for (int y = 0; y < height_; ++y) {
     off_t offset = static_cast<off_t>(y) * stride_px_ * sizeof(uint16_t);
     lseek(fd_, offset, SEEK_SET);
-    const uint16_t * row = back_buffer_.data() + static_cast<size_t>(y) * width_;
+    const uint16_t * row;
+    if (flip_180_) {
+      const uint16_t * src = back_buffer_.data() + static_cast<size_t>(height_ - 1 - y) * width_;
+      for (int x = 0; x < width_; ++x) {
+        flipped_row[x] = src[width_ - 1 - x];
+      }
+      row = flipped_row.data();
+    } else {
+      row = back_buffer_.data() + static_cast<size_t>(y) * width_;
+    }
     ssize_t want = static_cast<ssize_t>(width_) * sizeof(uint16_t);
     ssize_t got = write(fd_, row, want);
     (void)got;  // best-effort — a display glitch isn't worth crashing the node over

@@ -19,7 +19,18 @@ namespace mserve_display {
 class Framebuffer
 {
 public:
-  explicit Framebuffer(std::string device = "/dev/fb0");
+  // flip_180: mirrors every present() flush (both axes) before it hits the
+  // physical panel. The dtoverlay's rotate=90 param and the physical
+  // panel's actual mount orientation are two independent things — a live
+  // hardware test showed framebuffer content that was verified correct in
+  // memory (via a raw /dev/fb0 dump) still rendering upside down on the
+  // panel. A Y-only mirror was tried first (on the theory that a separate
+  // cmd_vel test already showed the eyes' left/right was correct) but left
+  // the menu screen still upside down — this hardware genuinely needs the
+  // full rotation. The Face screen's left/right issue turned out to be an
+  // unrelated bug in the eye-direction sign, not this transform — see
+  // DisplayNode::onCmdVel.
+  explicit Framebuffer(std::string device = "/dev/fb0", bool flip_180 = false);
   ~Framebuffer();
   Framebuffer(const Framebuffer &) = delete;
   Framebuffer & operator=(const Framebuffer &) = delete;
@@ -57,6 +68,7 @@ public:
 
 private:
   std::string device_;
+  bool flip_180_ = false;
   int fd_ = -1;
   uint16_t * mmap_base_ = nullptr;
   size_t mmap_len_ = 0;

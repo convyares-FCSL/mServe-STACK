@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -15,13 +16,22 @@ using namespace std::chrono_literals;
 
 namespace mserve_display {
 
+namespace
+{
+int64_t nowMs()
+{
+  using namespace std::chrono;
+  return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+}  // namespace
+
 DisplayNode::DisplayNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("mserve_display", options)
 {
   declareParams();
   loadParams();
 
-  framebuffer_ = std::make_unique<Framebuffer>(fb_device_);
+  framebuffer_ = std::make_unique<Framebuffer>(fb_device_, fb_flip_180_);
   framebuffer_available_ = framebuffer_->open();
   if (!framebuffer_available_) {
     RCLCPP_ERROR(get_logger(), "failed to open %s — running without a display", fb_device_.c_str());
@@ -86,6 +96,12 @@ DisplayNode::DisplayNode(const rclcpp::NodeOptions & options)
       std::chrono::duration<double>(ip_refresh_sec_),
       std::bind(&DisplayNode::onIpRefreshTimer, this));
   }
+  // Polls at a fraction of the timeout, not once — the timeout only needs
+  // to fire close to kMenuInfoTimeoutMs after the last tap, not exactly on
+  // it.
+  idle_timeout_timer_ = create_wall_timer(
+    std::chrono::milliseconds(kMenuInfoTimeoutMs / 5),
+    std::bind(&DisplayNode::onIdleTimeoutTimer, this));
 
   requestRedraw();
   RCLCPP_INFO(get_logger(), "mserve_display up — screen=face, fb=%s", framebuffer_available_ ? "ok" : "unavailable");
@@ -136,6 +152,10 @@ void DisplayNode::onTouchPollTimer()
 
 void DisplayNode::onTap(const TapEvent & tap)
 {
+  // Any tap counts as activity, even a Menu tap that misses every button
+  // (MenuButton::None) and so never reaches setScreen() below.
+  last_screen_activity_ms_ = nowMs();
+
   switch (current_screen_) {
     case Screen::Face:
       setScreen(Screen::Menu);
@@ -148,13 +168,90 @@ void DisplayNode::onTap(const TapEvent & tap)
           setScreen(Screen::Info);
         } else if (btn == MenuButton::Face) {
           setScreen(Screen::Face);
+        } else if (btn == MenuButton::Calibrate) {
+          setScreen(Screen::Calibrate);
         }
         break;
       }
     case Screen::Info:
       setScreen(Screen::Menu);
       break;
+    case Screen::Calibrate:
+      onCalibrateTap(tap);
+      break;
   }
+}
+
+void DisplayNode::onCalibrateTap(const TapEvent & tap)
+{
+  int step = state_.calib_step;
+  if (step < 0 || step > 3) {
+    return;
+  }
+
+  int64_t now = nowMs();
+  if (step > 0 && now - last_calib_tap_ms_ < kCalibTapDebounceMs) {
+    RCLCPP_WARN(
+      get_logger(), "calibrate: ignored tap %ldms after the last one (debounce=%dms) — "
+      "an accidental double-tap on the same prompt", static_cast<long>(now - last_calib_tap_ms_),
+      kCalibTapDebounceMs);
+    return;
+  }
+  last_calib_tap_ms_ = now;
+
+  state_.calib_raw_x[step] = tap.raw_x;
+  state_.calib_raw_y[step] = tap.raw_y;
+  state_.calib_step = step + 1;
+
+  if (state_.calib_step >= 4) {
+    applyCalibration();
+    setScreen(Screen::Menu);
+    return;
+  }
+  requestRedraw();
+}
+
+void DisplayNode::applyCalibration()
+{
+  // Step order: 0=Up, 1=Down, 2=Left, 3=Right (see onTap's Menu case /
+  // DisplayState::calib_step comment). Which raw axis (ABS_X or ABS_Y)
+  // actually corresponds to screen X isn't assumed — it's derived from
+  // whichever axis varies more between the Left and Right taps, so this
+  // self-corrects for both swap_xy and either axis being inverted, not
+  // just a fixed-range assumption.
+  int up_x = state_.calib_raw_x[0], up_y = state_.calib_raw_y[0];
+  int down_x = state_.calib_raw_x[1], down_y = state_.calib_raw_y[1];
+  int left_x = state_.calib_raw_x[2], left_y = state_.calib_raw_y[2];
+  int right_x = state_.calib_raw_x[3], right_y = state_.calib_raw_y[3];
+
+  int dx_horiz = right_x - left_x;
+  int dy_horiz = right_y - left_y;
+  bool swap_xy = std::abs(dy_horiz) > std::abs(dx_horiz);
+
+  int screenx_left = swap_xy ? left_y : left_x;
+  int screenx_right = swap_xy ? right_y : right_x;
+  int screeny_up = swap_xy ? up_x : up_y;
+  int screeny_down = swap_xy ? down_x : down_y;
+
+  TouchCalibration calib;
+  calib.x_min = std::min(screenx_left, screenx_right);
+  calib.x_max = std::max(screenx_left, screenx_right);
+  calib.invert_x = screenx_left > screenx_right;
+  calib.y_min = std::min(screeny_up, screeny_down);
+  calib.y_max = std::max(screeny_up, screeny_down);
+  calib.invert_y = screeny_up > screeny_down;
+  calib.swap_xy = swap_xy;
+
+  touch_calib_ = calib;
+  if (touch_) {
+    touch_->setCalibration(calib);
+  }
+  RCLCPP_INFO(
+    get_logger(),
+    "touch calibrated: x=[%d,%d] invert_x=%d y=[%d,%d] invert_y=%d swap_xy=%d — "
+    "update touch_calib.* in mserve_params.yaml to persist this across restarts",
+    calib.x_min, calib.x_max, calib.invert_x, calib.y_min, calib.y_max, calib.invert_y,
+    calib.swap_xy);
 }
 
 void DisplayNode::onInfoRefreshTimer()
@@ -252,9 +349,21 @@ void DisplayNode::callConnect()
 void DisplayNode::setScreen(Screen s)
 {
   current_screen_ = s;
+  last_screen_activity_ms_ = nowMs();  // Menu/Info auto-return clock — see kMenuInfoTimeoutMs
   state_.connect_result_valid = false;  // don't carry a stale result across navigation
+  if (s == Screen::Calibrate) {
+    state_.calib_step = 0;  // always start the wizard fresh, even entered via ~/set_display_mode
+  }
   requestRedraw();
   publishStatus();
+}
+
+void DisplayNode::onIdleTimeoutTimer()
+{
+  bool timeoutable = current_screen_ == Screen::Menu || current_screen_ == Screen::Info;
+  if (timeoutable && nowMs() - last_screen_activity_ms_ >= kMenuInfoTimeoutMs) {
+    setScreen(Screen::Face);
+  }
 }
 
 void DisplayNode::requestRedraw()
@@ -271,6 +380,9 @@ void DisplayNode::requestRedraw()
       break;
     case Screen::Info:
       renderInfo(*framebuffer_, state_);
+      break;
+    case Screen::Calibrate:
+      renderCalibrate(*framebuffer_, state_);
       break;
   }
   framebuffer_->present();
@@ -296,6 +408,7 @@ std::string DisplayNode::screenName(Screen s)
     case Screen::Face: return "face";
     case Screen::Menu: return "menu";
     case Screen::Info: return "info";
+    case Screen::Calibrate: return "calibrate";
   }
   return "face";
 }
@@ -308,11 +421,29 @@ std::optional<Screen> DisplayNode::screenFromName(const std::string & name)
   if (lower == "face") {return Screen::Face;}
   if (lower == "menu") {return Screen::Menu;}
   if (lower == "info") {return Screen::Info;}
+  if (lower == "calibrate") {
+    return Screen::Calibrate;
+  }
   return std::nullopt;
 }
 
 std::string DisplayNode::getIpAddress() const
 {
+  // In Docker mode this process runs inside the container's own network
+  // namespace — getifaddrs() below would only ever see the bridge-network
+  // IP (172.20.x.x, per docker-compose.yml's default compose network), not
+  // the host's real LAN IP, no matter which interface is picked. Confirmed
+  // on real hardware: Info screen showed 172.20.0.2 while the actual
+  // reachable address was the host's 172.16.68.73. run_stack.sh exports
+  // MSERVE_HOST_IP (computed on the host, outside the container) and
+  // docker-compose.yml passes it through — prefer that when set. Native
+  // (non-Docker) mode never sets this, so it falls through to the
+  // getifaddrs() scan below unchanged, where it already works correctly.
+  const char * host_ip_env = std::getenv("MSERVE_HOST_IP");
+  if (host_ip_env != nullptr && host_ip_env[0] != '\0') {
+    return host_ip_env;
+  }
+
   ifaddrs * ifaddr = nullptr;
   if (getifaddrs(&ifaddr) == -1) {
     return "unknown";

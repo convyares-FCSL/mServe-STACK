@@ -8,6 +8,7 @@ namespace mserve_display {
 void DisplayNode::declareParams()
 {
   // Bool params have no get_or_declare_param overload — declared directly.
+  declare_parameter<bool>("fb_flip_180", false);
   declare_parameter<bool>("touch_calib.invert_x", false);
   declare_parameter<bool>("touch_calib.invert_y", false);
   declare_parameter<bool>("touch_calib.swap_xy", false);
@@ -20,6 +21,7 @@ void DisplayNode::loadParams()
 
   fb_device_ = mserve_utils::get_or_declare_param(
     params, logger, "fb_device", std::string("/dev/fb0"), "framebuffer device");
+  fb_flip_180_ = get_parameter("fb_flip_180").as_bool();
   touch_device_name_match_ = mserve_utils::get_or_declare_param(
     params, logger, "touch.device_name_match", std::string("ADS7846 Touchscreen"),
     "touch device name");

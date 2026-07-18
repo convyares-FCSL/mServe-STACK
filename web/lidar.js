@@ -9,7 +9,9 @@ ros.on('connection', () => {
   elStatus.textContent = 'ROS Connected';
   elStatus.className = 'status connected';
   refreshLidarState();
-  refreshSlamState();
+  // slam_toolbox's own get_state poll is gated behind a rosapi existence
+  // check — see maybeStartSlamPolling below, registered separately on this
+  // same 'connection' event.
 });
 ros.on('error',  () => { elStatus.textContent = 'ROS Error';        elStatus.className = 'status disconnected'; });
 ros.on('close',  () => { elStatus.textContent = 'ROS Disconnected'; elStatus.className = 'status disconnected'; });
@@ -67,7 +69,34 @@ document.getElementById('slam-btn-activate').addEventListener('click',   () => c
 document.getElementById('slam-btn-deactivate').addEventListener('click', () => changeState('slam_toolbox', TRANSITIONS.deactivate, refreshSlamState));
 document.getElementById('slam-btn-cleanup').addEventListener('click',    () => changeState('slam_toolbox', TRANSITIONS.cleanup, refreshSlamState));
 
-setInterval(refreshSlamState, 4000);
+// slam_toolbox is only started with --slam-map/--slam-local — most runs of
+// run_stack.sh don't have it. Blindly polling /slam_toolbox/get_state every
+// 4s in that case meant rosbridge logged an ERROR to /rosout on every single
+// failed call_service — pure noise in any panel that shows /rosout (e.g.
+// Foxglove's Log panel), and worse, noise that looks identical to a real
+// problem. rosapi's /rosapi/services (ros.getServices() in roslib.js)
+// returns a clean list with no error either way, so check for the service
+// first and only start polling once it's actually there. Re-checked
+// periodically (not just once on connect) so the panel picks SLAM up if
+// it's started later in the same session, without needing a page reload.
+let slamPollStarted = false;
+function maybeStartSlamPolling() {
+  ros.getServices((services) => {
+    if (services.includes('/slam_toolbox/get_state')) {
+      if (!slamPollStarted) {
+        slamPollStarted = true;
+        refreshSlamState();
+        setInterval(refreshSlamState, 4000);
+      }
+    } else if (!slamPollStarted) {
+      elSlamNodeState.textContent = 'not running';
+      elSlamNodeState.className = 'state-label state-unavailable';
+    }
+  }, (err) => console.error('rosapi getServices failed', err));
+}
+
+ros.on('connection', maybeStartSlamPolling);
+setInterval(maybeStartSlamPolling, 15000);
 
 document.getElementById('slam-btn-reset').addEventListener('click', () => {
   if (!confirm('Reset the map? This clears the current map and pose graph — cannot be undone.')) return;

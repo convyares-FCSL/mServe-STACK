@@ -10,6 +10,16 @@ services:
     environment:
       ROS_DOMAIN_ID: "${MSERVE_ROS_DOMAIN_ID:-52}"
       RCUTILS_LOGGING_SEVERITY: "${MSERVE_LOG_LEVEL:-INFO}"
+      # The container's own network namespace only sees its bridge-network
+      # IP (172.20.x.x, per the compose network below) — nothing inside it
+      # can discover the host's real LAN IP on its own. mserve_display shows
+      # this on its Info screen; without this it displayed the useless
+      # internal address instead of the address you'd actually SSH/browse
+      # to. run_stack.sh computes and exports MSERVE_HOST_IP (same
+      # `hostname -I` trick already used for its own "Open in browser"
+      # printout) before calling `docker compose up`, so compose's
+      # variable substitution here picks it up from the calling shell.
+      MSERVE_HOST_IP: "${MSERVE_HOST_IP:-}"
     labels:
       logging: promtail
       robot: mserve

@@ -40,10 +40,13 @@ private:
 
   void onTouchPollTimer();
   void onTap(const TapEvent & tap);
+  void onCalibrateTap(const TapEvent & tap);
+  void applyCalibration();
   void onInfoRefreshTimer();
   void onLifecyclePollTimer();
   void onStatusPublishTimer();
   void onIpRefreshTimer();
+  void onIdleTimeoutTimer();
 
   void onSetDisplayMode(
     interfaces::srv::SetDisplayMode::Request::SharedPtr request,
@@ -81,6 +84,7 @@ private:
   rclcpp::TimerBase::SharedPtr lifecycle_poll_timer_;
   rclcpp::TimerBase::SharedPtr status_pub_timer_;
   rclcpp::TimerBase::SharedPtr ip_refresh_timer_;
+  rclcpp::TimerBase::SharedPtr idle_timeout_timer_;
 
   std::unique_ptr<Framebuffer> framebuffer_;
   std::unique_ptr<TouchInput> touch_;
@@ -89,13 +93,16 @@ private:
 
   Screen current_screen_ = Screen::Face;
   DisplayState state_;
-  std::array<Rect, 3> menu_button_rects_{};
+  std::array<Rect, 4> menu_button_rects_{};
   double last_rendered_eye_direction_ = 0.0;
+  int64_t last_calib_tap_ms_ = 0;  // debounce — see kCalibTapDebounceMs
+  int64_t last_screen_activity_ms_ = 0;  // Menu/Info auto-return — see kMenuInfoTimeoutMs
 
   double eye_max_angular_ = 1.2;
 
   // Params (loaded in loadParams())
   std::string fb_device_;
+  bool fb_flip_180_ = false;
   std::string touch_device_name_match_;
   double touch_poll_hz_ = 40.0;
   int tap_max_move_raw_ = 200;

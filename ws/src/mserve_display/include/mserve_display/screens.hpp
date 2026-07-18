@@ -10,7 +10,7 @@
 
 namespace mserve_display {
 
-enum class Screen { Face, Menu, Info };
+enum class Screen { Face, Menu, Info, Calibrate };
 
 struct Rect
 {
@@ -40,17 +40,27 @@ struct DisplayState
   bool connect_result_valid = false;
   bool connect_result_success = false;
   std::string connect_result_message;
+
+  // Touch calibration wizard (Screen::Calibrate) — 4-tap sequence: Up,
+  // Down, Left, Right. Raw ABS_X/Y captured per step, both axes even though
+  // only one matters per step — which axis actually matters isn't known
+  // until all 4 taps are in, since the controller's raw axes might be
+  // swapped relative to screen X/Y (see DisplayNode::applyCalibration).
+  int calib_step = 0;
+  std::array<int, 4> calib_raw_x{};
+  std::array<int, 4> calib_raw_y{};
 };
 
-enum class MenuButton { None, Connect, Info, Face };
+enum class MenuButton { None, Connect, Info, Face, Calibrate };
 
 // Menu screen button layout — computed once from screen dimensions and
 // reused by both rendering and hit-testing so they can never disagree.
-std::array<Rect, 3> menuButtonRects(int screen_w, int screen_h);
-MenuButton hitTestMenu(int x, int y, const std::array<Rect, 3> & button_rects);
+std::array<Rect, 4> menuButtonRects(int screen_w, int screen_h);
+MenuButton hitTestMenu(int x, int y, const std::array<Rect, 4> & button_rects);
 
 void renderFace(Framebuffer & fb, const DisplayState & state);
-void renderMenu(Framebuffer & fb, const DisplayState & state, const std::array<Rect, 3> & button_rects);
+void renderMenu(Framebuffer & fb, const DisplayState & state, const std::array<Rect, 4> & button_rects);
 void renderInfo(Framebuffer & fb, const DisplayState & state);
+void renderCalibrate(Framebuffer & fb, const DisplayState & state);
 
 }  // namespace mserve_display

@@ -23,6 +23,13 @@ import sys
 FB_DEVICE = "/dev/fb0"
 WIDTH = 480
 HEIGHT = 320
+# Matches mserve_display's fb_flip_180 param (mserve_params.yaml) — this
+# panel disagrees with dtoverlay=tft35a,rotate=90 and needs a full
+# 180-degree rotation to render right-side up (a Y-only mirror was tried
+# first and wasn't enough — see fb_flip_180's comment in mserve_params.yaml).
+# Kept in sync by hand, same as FONT below — this script has no access to
+# ROS params at boot time.
+FLIP_180 = True
 
 COL_BG = (10, 15, 30)
 COL_WHITE = (255, 255, 255)
@@ -110,6 +117,11 @@ def main():
     text_w = len(ip_text) * 6 * 2
     draw_text(frame, (WIDTH - text_w) // 2, 250, ip_text, white, scale=2)
 
+    if FLIP_180:
+        # Row-major, no stride padding — a 180-degree rotation is exactly
+        # the whole buffer reversed (index i -> len-1-i). Same reasoning as
+        # mserve_display's Framebuffer::present() flip_180 path.
+        frame = frame[::-1]
     data = b"".join(struct.pack("<H", px) for px in frame)
     try:
         with open(FB_DEVICE, "wb") as f:

@@ -114,11 +114,13 @@ cleanup() {
   done
   if [[ "$USE_DOCKER" == true ]]; then
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosapi_node         2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node     2>/dev/null || true
   else
     pkill -f rosbridge_websocket    2>/dev/null || true
+    pkill -f rosapi_node            2>/dev/null || true
     pkill -f web_video_server       2>/dev/null || true
     pkill -f foxglove_bridge        2>/dev/null || true
     pkill -f async_slam_toolbox_node 2>/dev/null || true
@@ -140,6 +142,7 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosapi_node           2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
@@ -152,6 +155,7 @@ cleanup() {
     pkill -9 -f robot_state_publisher 2>/dev/null || true
     pkill -9 -f lifecycle_manager     2>/dev/null || true
     pkill -9 -f rosbridge_websocket   2>/dev/null || true
+    pkill -9 -f rosapi_node           2>/dev/null || true
     pkill -9 -f web_video_server      2>/dev/null || true
     pkill -9 -f foxglove_bridge       2>/dev/null || true
     pkill -9 -f async_slam_toolbox_node 2>/dev/null || true
@@ -169,6 +173,13 @@ trap cleanup SIGINT SIGTERM EXIT
 # ── Docker: ensure container is running, build packages ──────────────────────
 if [[ "$USE_DOCKER" == true ]]; then
   echo "Starting Docker container…"
+  # Exported (not just set) so docker-compose.yml's ${MSERVE_HOST_IP:-}
+  # variable substitution can see it — compose reads that from the calling
+  # shell's environment, not this script's local scope. See that file's
+  # comment: the container can't discover the host's real LAN IP from
+  # inside its own network namespace, so mserve_display's Info screen needs
+  # it passed in explicitly.
+  export MSERVE_HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   # No --force-recreate needed: camera/lidar/touch are all live directory
   # bind-mounts now (docker-compose.yml), not `devices:` entries, so by-id
   # paths resolve fresh on every open() inside the container rather than
@@ -250,6 +261,7 @@ fi
 if [[ "$USE_DOCKER" == true ]]; then
   # See note in cleanup() — one exec per pkill so each pattern actually runs.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosapi_node           2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node       2>/dev/null || true
@@ -264,6 +276,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   # Force-kill any survivors so the new nodes don't end up with duplicate
   # /mserve_base or /mserve_drivechain registrations.
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosapi_node           2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
@@ -276,6 +289,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
 else
   pkill -f rosbridge_websocket    2>/dev/null || true
+  pkill -f rosapi_node            2>/dev/null || true
   pkill -f web_video_server       2>/dev/null || true
   pkill -f foxglove_bridge        2>/dev/null || true
   pkill -f async_slam_toolbox_node 2>/dev/null || true
@@ -317,6 +331,27 @@ else
   # rosbridge throws a known rclpy/Tornado traceback on SIGINT shutdown (Jazzy
   # bug) — redirect to a log file so it doesn't spam the terminal on Ctrl+C.
   ros2 run rosbridge_server rosbridge_websocket --port 9090 > /tmp/rosbridge.log 2>&1 &
+  NATIVE_PIDS+=($!)
+fi
+sleep 1
+
+# ── Start rosapi ──────────────────────────────────────────────────────────────
+# Provides /rosapi/services (ros.getServices() in roslib.js) — lets web pages
+# check whether an optional service (e.g. /slam_toolbox/get_state, only
+# present when SLAM was actually started) exists before calling it, instead
+# of unconditionally polling and letting rosbridge log an ERROR to /rosout
+# for every failed call_service on a service that was never expected to
+# exist this run. That was previously drowning out real errors in any panel
+# subscribed to /rosout (e.g. Foxglove's Log panel) — see web/lidar.js.
+echo "Starting rosapi…"
+if [[ "$USE_DOCKER" == true ]]; then
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+    source /opt/ros/jazzy/setup.bash
+    source /ws/install/setup.bash
+    ros2 run rosapi rosapi_node
+  "
+else
+  ros2 run rosapi rosapi_node > /tmp/rosapi.log 2>&1 &
   NATIVE_PIDS+=($!)
 fi
 sleep 1
