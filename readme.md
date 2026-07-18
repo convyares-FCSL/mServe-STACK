@@ -2,7 +2,14 @@
 
 ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — see `transfer.md` for the full history if anything below looks inconsistent with a native-Lyrical setup you remember from mid-July.
 
-**Known gap:** camera (`mserve_camera`) and lidar (`mserve_lidar`) are not wired into the Docker path yet — `docker-compose.yml`/`Dockerfile` don't have the driver deps, and `run_stack.sh` passes `with_camera:=false with_lidar:=false` to the launch file in Docker mode. `camera.html`/`lidar.html` won't show live data until this lands. Drivechain, base, rosbridge, and the web UI (`drivechain.html`/`base.html`) all work today.
+Camera (`mserve_camera`) and lidar (`mserve_lidar`) are wired into the
+Docker path as of 2026-07-18 — drivechain, base, camera, lidar, rosbridge,
+and the full web UI (`drivechain.html`/`base.html`/`camera.html`/
+`lidar.html`) all work. Device paths use udev `by-id` stable symlinks (see
+`docker-compose.yml`), not raw `/dev/videoN`/`/dev/ttyUSBN` — those indices
+aren't stable across USB resets/replugs on this Pi, confirmed the hard way.
+Still not wired into Docker: SLAM Toolbox, Foxglove Bridge, Zenoh
+remote-RViz.
 
 The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
 
@@ -79,13 +86,12 @@ per-package READMEs for current fact.
 
 ## Normal flow
 
-The drivechain + base stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) starts automatically on boot via `mserve-drivechain.service` (see [Running on boot](#running-on-boot-systemd)) — **on a running Pi you normally don't need to start anything by hand, just open the web UI directly:**
+The full stack (rosbridge + `mserve_drivechain` + `mserve_base` + `mserve_camera` + `mserve_lidar` + web UI) starts automatically on boot via `mserve-drivechain.service` (see [Running on boot](#running-on-boot-systemd)) — **on a running Pi you normally don't need to start anything by hand, just open the web UI directly:**
 
 - `http://<pi-ip>:6240/drivechain.html`
 - `http://<pi-ip>:6240/base.html`
-
-(`camera.html`/`lidar.html` exist in `web/` but won't show live data until
-camera/lidar are wired into Docker — see the known-gap note at the top.)
+- `http://<pi-ip>:6240/camera.html`
+- `http://<pi-ip>:6240/lidar.html`
 
 e.g. on this Pi (Wi-Fi IP as of 2026-07-18): `http://172.16.68.73:6240/drivechain.html`.
 Off-network access is via Raspberry Pi Connect now, not Tailscale (see
@@ -106,13 +112,16 @@ every run):
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
-It starts rosbridge, then launches `mserve_drivechain` + `mserve_base` +
-`robot_state_publisher` + `lifecycle_manager` together via
-`ws/src/launch/launch/mserve_min.launch.py` (`with_camera:=false
-with_lidar:=false` in Docker mode — see the known-gap note above) —
-`lifecycle_manager` drives configure/activate for both lifecycle nodes, not
-the script itself — and serves the debug UI at the same URLs above once
-drivechain and base report `active`.
+It starts rosbridge + `web_video_server`, then launches `mserve_drivechain` +
+`mserve_base` + `mserve_camera` + `mserve_lidar` + `robot_state_publisher` +
+`lifecycle_manager` together via
+`ws/src/launch/launch/mserve_min.launch.py` (`with_camera`/`with_lidar`
+default `true` in both native and Docker mode now — `run_stack.sh` doesn't
+currently expose a flag to turn them off; edit `LAUNCH_ARGS` in the script
+if you need to run without that hardware attached) — `lifecycle_manager`
+drives configure/activate for all four lifecycle nodes, not the script
+itself — and serves the debug UI at the same URLs above once drivechain and
+base report `active`.
 
 The UI shows lifecycle state for each node and allows
 configure/activate/deactivate/shutdown and cmd_vel publishing. Click
