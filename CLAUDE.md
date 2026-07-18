@@ -5,7 +5,7 @@
 mServe is a learning-first ROS 2 C++ differential-drive robot stack running on a
 Raspberry Pi 5. Full design philosophy: `readme.md` and `docs/architecture.md`.
 
-## Runtime environment (as of the 2026-07-18 platform revert)
+## Runtime environment
 
 - Runs in **Docker** (image `mserve-robot:jazzy`, ROS 2 **Jazzy**) on fresh
   Raspberry Pi OS — no native ROS install on this Pi at all.
@@ -95,6 +95,30 @@ rosbridge on `:9090`.
 - No `ros2_control` yet — the first control stack is hand-written (clamping,
   kinematics, protocol, fail-safe) so every part is visible and learnable.
 - Parameter bounds are enforced by ROS descriptors, not manual throws.
+- Optional USB/input peripherals (camera, lidar, touch) are live directory
+  bind-mounts in `docker-compose.yml` (`/dev/host` = the whole host `/dev`,
+  plus `/dev/input`), not static `devices:` entries — a missing/unplugged
+  peripheral no longer blocks the *entire* container from starting (it used
+  to: an unplugged RPLIDAR once crash-looped the whole systemd service, not
+  just `mserve_lidar`). By-id paths resolve fresh on every `open()` instead
+  of being snapshotted at container-create time, so `--force-recreate` isn't
+  needed on every `run_stack.sh` run either.
+
+## Verification
+
+For display/hardware-adjacent fixes, don't declare done from code review or
+compile success alone — verify empirically on the real device, then report
+what was actually observed, not what was expected. Several fixes to
+`mserve_display` looked correct by reasoning alone but were subtly wrong on
+real hardware: a screen-orientation fix that needed a full 180-degree
+rotation, not the more "logical" Y-only flip; an eye-direction sign bug that
+only surfaced by actually driving via the web UI's buttons, not a synthetic
+`ros2 topic pub`; an eyebrow color that was technically present in the
+framebuffer but visually invisible against the background. For display work
+specifically, dump and view the actual rendered output (`/dev/fb0` → PPM →
+PNG) rather than trusting the code path alone. After deploying a fix,
+restart the actual running node/container and re-verify — a rebuilt binary
+isn't running until the process is restarted.
 
 ## Docs caveat
 

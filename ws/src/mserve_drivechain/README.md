@@ -250,7 +250,7 @@ cd ~/mServe-STACK
 
 The browser banner shows `[sim]` or `[hardware (/dev/ttyAMA0)]` so you can tell at a glance which mode is running.
 
-### Running on this Pi (Docker, as of the 2026-07-18 platform revert)
+### Running on this Pi (Docker)
 
 This Pi has no native ROS install at all — everything runs in Docker
 (`mserve-robot:jazzy`, ROS 2 Jazzy). `run_stack.sh` detects that `ros2` isn't

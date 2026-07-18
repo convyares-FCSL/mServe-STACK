@@ -1,19 +1,18 @@
 # mServe Stack
 
-ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — there is no native ROS install on this Pi.
+ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. There is no native ROS install on this Pi — Docker is the only runtime path.
 
-Camera (`mserve_camera`), lidar (`mserve_lidar`), Foxglove Bridge
-(`--foxglove`), and SLAM Toolbox (`--slam-map`/`--slam-local`) are all wired
-into the Docker path as of 2026-07-18 — drivechain, base, camera, lidar,
-rosbridge, Foxglove Bridge, SLAM Toolbox, and the full web UI
-(`drivechain.html`/`base.html`/`camera.html`/`lidar.html`) all work. Device
-paths use udev `by-id` stable symlinks (see `docker-compose.yml`), not raw
-`/dev/videoN`/`/dev/ttyUSBN` — those indices aren't stable across USB
-resets/replugs on this Pi, confirmed the hard way. `slam_toolbox` itself
-needed a small source patch (this distro's `message_filters` changed API
-underneath it) — see `ws/src/third_party/README.md`. Zenoh remote-RViz is
-deprioritized, not currently planned for Docker — same-LAN access is
-already covered by Foxglove Bridge.
+Drivechain, base, camera (`mserve_camera`), lidar (`mserve_lidar`), rosbridge,
+Foxglove Bridge (`--foxglove`), SLAM Toolbox (`--slam-map`/`--slam-local`),
+and the full web UI (`drivechain.html`/`base.html`/`camera.html`/
+`lidar.html`) all run in Docker. Device paths use udev `by-id` stable
+symlinks (see `docker-compose.yml`), not raw `/dev/videoN`/`/dev/ttyUSBN` —
+those indices aren't stable across USB resets/replugs on this Pi, confirmed
+the hard way. `slam_toolbox` itself needed a small source patch (this
+distro's `message_filters` changed API underneath it) — see
+`ws/src/third_party/README.md`. Zenoh remote-RViz isn't ported to Docker yet
+— same-LAN access is already covered by Foxglove Bridge; see `docs/TODO.md`
+if you need it.
 
 The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
 
@@ -100,9 +99,8 @@ The full stack (rosbridge + `mserve_drivechain` + `mserve_base` + `mserve_camera
 - `http://<pi-ip>:6240/camera.html`
 - `http://<pi-ip>:6240/lidar.html`
 
-e.g. on this Pi (Wi-Fi IP as of 2026-07-18): `http://172.16.68.73:6240/drivechain.html`.
-Off-network access is via Raspberry Pi Connect now, not Tailscale —
-`rpi-connect` is installed but not yet signed in (`rpi-connect signin`).
+Off-network access is via Raspberry Pi Connect (`rpi-connect` — installed but
+not yet signed in, `rpi-connect signin`).
 
 ## Running manually
 

@@ -32,10 +32,9 @@ The C++ lessons in `/home/ecm/ros2-systems-operability/src/2_cpp` are the main s
 
 ## Running the Current Skeleton
 
-**As of the 2026-07-18 platform revert, this Pi runs the stack in Docker (ROS
-2 Jazzy) — there is no native ROS install on this Pi at all.** `run_stack.sh`
-detects this (`command -v ros2` fails) and routes every command through
-`docker compose exec robot-mserve`.
+**This Pi runs the stack in Docker (ROS 2 Jazzy) — there is no native ROS
+install on this Pi at all.** `run_stack.sh` detects this (`command -v ros2`
+fails) and routes every command through `docker compose exec robot-mserve`.
 
 ### Docker workflow (the only path on this Pi)
 
