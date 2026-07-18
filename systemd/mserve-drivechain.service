@@ -9,6 +9,13 @@ Type=simple
 User=ecm
 Group=ecm
 WorkingDirectory=/home/ecm/mServe-STACK
+# Paints closed eyes + the Pi's IP directly to /dev/fb0 before the slow
+# part (Docker start, colcon build, ROS launch — ~15-30s) even begins.
+# network-online.target (below) already gates this whole unit's start, so
+# the IP is real by the time this runs, not a guess. mserve_display's own
+# Face screen overwrites this with open eyes once it's actually up. `-`
+# prefix: never block/fail the real stack over a screen glitch.
+ExecStartPre=-/usr/bin/python3 /home/ecm/mServe-STACK/scripts/boot_splash.py
 ExecStart=/home/ecm/mServe-STACK/scripts/run_stack.sh
 Restart=on-failure
 RestartSec=5
