@@ -107,17 +107,18 @@ Then, from `ws/`:
 colcon build --packages-select slam_toolbox --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
-If building in a scoped workspace (like Docker's `run_stack.sh`, which only
-`--packages-select`s what it needs rather than the whole `ws/src` tree) and
-`ws/src/third_party/navigation2/` also happens to be checked out: colcon
-discovers its *vendored source* package.xml files regardless of
+**Watch out if `ws/src/third_party/navigation2/` ever gets re-vendored**
+(see that section below — removed 2026-07-18, wasn't needed by anything):
+in a scoped workspace build (like Docker's `run_stack.sh`, which only
+`--packages-select`s what it needs rather than the whole `ws/src` tree),
+colcon discovers vendored source package.xml files regardless of
 `--packages-select`, and `nav2_map_server`'s local `build_depend` on
 `nav2_ros_common` (→ `backward_ros`, no apt package either) cascades into a
 hard error trying to build them from source — even though the already-
 apt-installed `nav2_common`/`nav2_msgs`/`nav2_util`/`nav2_map_server`
 satisfy `slam_toolbox`'s actual `exec_depend` just fine (colcon falls back
 to them with only a warning, for everything *not* also chasing
-`nav2_ros_common`). Add
+`nav2_ros_common`). Fix, if it recurs: add
 `--packages-ignore nav2_common nav2_msgs nav2_util nav2_map_server nav2_ros_common`
 to keep colcon from ever consulting the vendored package.xml files.
 
@@ -128,75 +129,36 @@ note. `nav2_map_server` shows up in `slam_toolbox`'s `package.xml` as an
 map *serving*, a separate concern from SLAM *building* a map, and
 `slam_toolbox` has its own `save_map` service independent of it.
 
-## navigation2 (Nav2)
+## navigation2 (Nav2) — removed 2026-07-18
 
-Not yet wired into any mserve launch file (work in progress) — this is
-just what's needed to get the minimal package set building. No apt package
-exists for this distro either. Clone the `main` branch (rolling-tracking) —
-`humble`/`jazzy` risk an older BT.CPP API than the `4.9.0` this distro's
-`ros-lyrical-behaviortree-cpp` actually provides (see patch 1 below, hit
-exactly that).
-
-```bash
-cd ws/src/third_party
-git clone --branch main --depth 1 https://github.com/ros-navigation/navigation2.git
-sudo apt install ros-lyrical-action-msgs ros-lyrical-ament-cmake-python ros-lyrical-ament-index-cpp \
-  ros-lyrical-angles ros-lyrical-backward-ros ros-lyrical-behaviortree-cpp \
-  ros-lyrical-bond ros-lyrical-bondcpp ros-lyrical-builtin-interfaces \
-  ros-lyrical-cv-bridge ros-lyrical-diagnostic-updater ros-lyrical-geographic-msgs \
-  ros-lyrical-geometry-msgs ros-lyrical-image-transport ros-lyrical-laser-geometry \
-  ros-lyrical-launch ros-lyrical-launch-ros ros-lyrical-lifecycle-msgs \
-  ros-lyrical-map-msgs ros-lyrical-message-filters ros-lyrical-nav-msgs \
-  ros-lyrical-osrf-pycommon ros-lyrical-pluginlib ros-lyrical-point-cloud-transport \
-  ros-lyrical-point-cloud-transport-plugins ros-lyrical-rclcpp ros-lyrical-rclcpp-action \
-  ros-lyrical-rclcpp-components ros-lyrical-rclcpp-lifecycle ros-lyrical-rcl-interfaces \
-  ros-lyrical-rclpy ros-lyrical-rmw ros-lyrical-robot-localization \
-  ros-lyrical-rosidl-default-runtime ros-lyrical-sensor-msgs ros-lyrical-std-msgs \
-  ros-lyrical-std-srvs ros-lyrical-tf2 ros-lyrical-tf2-geometry-msgs ros-lyrical-tf2-msgs \
-  ros-lyrical-tf2-ros ros-lyrical-tf2-sensor-msgs ros-lyrical-unique-identifier-msgs \
-  ros-lyrical-visualization-msgs libeigen3-dev libgraphicsmagick++1-dev
-```
-
-**Required patches before building** — every other dependency above
-resolved fine via apt (unlike slam_toolbox/BT.ROS2, nothing else needed
-vendoring); these two are toolchain-generation gaps between what `main` was
-tested against and what's actually installed here:
+Was vendored + patched here (minimal 18-package set, `main` branch) as prep
+for a future `mserve_navigation` phase — never wired into any launch file.
+Deleted during the Docker transfer cleanup (161MB, unused, and its
+presence in the workspace was actively causing `slam_toolbox` colcon
+builds to fail — see that section's "Second required patch" note for the
+mechanism). Re-clone from `https://github.com/ros-navigation/navigation2.git`
+(branch `main`) if this work resumes; these two patches were needed to get
+it building against this distro's toolchain (find current apt package names
+fresh rather than trusting old ones written against a different distro):
 
 1. `nav2_behavior_tree/include/nav2_behavior_tree/utils/loop_rate.hpp` —
    used `tree_->wakeUpSignal()->waitFor(...)`, an older BT.CPP API this
-   distro's `4.9.0` package doesn't have (`Tree` has no `wakeUpSignal`
-   member). Replace both `wake_up->waitFor(...)` call sites with
-   `tree_->sleep(...)` directly (4.9.0's `Tree::sleep(timeout)` does the
-   same interruptible wait — interrupted by `emitWakeUpSignal()`, returns
-   `true` if interrupted before timeout — in one call), and delete the
+   distro's `behaviortree_cpp` package doesn't have (`Tree` has no
+   `wakeUpSignal` member). Replace both `wake_up->waitFor(...)` call sites
+   with `tree_->sleep(...)` directly (`Tree::sleep(timeout)` does the same
+   interruptible wait — interrupted by `emitWakeUpSignal()`, returns `true`
+   if interrupted before timeout — in one call), and delete the
    `auto wake_up = tree_->wakeUpSignal();` line.
 2. `nav2_common/cmake/nav2_package.cmake` — drop `-Werror` from the
    `add_compile_options(...)` call for GNU/Clang (keep the rest of the
-   warning flags). This GCC (15, Ubuntu 26.04/Resolute) is newer than what
-   `main` was tested against and turns real-but-harmless deprecations
-   (`std::atomic_load`/`store` in `nav2_costmap_2d`, superseded by
-   `std::atomic<shared_ptr<T>>` in C++20) and at least one outright false
-   positive (`-Wnull-dereference` inside GCC-inlined, auto-generated ROS
-   message `operator==` code in `builtin_interfaces`, not Nav2's own logic)
-   into hard build failures. Every warning still prints, just isn't fatal.
+   warning flags). Newer GCC than `main` was tested against turns
+   real-but-harmless deprecations and at least one outright false positive
+   (`-Wnull-dereference` inside GCC-inlined, auto-generated ROS message
+   `operator==` code) into hard build failures. Every warning still prints,
+   just isn't fatal.
 
-Minimal package set that's actually been built and verified so far (all 18
-finish clean with the patches above):
-
-```bash
-colcon build --packages-up-to nav2_bt_navigator nav2_regulated_pure_pursuit_controller \
-  nav2_navfn_planner nav2_behaviors nav2_velocity_smoother nav2_waypoint_follower \
-  nav2_lifecycle_manager --cmake-args -DBUILD_TESTING=OFF --symlink-install
-```
-
-Deliberately scoped down from the full 34-package repo: no `nav2_amcl`
-(this robot uses `slam_toolbox` in localization mode instead of AMCL, same
-decision as for mapping — see `docs/plan.md`'s Current Open Questions),
-`nav2_smac_planner`/`nav2_mppi_controller`/etc. (extra plugin alternatives,
-not needed to have *a* working planner/controller),
-`nav2_rviz_plugins`/`nav2_simple_commander`/`nav2_docking`/etc. (optional
-tooling). `nav2_map_server` gets pulled in anyway as a transitive
-`test_depend` of `nav2_costmap_2d` even with `BUILD_TESTING=OFF` (colcon's
-dependency graph includes test_depends regardless) — needs
-`libgraphicsmagick++1-dev` specifically, not the C-only
-`libgraphicsmagick1-dev`, easy to grab the wrong one.
+Scope it down from the full 34-package repo the same way as before: no
+`nav2_amcl` (this robot uses `slam_toolbox` in localization mode instead —
+see `docs/plan.md`'s Current Open Questions), no extra planner/controller
+plugin alternatives, no optional tooling (`nav2_rviz_plugins`,
+`nav2_simple_commander`, `nav2_docking`, etc.).
