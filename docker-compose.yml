@@ -34,6 +34,5 @@ services:
           sleep "$${MSERVE_HEARTBEAT_SEC:-10}"
         done
     ports:
-      - "${MSERVE_WEB_PORT:-5002}:5002"
       - "${MSERVE_ROSBRIDGE_PORT:-9090}:9090"
     restart: unless-stopped

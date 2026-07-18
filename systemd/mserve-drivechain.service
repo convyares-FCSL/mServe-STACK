@@ -1,0 +1,18 @@
+[Unit]
+Description=mServe drivechain + base (hardware)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecm
+Group=ecm
+WorkingDirectory=/home/ecm/mServe-STACK
+ExecStart=/home/ecm/mServe-STACK/scripts/run_stack.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
