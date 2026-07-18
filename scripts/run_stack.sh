@@ -165,7 +165,13 @@ trap cleanup SIGINT SIGTERM EXIT
 # ── Docker: ensure container is running, build packages ──────────────────────
 if [[ "$USE_DOCKER" == true ]]; then
   echo "Starting Docker container…"
-  docker compose -f "$ROOT_DIR/docker-compose.yml" up -d robot-mserve
+  # --force-recreate: the camera/lidar `devices:` entries in docker-compose.yml
+  # resolve their by-id host paths to a specific major:minor once, at
+  # container-create time — see that file's comment. Forcing a fresh
+  # container on every run re-resolves them, so a USB re-enumeration event
+  # between runs (already observed twice on this hardware) doesn't leave a
+  # stale device node behind.
+  docker compose -f "$ROOT_DIR/docker-compose.yml" up -d --force-recreate robot-mserve
   sleep 2
 
   echo "Building ROS packages inside container…"

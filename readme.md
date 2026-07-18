@@ -238,7 +238,7 @@ ros2 param describe /mserve_base limits.max_linear_speed
 
 ## Stop / remove
 
-To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_stack.sh` manually) — see [Running on boot](#running-on-boot-systemd). The `robot-mserve` container itself is left running (`restart: unless-stopped`) so the next `run_stack.sh` invocation doesn't pay the `docker compose up` cost again; `docker compose down` in the repo root removes it if you actually want it gone.
+To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_stack.sh` manually) — see [Running on boot](#running-on-boot-systemd). The `robot-mserve` container itself gets recreated (not just restarted) on every `run_stack.sh` invocation (`--force-recreate`) — needed so the camera/lidar `devices:` mappings re-resolve their by-id host paths fresh each time (this Pi's USB video/serial enumeration isn't stable — see `docker-compose.yml`'s `devices:` comment). `docker compose down` in the repo root removes it if you want it fully gone between runs too.
 
 ## Logs
 

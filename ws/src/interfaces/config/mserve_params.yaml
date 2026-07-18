@@ -43,6 +43,13 @@ mserve_drivechain:
 
 mserve_camera:
   ros__parameters:
+    # Fixed container-internal path — docker-compose.yml maps the host's
+    # udev by-id stable path here (resolved fresh on every container
+    # recreate, since run_stack.sh always --force-recreates). This Pi's USB
+    # video enumeration isn't stable (the webcam has shown up as video0,
+    # video1, *and* video2 across reboots/container restarts in one
+    # session) — see docker-compose.yml's devices: comment for the full
+    # story, including why this ISN'T just a live bind-mounted by-id path.
     device: /dev/video1
     width: 640                    # YUYV @ 640x480 hits 30fps on this USB webcam;
     height: 480                   # higher resolutions drop to 5-10fps in YUYV (MJPG would be needed for full-rate 1080p)
@@ -50,6 +57,9 @@ mserve_camera:
 
 mserve_lidar:
   ros__parameters:
+    # Same fixed-path-via-docker-compose-mapping reasoning as the camera
+    # above (a USB bus reset turned this into /dev/ttyUSB1 mid-session once
+    # already).
     device: /dev/ttyUSB0
     baudrate: 460800              # fixed for RPLIDAR C1 — not configurable on the device side
     frame_id: lidar_link          # see mserve_lidar.xacro

@@ -18,22 +18,30 @@ services:
       - ./web:/web
     working_dir: /ws
     devices:
-      # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md
+      # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md.
+      # Not USB — no enumeration instability, a plain devices: entry is fine.
       - /dev/ttyAMA0:/dev/ttyAMA0
-      # USB webcam (mserve_camera). Host side is the udev by-id stable path,
-      # not a raw /dev/videoN — confirmed on this Pi that plain indices shift
-      # (a USB bus reset during camera debugging turned /dev/ttyUSB0 into
-      # /dev/ttyUSB1, and separately /dev/video0 wasn't even the camera to
-      # begin with — this Pi OS install's pispbe/rpi-hevc-dec ISP video nodes
-      # push the UVC camera's index down; `v4l2-ctl --list-devices` is the
-      # way to check, not assuming video0). Not Docker-specific — native mode
-      # would hit the same instability. Container-internal path stays fixed
-      # at /dev/video1 regardless of host-side churn, matching
-      # mserve_params.yaml's device param.
+      # USB webcam (mserve_camera) / RPLIDAR C1 (mserve_lidar). Host side is
+      # the udev by-id stable path, not a raw /dev/videoN or /dev/ttyUSBN —
+      # confirmed on this Pi that plain indices renumber on their own (the
+      # webcam has been at video0, video1, *and* video2 across container
+      # restarts in one session; a USB bus reset separately turned the
+      # lidar's /dev/ttyUSB0 into /dev/ttyUSB1). Container-internal path
+      # stays fixed (/dev/video1, /dev/ttyUSB0) regardless of host-side
+      # churn, matching mserve_params.yaml's device params.
+      #
+      # `devices:` resolves the by-id symlink to a major:minor ONCE, at
+      # container-CREATE time — it does not track the symlink live. If the
+      # physical device gets reassigned a new major:minor after that
+      # (another USB reset, a reboot) while this container is still
+      # running, the mapped node goes stale (ENXIO on open). Tried bind-
+      # mounting the whole host /dev instead so it'd always resolve fresh —
+      # rejected: it shadows Docker's own /dev/shm tmpfs with a read-only
+      # view, which would break DDS's shared-memory transport. Mitigation
+      # instead: run_stack.sh always `--force-recreate`s this container, so
+      # the snapshot is refreshed on every run even though it's still a
+      # snapshot, not a live view.
       - /dev/v4l/by-id/usb-Ingenic_Semiconductor_CO.__LTD._HD_Web_Camera_Ucamera001-video-index0:/dev/video1
-      # RPLIDAR C1, USB-serial (mserve_lidar) — see ws/src/mserve_lidar/README.md.
-      # Same by-id reasoning as the camera above; container-internal path
-      # stays fixed at /dev/ttyUSB0, matching mserve_params.yaml.
       - /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_d656b5b6075ef01187795a401045c30f-if00-port0:/dev/ttyUSB0
     group_add:
       - dialout
