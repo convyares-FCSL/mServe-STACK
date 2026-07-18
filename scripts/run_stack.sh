@@ -281,9 +281,24 @@ else
   pkill -f lidar_node            2>/dev/null || true
   pkill -f robot_state_publisher 2>/dev/null || true
   pkill -f lifecycle_manager    2>/dev/null || true
-  pkill -f "http.server 6240"   2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting
 fi
+
+# The debug web UI (python3 -m http.server 6240) always runs on the host,
+# regardless of Docker/native ROS mode — a stale one left over from a prior
+# run (e.g. its parent script died without running cleanup(), or got
+# orphaned some other way) blocks the new one below with "Address already
+# in use". That failure was fatal in a much worse way than it looks: the
+# script's own `wait` at the end only tracks NATIVE_PIDS (just this http
+# server in Docker mode — rosbridge/drivechain/etc. run detached inside the
+# container via `exec -d`, invisible to `wait`), so an instant crash here
+# made `wait` return immediately, which fell through to the EXIT trap and
+# tore down the entire — otherwise perfectly healthy — stack over a
+# completely unrelated port conflict. Confirmed happening for real: a
+# leftover http.server from an earlier session killed a live drivechain/
+# base/camera/lidar/slam_toolbox/foxglove_bridge stack within a second of
+# it successfully starting.
+pkill -f "http.server 6240" 2>/dev/null || true
 
 # ── Start rosbridge ───────────────────────────────────────────────────────────
 echo "Starting rosbridge on ws://localhost:9090…"
