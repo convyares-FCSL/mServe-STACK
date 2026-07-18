@@ -1,8 +1,10 @@
 # mServe Stack
 
-ROS 2 C++ robot stack for the mServe differential-drive robot, running natively (no Docker) on a Raspberry Pi 5. Originally built against ROS 2 Jazzy; as of the July 2026 SD-card migration it builds and runs natively against ROS 2 Lyrical — see the CMake note in [Build](#build) if you're building from scratch on a newer distro.
+ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — see `transfer.md` for the full history if anything below looks inconsistent with a native-Lyrical setup you remember from mid-July.
 
-The full stack — drivechain, base, camera, lidar — starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
+**Known gap:** camera (`mserve_camera`) and lidar (`mserve_lidar`) are not wired into the Docker path yet — `docker-compose.yml`/`Dockerfile` don't have the driver deps, and `run_stack.sh` passes `with_camera:=false with_lidar:=false` to the launch file in Docker mode. `camera.html`/`lidar.html` won't show live data until this lands. Drivechain, base, rosbridge, and the web UI (`drivechain.html`/`base.html`) all work today.
+
+The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
 
 The design philosophy is learning-first: every control boundary, kinematic calculation, and hardware protocol is written by hand before reaching for frameworks like `ros2_control`. Each layer should be readable on its own.
 
@@ -49,7 +51,7 @@ ws/src/
 ## Files
 
 - `.env`: local runtime settings (gitignored).
-- `Dockerfile` / `docker-compose.yml`: legacy — the stack ran in Docker before the July 2026 migration to the Ubuntu 26.04 SD card. Left in place for reference but unused; `run_stack.sh` only falls back to them if it can't find `ros2` on PATH.
+- `Dockerfile` / `docker-compose.yml`: the active runtime (ROS 2 Jazzy). `run_stack.sh` auto-detects and uses them whenever `ros2` isn't found on the host PATH — true on this Pi OS install, which has no native ROS at all.
 - `docs/`: design notes, milestones, session log, task tracker.
 - `scripts/`: all helper scripts, flat and topic-named (`scripts/README.md` has the full list).
 - `web/`: debug browser UI (lifecycle control + cmd_vel publisher), served by `scripts/run_stack.sh`.
@@ -77,36 +79,40 @@ per-package READMEs for current fact.
 
 ## Normal flow
 
-The full stack (rosbridge + `mserve_drivechain` + `mserve_base` + `mserve_camera` + `mserve_lidar` + web UI) starts automatically on boot via `mserve-drivechain.service` (see [Running on boot](#running-on-boot-systemd)) — **on a running Pi you normally don't need to start anything by hand, just open the web UI directly:**
+The drivechain + base stack (rosbridge + `mserve_drivechain` + `mserve_base` + web UI) starts automatically on boot via `mserve-drivechain.service` (see [Running on boot](#running-on-boot-systemd)) — **on a running Pi you normally don't need to start anything by hand, just open the web UI directly:**
 
 - `http://<pi-ip>:6240/drivechain.html`
 - `http://<pi-ip>:6240/base.html`
-- `http://<pi-ip>:6240/camera.html`
-- `http://<pi-ip>:6240/lidar.html`
 
-e.g. on this Pi (static Wi-Fi IP): `http://172.16.68.73:6240/drivechain.html` —
-also reachable over Tailscale at `http://100.122.150.74:6240/...` from off-network.
+(`camera.html`/`lidar.html` exist in `web/` but won't show live data until
+camera/lidar are wired into Docker — see the known-gap note at the top.)
+
+e.g. on this Pi (Wi-Fi IP as of 2026-07-18): `http://172.16.68.73:6240/drivechain.html`.
+Off-network access is via Raspberry Pi Connect now, not Tailscale (see
+`transfer.md`) — `rpi-connect` is installed but not yet signed in
+(`rpi-connect signin`).
 
 ## Running manually
 
 Use this instead of the boot service after stopping it, or for development.
-Source ROS 2 first, then start the stack:
+No need to source anything on the host — `run_stack.sh` detects there's no
+native `ros2` on PATH and runs everything inside the `robot-mserve` Docker
+container automatically (building/rebuilding the workspace inside it first,
+every run):
 
 ```bash
-source /opt/ros/lyrical/setup.bash
 ./scripts/run_stack.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
 ./scripts/run_stack.sh --sim        # simulated backend, no hardware needed
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
 ```
 
-This expects the workspace already built (falls back to the legacy
-`robot-mserve` Docker container only if `ros2` isn't found on PATH). It
-starts rosbridge, then launches `mserve_drivechain` + `mserve_base` +
-`mserve_camera` + `mserve_lidar` + `robot_state_publisher` +
-`lifecycle_manager` together via `ws/src/launch/launch/mserve_min.launch.py`
-— `lifecycle_manager` drives configure/activate for all four lifecycle
-nodes, not the script itself — and serves the debug UI at the same URLs
-above once drivechain and base report `active`.
+It starts rosbridge, then launches `mserve_drivechain` + `mserve_base` +
+`robot_state_publisher` + `lifecycle_manager` together via
+`ws/src/launch/launch/mserve_min.launch.py` (`with_camera:=false
+with_lidar:=false` in Docker mode — see the known-gap note above) —
+`lifecycle_manager` drives configure/activate for both lifecycle nodes, not
+the script itself — and serves the debug UI at the same URLs above once
+drivechain and base report `active`.
 
 The UI shows lifecycle state for each node and allows
 configure/activate/deactivate/shutdown and cmd_vel publishing. Click
@@ -114,16 +120,23 @@ configure/activate/deactivate/shutdown and cmd_vel publishing. Click
 open the UART port, `~/connect` does.
 
 Press Ctrl+C to stop. This runs `lifecycle_manager`'s shutdown tree
-(deactivates all four nodes) before tearing down rosbridge/web server cleanly.
+(deactivates drivechain + base, plus camera + lidar if running natively with
+them enabled) before tearing down rosbridge/web server cleanly.
 
 ## Remote RViz (Zenoh)
 
 Gazebo + RViz run on the NVIDIA Thor, not the Pi (see [Hardware](#hardware)).
-Two scripts, one per machine, in `scripts/remote/`:
+
+**Not yet ported to Docker** (see the known-gap note at the top) — this
+script assumes a native `ros2` on PATH, which this Pi OS install doesn't
+have. Likely needs `network_mode: host` in `docker-compose.yml` since DDS/
+Zenoh multicast discovery doesn't traverse Docker's default bridge network
+cleanly — a real decision, not copy-paste. Two scripts, one per machine, in
+`scripts/remote/`:
 
 ```bash
-# On the Pi — start the router, leave it running:
-source /opt/ros/lyrical/setup.bash
+# On the Pi — start the router, leave it running (native ROS 2 required):
+source /opt/ros/jazzy/setup.bash
 ./scripts/remote/start_zenoh_router.sh
 
 # On Thor — point RViz at the Pi's LAN or Tailscale address:
@@ -138,7 +151,7 @@ up, and troubleshooting.
 
 ## Running on boot (systemd)
 
-`mserve-drivechain.service` (native — no Docker dependency) sources ROS 2 Lyrical + the workspace and runs `./scripts/run_stack.sh` on boot, so the robot comes up ready on power-on.
+`mserve-drivechain.service` (`Requires=docker.service` — checked into the repo at `systemd/mserve-drivechain.service`, install with `sudo cp systemd/mserve-drivechain.service /etc/systemd/system/ && sudo systemctl daemon-reload`) runs `./scripts/run_stack.sh` on boot, which starts the Docker container and builds/launches the workspace inside it, so the robot comes up ready on power-on.
 
 ```bash
 sudo systemctl status mserve-drivechain      # check it's running
@@ -191,10 +204,13 @@ message packages export a `<pkg>::<pkg>` aggregate target automatically via
 If you're building this from scratch on an even newer distro and hit
 `Unknown CMake command "ament_target_dependencies"`, this is why.
 
-The Docker path (`docker compose build robot-mserve`,
-`scripts/docker/docker_build_workspace.sh`) still exists as a fallback —
-`run_stack.sh` uses it automatically if `ros2` isn't on PATH — but
-is no longer the primary workflow on this Pi.
+**This is all native-build reference** (useful if you're ever building on a
+machine with ROS 2 installed directly) — on this Pi, `run_stack.sh` does the
+equivalent build automatically inside the `robot-mserve` Docker container on
+every run (`docker compose build robot-mserve` once to build the image
+itself, first). See `Dockerfile` for the current package list — it's smaller
+than the native one above since camera/lidar/SLAM aren't wired into Docker
+yet (known gap, see the top of this file).
 
 ## Runtime parameter updates (no restart needed)
 
@@ -213,7 +229,7 @@ ros2 param describe /mserve_base limits.max_linear_speed
 
 ## Stop / remove
 
-To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_stack.sh` manually) — see [Running on boot](#running-on-boot-systemd). Since everything runs as native processes now, `stop` is the whole story — there's no container to separately remove.
+To stop the drive stack, use `sudo systemctl stop mserve-drivechain` (or Ctrl+C if running `run_stack.sh` manually) — see [Running on boot](#running-on-boot-systemd). The `robot-mserve` container itself is left running (`restart: unless-stopped`) so the next `run_stack.sh` invocation doesn't pay the `docker compose up` cost again; `docker compose down` in the repo root removes it if you actually want it gone.
 
 ## Logs
 
