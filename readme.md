@@ -2,14 +2,14 @@
 
 ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. As of the 2026-07-18 platform revert (Ubuntu/native Lyrical → Raspberry Pi OS/Docker), Docker is the primary and only actively-maintained path again — see `transfer.md` for the full history if anything below looks inconsistent with a native-Lyrical setup you remember from mid-July.
 
-Camera (`mserve_camera`) and lidar (`mserve_lidar`) are wired into the
-Docker path as of 2026-07-18 — drivechain, base, camera, lidar, rosbridge,
-and the full web UI (`drivechain.html`/`base.html`/`camera.html`/
-`lidar.html`) all work. Device paths use udev `by-id` stable symlinks (see
-`docker-compose.yml`), not raw `/dev/videoN`/`/dev/ttyUSBN` — those indices
-aren't stable across USB resets/replugs on this Pi, confirmed the hard way.
-Still not wired into Docker: SLAM Toolbox, Foxglove Bridge, Zenoh
-remote-RViz.
+Camera (`mserve_camera`), lidar (`mserve_lidar`), and Foxglove Bridge
+(`--foxglove`) are wired into the Docker path as of 2026-07-18 — drivechain,
+base, camera, lidar, rosbridge, Foxglove Bridge, and the full web UI
+(`drivechain.html`/`base.html`/`camera.html`/`lidar.html`) all work. Device
+paths use udev `by-id` stable symlinks (see `docker-compose.yml`), not raw
+`/dev/videoN`/`/dev/ttyUSBN` — those indices aren't stable across USB
+resets/replugs on this Pi, confirmed the hard way. Still not wired into
+Docker: SLAM Toolbox, Zenoh remote-RViz.
 
 The drivechain + base stack starts automatically on boot via systemd (`mserve-drivechain.service`), so the robot is ready as soon as the Pi powers on.
 
