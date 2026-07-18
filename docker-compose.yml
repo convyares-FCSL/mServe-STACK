@@ -16,6 +16,12 @@ services:
     volumes:
       - ./ws:/ws
       - ./web:/web
+      # mserve_slam.launch.py sets slam_toolbox's cwd to
+      # os.path.expanduser('~/mServe-STACK/map') unconditionally (native and
+      # Docker alike) so save_map/serialize_map resolve a bare name with no
+      # path typing — see map/README.md. Container's $HOME is /root, not
+      # /home/ecm, so that path only exists here via this mount.
+      - ./map:/root/mServe-STACK/map
     working_dir: /ws
     devices:
       # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md.

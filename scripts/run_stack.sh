@@ -116,6 +116,7 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket 2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node     2>/dev/null || true
   else
     pkill -f rosbridge_websocket    2>/dev/null || true
     pkill -f web_video_server       2>/dev/null || true
@@ -140,6 +141,7 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
   else
     pkill -9 -f drivechain_node       2>/dev/null || true
     pkill -9 -f base_node             2>/dev/null || true
@@ -175,12 +177,38 @@ if [[ "$USE_DOCKER" == true ]]; then
   sleep 2
 
   echo "Building ROS packages inside container…"
+  # slam_toolbox only when actually requested — it's a much bigger build
+  # (Ceres/SuiteSparse/RViz deps) than everything else here combined, no
+  # reason to pay that on every plain run.
+  DOCKER_SLAM_PKG=""
+  DOCKER_SLAM_IGNORE=""
+  if [[ "$SLAM" == true ]]; then
+    DOCKER_SLAM_PKG="slam_toolbox"
+    # slam_toolbox's package.xml only exec_depends on nav2_map_server, which
+    # the Dockerfile apt-installs (real map *serving* isn't needed — see
+    # ws/src/third_party/README.md's slam_toolbox section, save_map/
+    # serialize_map are slam_toolbox's own services). But
+    # ws/src/third_party/navigation2/ (a separate, much bigger vendoring
+    # effort, mostly unrelated to SLAM) is ALSO checked out in this
+    # workspace, and colcon's dependency graph discovers its *vendored
+    # source* package.xml files regardless of --packages-select — vendored
+    # nav2_map_server's own build_depend on nav2_ros_common then cascades
+    # to nav2_ros_common's REQUIRED backward_ros, neither of which has an
+    # apt package or is vendored, and colcon hard-errors trying to build
+    # them instead of just accepting the already-apt-installed
+    # nav2_common/nav2_msgs/nav2_util/nav2_map_server (which it does, with
+    # only a warning, for everything NOT also chasing nav2_ros_common).
+    # Explicitly ignoring these five keeps colcon from ever consulting the
+    # vendored package.xml files, so it relies purely on apt.
+    DOCKER_SLAM_IGNORE="--packages-ignore nav2_common nav2_msgs nav2_util nav2_map_server nav2_ros_common"
+  fi
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve bash -lc "
     source /opt/ros/jazzy/setup.bash
     cd /ws
     colcon build \
       --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
-        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar \
+        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar $DOCKER_SLAM_PKG \
+      $DOCKER_SLAM_IGNORE \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "
@@ -240,6 +268,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f rosbridge_websocket   2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node           2>/dev/null || true
@@ -252,6 +281,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f rosbridge_websocket   2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
@@ -392,14 +422,18 @@ wait_for_active /mserve_base
 # Plain `ros2 launch launch mserve_slam.launch.py` (.py, not .xml) — doesn't
 # hit the launch-package-name collision that foxglove_bridge's XML file does.
 if [[ "$SLAM" == true ]]; then
-  if [[ "$USE_DOCKER" == true ]]; then
-    echo "NOTE: --slam-$SLAM_MODE is native-only (not wired into the Docker path, same as camera/lidar) — skipping."
+  if [[ "$SLAM_MODE" == "map" ]]; then
+    echo "Starting SLAM Toolbox (mapping) — /map will start publishing once configure/activate completes…"
   else
-    if [[ "$SLAM_MODE" == "map" ]]; then
-      echo "Starting SLAM Toolbox (mapping) — /map will start publishing once configure/activate completes…"
-    else
-      echo "Starting SLAM Toolbox (localization) — needs a real map_file_name already set in slam_params_local.yaml…"
-    fi
+    echo "Starting SLAM Toolbox (localization) — needs a real map_file_name already set in slam_params_local.yaml…"
+  fi
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+      source /opt/ros/jazzy/setup.bash
+      source /ws/install/setup.bash
+      ros2 launch launch mserve_slam.launch.py mode:=$SLAM_MODE > /tmp/mserve_slam.log 2>&1
+    "
+  else
     ros2 launch launch mserve_slam.launch.py mode:="$SLAM_MODE" > /tmp/mserve_slam.log 2>&1 &
     NATIVE_PIDS+=($!)
   fi

@@ -79,11 +79,47 @@ Boost.Serialization, so saving a pose graph throws "unregistered class"/
    `BOOST_CLASS_EXPORT_IMPLEMENT(slam_toolbox::LoopClosureListener)` right
    after the `#include`.
 
+**Second required patch** (2026-07-18, hit wiring this into Docker — a
+toolchain-generation gap like the Nav2 ones below, not something the Boost
+patch above touches) — build fails with `message_filters::Subscriber<...>`
+"no matching function for call" on `slam_toolbox_common.cpp`'s
+`scan_filter_sub_` construction. This distro's `message_filters` (apt,
+dated after this fork's `ros2` branch was last synced) changed
+`Subscriber`'s constructors to be specific to its `NodeType` template
+parameter (default `rclcpp::Node`) with no longer any overload generic
+enough to accept an `rclcpp_lifecycle::LifecycleNode*`, and dropped the
+`rclcpp::QoS`-taking overload entirely (only `rmw_qos_profile_t` now). Two
+edits, `// mServe:` comments in place:
+
+1. `include/slam_toolbox/slam_toolbox_common.hpp` — `scan_filter_sub_`'s
+   type: `message_filters::Subscriber<sensor_msgs::msg::LaserScan>` →
+   `message_filters::Subscriber<sensor_msgs::msg::LaserScan,
+   rclcpp_lifecycle::LifecycleNode>` (explicit second template arg).
+2. `src/slam_toolbox_common.cpp` — the matching construction call: same
+   explicit template arg, plus
+   `rclcpp::SensorDataQoS()` → `rclcpp::SensorDataQoS().get_rmw_qos_profile()`
+   (explicit conversion to the only QoS type this version's constructor
+   still accepts).
+
 Then, from `ws/`:
 
 ```bash
 colcon build --packages-select slam_toolbox --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
+
+If building in a scoped workspace (like Docker's `run_stack.sh`, which only
+`--packages-select`s what it needs rather than the whole `ws/src` tree) and
+`ws/src/third_party/navigation2/` also happens to be checked out: colcon
+discovers its *vendored source* package.xml files regardless of
+`--packages-select`, and `nav2_map_server`'s local `build_depend` on
+`nav2_ros_common` (→ `backward_ros`, no apt package either) cascades into a
+hard error trying to build them from source — even though the already-
+apt-installed `nav2_common`/`nav2_msgs`/`nav2_util`/`nav2_map_server`
+satisfy `slam_toolbox`'s actual `exec_depend` just fine (colcon falls back
+to them with only a warning, for everything *not* also chasing
+`nav2_ros_common`). Add
+`--packages-ignore nav2_common nav2_msgs nav2_util nav2_map_server nav2_ros_common`
+to keep colcon from ever consulting the vendored package.xml files.
 
 Built clean on real hardware (Pi 5) in ~5 minutes, no dependency issues
 beyond the apt packages above — see `docs/TODO.md` for the verification
