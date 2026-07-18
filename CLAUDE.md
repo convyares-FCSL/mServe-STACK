@@ -30,9 +30,12 @@ ws/src/
   launch/               launch files (mserve_min.launch.py)
 ```
 
-`mserve_base_archive/`, `template/` (an old `hyfleet_subsystem` scaffold from an
-unrelated project, left in the tree), and `lifecycle_manager/` all carry
-`COLCON_IGNORE` and are excluded from the build.
+`mserve_base_archive/` and `template/` (an old `hyfleet_subsystem` scaffold from
+an unrelated project, left in the tree) carry `COLCON_IGNORE` and are excluded
+from the build. `lifecycle_manager/` does **not** — it's a required runtime
+package (drives `mserve_drivechain`/`mserve_base` through configure/activate
+via BT.CPP, wired into `launch/mserve_min.launch.py`) and must be built like
+any other package.
 
 ## Hardware chain
 
