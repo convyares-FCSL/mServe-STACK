@@ -20,8 +20,24 @@ services:
     devices:
       # GPIO header UART (pins 14/15) on Pi 5 — see ws/src/mserve_drivechain/README.md
       - /dev/ttyAMA0:/dev/ttyAMA0
+      # USB webcam (mserve_camera). Host side is the udev by-id stable path,
+      # not a raw /dev/videoN — confirmed on this Pi that plain indices shift
+      # (a USB bus reset during camera debugging turned /dev/ttyUSB0 into
+      # /dev/ttyUSB1, and separately /dev/video0 wasn't even the camera to
+      # begin with — this Pi OS install's pispbe/rpi-hevc-dec ISP video nodes
+      # push the UVC camera's index down; `v4l2-ctl --list-devices` is the
+      # way to check, not assuming video0). Not Docker-specific — native mode
+      # would hit the same instability. Container-internal path stays fixed
+      # at /dev/video1 regardless of host-side churn, matching
+      # mserve_params.yaml's device param.
+      - /dev/v4l/by-id/usb-Ingenic_Semiconductor_CO.__LTD._HD_Web_Camera_Ucamera001-video-index0:/dev/video1
+      # RPLIDAR C1, USB-serial (mserve_lidar) — see ws/src/mserve_lidar/README.md.
+      # Same by-id reasoning as the camera above; container-internal path
+      # stays fixed at /dev/ttyUSB0, matching mserve_params.yaml.
+      - /dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_d656b5b6075ef01187795a401045c30f-if00-port0:/dev/ttyUSB0
     group_add:
       - dialout
+      - video
     command:
       - bash
       - -lc
@@ -35,4 +51,5 @@ services:
         done
     ports:
       - "${MSERVE_ROSBRIDGE_PORT:-9090}:9090"
+      - "${MSERVE_HTTP_PORT:-8080}:8080"
     restart: unless-stopped

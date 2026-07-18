@@ -43,7 +43,7 @@ mserve_drivechain:
 
 mserve_camera:
   ros__parameters:
-    device: /dev/video0
+    device: /dev/video1
     width: 640                    # YUYV @ 640x480 hits 30fps on this USB webcam;
     height: 480                   # higher resolutions drop to 5-10fps in YUYV (MJPG would be needed for full-rate 1080p)
     frame_id: camera_link_optical # REP-103 optical frame — see mserve_camera.xacro/mserve_depth_camera.xacro

@@ -172,7 +172,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     cd /ws
     colcon build \
       --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
-        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 \
+        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "
@@ -287,7 +287,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
     source /opt/ros/jazzy/setup.bash
     source /ws/install/setup.bash
-    ros2 run web_video_server web_video_server
+    ros2 run web_video_server web_video_server > /tmp/web_video_server.log 2>&1
   "
 else
   ros2 run web_video_server web_video_server > /tmp/web_video_server.log 2>&1 &
@@ -321,11 +321,9 @@ fi
 BACKEND=$([ "$SIM_MODE" == true ] && echo "sim" || echo "hardware")
 echo "Launching drivechain + base + lifecycle_manager (backend=$BACKEND)…"
 LAUNCH_ARGS="backend:=$BACKEND uart_device:=$UART_DEVICE"
-if [[ "$USE_DOCKER" == true ]]; then
-  # camera/lidar driver deps aren't in the Docker image yet — see
-  # transfer.md's "Known gaps" (real new work, not a restore).
-  LAUNCH_ARGS="$LAUNCH_ARGS with_camera:=false with_lidar:=false"
-fi
+# with_camera/with_lidar default true (mserve_min.launch.py) in both native
+# and Docker mode now that the Docker image has the driver deps — see
+# docker-compose.yml's /dev/video0 and /dev/ttyUSB0 device passthrough.
 
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
