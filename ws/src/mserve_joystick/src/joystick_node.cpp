@@ -109,7 +109,29 @@ void JoystickNode::publishCmdVel(const sensor_msgs::msg::Joy & msg)
     twist.linear.x = linear * speed_scale_;
     twist.angular.z = angular * angular_scale_;
   }
-  cmd_vel_pub_->publish(twist);
+
+  // /cmd_vel has no source arbitration yet (mserve_base is the documented
+  // future home for that — see CLAUDE.md) — anything publishing here
+  // competes directly with every other publisher on the same topic (e.g.
+  // the web UI's drive buttons). joy_node's autorepeat (mserve_min.launch.py)
+  // keeps /joy arriving continuously even with the stick centered, on
+  // purpose — a genuinely-held nonzero stick still needs a steady /cmd_vel
+  // stream so mserve_base's cmd_vel_timeout_ms doesn't zero it between real
+  // axis changes. But blindly republishing on every single tick regardless
+  // of value meant this node kept spamming zero-Twist at ~20Hz forever
+  // after the very first touch of the stick, even once released back to
+  // center — confirmed on real hardware: driving from the web UI afterward
+  // went from smooth to "temperamental", because these idle zero commands
+  // kept interleaving with and overwriting the web UI's own (slower, 10Hz)
+  // publishes. Fix: publish while genuinely active (nonzero), plus exactly
+  // one final zero on the active->idle transition (so the robot still
+  // stops immediately, not after waiting on the timeout) — then go silent,
+  // leaving /cmd_vel free for whoever else is driving.
+  const bool is_active = (twist.linear.x != 0.0) || (twist.angular.z != 0.0);
+  if (is_active || cmd_vel_was_active_) {
+    cmd_vel_pub_->publish(twist);
+  }
+  cmd_vel_was_active_ = is_active;
 }
 
 void JoystickNode::dispatchButtons(const sensor_msgs::msg::Joy & msg)

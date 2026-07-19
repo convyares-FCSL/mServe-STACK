@@ -89,7 +89,17 @@ slam_toolbox:
     angle_variance_penalty: 1.0
 
     fine_search_angle_offset: 0.00349
-    coarse_search_angle_offset: 0.349
+    # 0.349 (default, ±20deg) -> 0.6 (~±34deg): widened after a real
+    # out-and-back loop through an open/feature-poor area (a corridor) left
+    # the live scan ~30deg rotated relative to the built map. This is the
+    # per-scan search window scan matching uses to pull odom's heading
+    # estimate back toward the true one — once real drift exceeds it in a
+    # single step, matching can't correct it and the error sticks. Not yet
+    # re-verified against the same loop; if 30deg-class drift recurs, the
+    # next lever is loop_search_space_dimension/loop_match_minimum_response_*
+    # (pose-graph loop closure) rather than widening this further, since a
+    # bigger per-scan search window costs more CPU and risks false matches.
+    coarse_search_angle_offset: 0.6
     coarse_angle_resolution: 0.0349
     minimum_angle_penalty: 0.9
     minimum_distance_penalty: 0.5

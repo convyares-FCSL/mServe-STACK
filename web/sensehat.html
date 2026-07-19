@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mServe — Sense HAT</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    #btn-online-toggle.is-online  { background: var(--success); }
+    #btn-online-toggle.is-offline { background: var(--danger); }
+
+    .motor-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    .motor-table th {
+      text-align: left; color: #94a3b8; font-weight: 600; padding: 6px 10px;
+      border-bottom: 1px solid #334155; text-transform: uppercase;
+      letter-spacing: 0.04em; font-size: 0.72rem;
+    }
+    .motor-table td { padding: 5px 10px; border-bottom: 1px solid #1e293b; }
+    .motor-cmd-empty { color: #64748b; font-size: 0.85rem; padding: 10px 0; }
+
+    .feedback-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 640px) { .feedback-grid { grid-template-columns: 1fr; } }
+    .feedback-card { background: var(--surface-2); border-radius: 12px; padding: 14px 16px; }
+    .feedback-card h4 {
+      margin: 0 0 8px; font-size: 0.85rem; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #94a3b8;
+    }
+    .feedback-value {
+      font-size: 1.6rem; font-weight: 700; color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .feedback-unit { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+    .not-available { color: var(--danger); font-size: 0.8rem; }
+
+    .vec3-row { display: flex; gap: 18px; margin-top: 4px; }
+    .vec3-axis { flex: 1; }
+    .vec3-axis .axis-label { font-size: 0.72rem; color: #64748b; }
+    .vec3-axis .axis-value {
+      font-size: 1.2rem; font-weight: 700; color: var(--accent-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Compass */
+    .compass-wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .compass-dial {
+      position: relative; width: 140px; height: 140px; border-radius: 50%;
+      background: var(--surface-2); border: 2px solid #475569;
+      flex-shrink: 0;
+    }
+    .compass-tick {
+      position: absolute; left: 50%; top: 6px; font-size: 0.7rem; color: #64748b;
+      transform: translateX(-50%);
+    }
+    /* The ring (N/E/S/W) rotates so true north stays correctly oriented as
+       the robot turns — same convention as a phone/car-nav compass. Each
+       tick's own transform is set in JS: its fixed centering offset
+       (data-base) composed with a counter-rotation, so the letters
+       themselves stay upright while their position swings around the dial. */
+    .compass-ring {
+      position: absolute; inset: 0;
+      transform-origin: 50% 50%;
+      transition: transform 0.15s ease-out;
+    }
+    /* Fixed — always points straight up, representing the robot's current
+       heading (whatever ring label is under this is the direction it's
+       facing). Does not rotate; the ring does. */
+    .compass-fixed-pointer {
+      position: absolute; left: 50%; top: 50%; width: 4px; height: 60px;
+      background: linear-gradient(var(--danger), var(--accent));
+      transform-origin: 50% 100%;
+      transform: translate(-50%, -100%);
+      border-radius: 2px;
+    }
+    .compass-center-dot {
+      position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
+      border-radius: 50%; background: var(--text); transform: translate(-50%, -50%);
+    }
+    .compass-readout { font-size: 1rem; color: #94a3b8; }
+    .compass-readout .feedback-value { font-size: 2rem; }
+
+    /* D-pad (mirrors joystick.html's dpad-mini) */
+    .dpad-wrap { text-align: center; }
+    .dpad-mini {
+      display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 34px);
+      gap: 4px; margin: 0 auto;
+    }
+    .dpad-mini div { background: var(--surface-2); border-radius: 4px; transition: background 0.05s linear; }
+    .dpad-mini div.lit { background: var(--accent); }
+    .dpad-mini .u { grid-column: 2; grid-row: 1; }
+    .dpad-mini .l { grid-column: 1; grid-row: 2; }
+    .dpad-mini .c { grid-column: 2; grid-row: 2; border-radius: 50%; }
+    .dpad-mini .r { grid-column: 3; grid-row: 2; }
+    .dpad-mini .d { grid-column: 2; grid-row: 3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="site-header"></div>
+
+    <header>
+      <h1>Sense HAT</h1>
+      <p>LED matrix, joystick, and LSM9DS1 IMU — pressure/temperature/humidity, accel/gyro/magnetometer, compass heading.</p>
+      <div class="status-row" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span id="connection-status" class="status disconnected">ROS Disconnected</span>
+        <button id="btn-online-toggle" style="padding:6px 16px">—</button>
+        <span id="online-hint" style="font-size:0.8rem;color:#64748b">
+          Offline disables button_actions (e.g. connect) so the joystick can be tested without
+          triggering them — sensors/LED/status keep working either way.
+        </span>
+      </div>
+    </header>
+
+        <!-- Parameters ─────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Parameters</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Live view of mserve_sensehat's ROS parameters — includes button_actions (key -&gt; action,
+        e.g. center -&gt; connect), same reassignable-mapping pattern as mserve_joystick.
+      </p>
+      <div class="button-row" style="margin-bottom:12px">
+        <button id="btn-params-refresh">Refresh</button>
+        <button id="btn-params-apply">Apply Changes</button>
+      </div>
+      <table class="motor-table" id="params-table">
+        <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+        <tbody id="params-table-body">
+          <tr><td colspan="2" class="motor-cmd-empty">Click Refresh to load parameters.</td></tr>
+        </tbody>
+      </table>
+      <div id="params-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
+    <!-- Device availability ────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Device availability</h2>
+      <div class="feedback-grid">
+        <div class="feedback-card"><h4>IMU</h4><div class="feedback-value" id="avail-imu" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>Pressure</h4><div class="feedback-value" id="avail-pressure" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>Humidity</h4><div class="feedback-value" id="avail-humidity" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>LED matrix</h4><div class="feedback-value" id="avail-led" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>Joystick</h4><div class="feedback-value" id="avail-joystick" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>Compass calibration</h4><div class="feedback-value" id="avail-compass-cal" style="font-size:1.1rem">—</div></div>
+        <div class="feedback-card"><h4>Accel calibration</h4><div class="feedback-value" id="avail-accel-cal" style="font-size:1.1rem">—</div></div>
+      </div>
+    </section>
+
+    <!-- Environmental ──────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Environmental</h2>
+      <div class="feedback-grid">
+        <div class="feedback-card">
+          <h4>Temperature</h4>
+          <div class="feedback-value" id="env-temperature">—</div>
+          <div class="feedback-unit">°C</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Pressure</h4>
+          <div class="feedback-value" id="env-pressure">—</div>
+          <div class="feedback-unit" id="env-pressure-unit">hPa</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Humidity</h4>
+          <div class="feedback-value" id="env-humidity">—</div>
+          <div class="feedback-unit" id="env-humidity-unit">% RH</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- IMU ────────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>IMU</h2>
+      <p id="imu-not-available" class="not-available" style="display:none">IMU not detected on this device.</p>
+      <div class="feedback-grid" style="grid-template-columns:1fr">
+        <div class="feedback-card">
+          <h4>Acceleration</h4>
+          <div class="vec3-row">
+            <div class="vec3-axis"><div class="axis-label">X</div><div class="axis-value" id="accel-x">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Y</div><div class="axis-value" id="accel-y">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Z</div><div class="axis-value" id="accel-z">—</div></div>
+          </div>
+          <div class="feedback-unit">g (also published as m/s² on ~/imu, sensor_msgs/Imu)</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Gyroscope</h4>
+          <div class="vec3-row">
+            <div class="vec3-axis"><div class="axis-label">X</div><div class="axis-value" id="gyro-x">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Y</div><div class="axis-value" id="gyro-y">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Z</div><div class="axis-value" id="gyro-z">—</div></div>
+          </div>
+          <div class="feedback-unit">deg/s (also published as rad/s on ~/imu)</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Magnetometer</h4>
+          <div class="vec3-row">
+            <div class="vec3-axis"><div class="axis-label">X</div><div class="axis-value" id="mag-x">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Y</div><div class="axis-value" id="mag-y">—</div></div>
+            <div class="vec3-axis"><div class="axis-label">Z</div><div class="axis-value" id="mag-z">—</div></div>
+          </div>
+          <div class="feedback-unit">µT</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Compass ────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Compass</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Tilt/mag-compensated heading from RTIMULib's own fusion filter (accel+gyro+magnetometer) —
+        not a raw compass angle.
+      </p>
+      <p id="compass-uncalibrated-warning" class="not-available" style="display:none">
+        Uncalibrated — heading is unreliable until RTIMULibCal has been run (see
+        ws/src/mserve_sensehat/README.md).
+      </p>
+      <div class="compass-wrap">
+        <div class="compass-dial">
+          <div class="compass-ring" id="compass-ring">
+            <span class="compass-tick" data-base="translateX(-50%)" style="top:6px;left:50%">N</span>
+            <span class="compass-tick" data-base="translateY(-50%)" style="top:50%;left:auto;right:6px">E</span>
+            <span class="compass-tick" data-base="translateX(-50%)" style="bottom:6px;top:auto;left:50%">S</span>
+            <span class="compass-tick" data-base="translateY(-50%)" style="top:50%;left:6px">W</span>
+          </div>
+          <div class="compass-fixed-pointer"></div>
+          <div class="compass-center-dot"></div>
+        </div>
+        <div class="compass-readout">
+          <div class="feedback-value" id="compass-heading">—</div>
+          <div class="feedback-unit">degrees (0 = N, 90 = E) — top of dial = robot's current heading</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Joystick + LED ─────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Joystick &amp; LED matrix</h2>
+      <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+        <div class="dpad-wrap">
+          <div class="dpad-mini">
+            <div class="u" id="joy-up"></div>
+            <div class="l" id="joy-left"></div>
+            <div class="c" id="joy-center"></div>
+            <div class="r" id="joy-right"></div>
+            <div class="d" id="joy-down"></div>
+          </div>
+          <div class="feedback-unit" style="margin-top:8px">live button state</div>
+        </div>
+        <div>
+          <div class="feedback-card">
+            <h4>LED matrix status icon</h4>
+            <div class="feedback-value" id="led-status-icon" style="font-size:1.3rem">—</div>
+            <div class="feedback-unit">red X = drivechain disconnected, green O = connected</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div id="site-footer"></div>
+
+  </div>
+
+  <script src="common.js"></script>
+  <script src="roslib.min.js"></script>
+  <script src="sensehat.js"></script>
+</body>
+</html>

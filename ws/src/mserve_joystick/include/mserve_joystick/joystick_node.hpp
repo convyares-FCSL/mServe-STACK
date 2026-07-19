@@ -45,6 +45,10 @@ private:
   // Subscription / publishers
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+  // Whether the last publishCmdVel() call sent a nonzero Twist — see that
+  // function's comment for why this gates publishing at all, not just what
+  // gets published.
+  bool cmd_vel_was_active_ = false;
   rclcpp::Publisher<interfaces::msg::JoystickStatus>::SharedPtr status_pub_;
   rclcpp::TimerBase::SharedPtr status_pub_timer_;
 

@@ -9,6 +9,7 @@ const PAGES = [
   { href: 'camera.html', label: 'Camera' },
   { href: 'lidar.html', label: 'LiDAR' },
   { href: 'joystick.html', label: 'Joystick' },
+  { href: 'sensehat.html', label: 'Sense HAT' },
 ];
 
 function renderSiteHeader() {

@@ -32,6 +32,15 @@ services:
       # path typing — see map/README.md. Container's $HOME is /root, not
       # /home/ecm, so that path only exists here via this mount.
       - ./map:/root/mServe-STACK/map
+      # mserve_sensehat's RTIMULib settings/calibration cache
+      # (imu_settings_dir param, mserve_params.yaml). Without this the
+      # container's own isolated /tmp is used instead — real calibration
+      # data (magnetometer min/max + ellipsoid) was lost this way once
+      # already: run on the host into /tmp/mserve_sensehat, which the
+      # container never saw, since a container's /tmp is not the host's.
+      # This mount makes it survive both container recreates and reruns of
+      # RTIMULibCal from the host (ws/src/mserve_sensehat/README.md).
+      - ./sensehat_calibration:/tmp/mserve_sensehat
       # USB webcam (mserve_camera) / RPLIDAR C1 (mserve_lidar) — optional
       # peripherals that can be unplugged. Bind-mounted rather than listed
       # under `devices:` below, because `devices:` resolves each host path
@@ -81,11 +90,23 @@ services:
       # peripherals above, we *want* a hard failure if this is ever missing,
       # since drivechain can't function at all without it).
       - /dev/ttyAMA0:/dev/ttyAMA0
-      # ELEGOO 3.5" SPI TFT framebuffer (mserve_display). SPI/GPIO-attached,
-      # fixed to this Pi — no USB-style re-enumeration or unplug risk (see
-      # the touch input device's own comment above for why that one's
-      # handled differently, as a directory bind-mount instead of here).
+      # Framebuffers for the ELEGOO 3.5" SPI TFT (mserve_display) and the Pi
+      # Sense HAT's 8x8 LED matrix — both SPI/GPIO-attached, fixed to this
+      # Pi, no USB-style re-enumeration or unplug risk (see the touch input
+      # device's own comment above for why that one's handled differently,
+      # as a directory bind-mount instead of here). Listed as both fb0/fb1
+      # rather than assuming which is which: framebuffer *numbering* is
+      # probe-order-dependent, not fixed — adding the Sense HAT bumped the
+      # ELEGOO panel from fb0 to fb1 on this robot. mserve_display resolves
+      # the right one at runtime by driver name (see
+      # mserve_display::resolveFramebufferDevice); this just needs both
+      # nodes visible to the container regardless of which is which.
       - /dev/fb0:/dev/fb0
+      - /dev/fb1:/dev/fb1
+      # Onboard I2C bus (GPIO header pins 3/5) — Pi Sense HAT's IMU
+      # (LSM9DS1-address chips) and environmental sensors. Fixed hardware,
+      # same no-unplug-risk reasoning as ttyAMA0 above.
+      - /dev/i2c-1:/dev/i2c-1
     # The three directory bind-mounts above (volumes:) only make the device
     # files VISIBLE in the container's filesystem — they do NOT grant cgroup
     # device access, which is Docker's separate mechanism for actual

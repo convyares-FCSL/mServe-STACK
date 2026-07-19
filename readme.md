@@ -25,6 +25,7 @@ The design philosophy is learning-first: every control boundary, kinematic calcu
 - Generic USB UVC webcam (`/dev/video0`) — driven by `mserve_camera`
 - SLAMTEC RPLIDAR C1, USB-serial (`/dev/ttyUSB0`, 460800 baud) — driven by `mserve_lidar`
 - ELEGOO 3.5" SPI TFT touchscreen (ILI9486 display + ADS7846 resistive touch) — driven by `mserve_display`, a small status/control UI (face, connect/info/calibrate menu)
+- Pi Sense HAT (2): 8x8 LED matrix, 5-way joystick, LSM9DS1 IMU — driven by `mserve_sensehat`. Its framebuffer driver can register ahead of the touchscreen's (bumping it from `/dev/fb0` to `/dev/fb1`) — both display packages resolve their device by driver name at runtime rather than assuming a fixed path, see `mserve_sensehat/README.md`
 - Gazebo + RViz simulation run on the NVIDIA Thor — the Pi 5 has no compute GPU and stays hardware-only
 
 ## Workspace
@@ -38,10 +39,12 @@ ws/src/
   mserve_camera/         lifecycle node wrapping v4l2_camera's device class directly (USB webcam)
   mserve_lidar/          lifecycle node wrapping a vendored RPLIDAR SDK directly (RPLIDAR C1)
   mserve_display/        plain node (not lifecycle) driving the ELEGOO touchscreen UI
+  mserve_joystick/       plain node (not lifecycle), game controller teleop, consumes /joy
+  mserve_sensehat/       plain node (not lifecycle), Pi Sense HAT: LED matrix, joystick, IMU
   mserve_description/    URDF robot model
   lifecycle_manager/     BehaviorTree.CPP-driven configure/activate/shutdown of the four lifecycle nodes
   launch/                launch files
-  third_party/           vendored source deps (BehaviorTree.ROS2, slam_toolbox) — gitignored, see third_party/README.md
+  third_party/           vendored source deps (BehaviorTree.ROS2, slam_toolbox, RTIMULib) — gitignored, see third_party/README.md
 ```
 
 (Folder names dropped the `mserve_` prefix on `interfaces`/`utils`/`launch` at some point — the docs below still use the old prefixed names in places; treat the folder names above as current.)
@@ -57,9 +60,11 @@ ws/src/
 | `mserve_camera` | Wraps `v4l2_camera`'s `V4l2CameraDevice` directly (not the whole `v4l2_camera_node`), publishes `sensor_msgs/Image` + `CameraInfo` — see `ws/src/mserve_camera/README.md` |
 | `mserve_lidar` | Wraps a vendored Slamtec RPLIDAR SDK directly (no apt package exists for `rplidar_ros` on this distro), publishes `sensor_msgs/LaserScan` — see `ws/src/mserve_lidar/README.md` |
 | `mserve_display` | Plain node (not lifecycle-managed) driving the ELEGOO touchscreen — face w/ eyes tracking cmd_vel, connect/info/calibrate menu — see `ws/src/mserve_display/README.md` |
+| `mserve_joystick` | Plain node (not lifecycle-managed), game controller teleop — `/joy` → `/cmd_vel` + button actions (connect, display info, speed/angular scale) — see `ws/src/mserve_joystick/README.md` |
+| `mserve_sensehat` | Plain node (not lifecycle-managed), Pi Sense HAT — LED matrix shows drivechain connection status, joystick center-click calls `connect`, publishes `sensor_msgs/Imu` via vendored RTIMULib — see `ws/src/mserve_sensehat/README.md` |
 | `mserve_description` | URDF robot description |
-| `lifecycle_manager` | BT-driven configure/activate on bringup, deactivate/shutdown on SIGINT, for the four lifecycle nodes above (`mserve_display` isn't lifecycle-managed) — see `ws/src/lifecycle_manager/README.md` |
-| `launch` | `mserve_min.launch.py` — starts drivechain + base + camera + lidar + display + `robot_state_publisher` + `lifecycle_manager` together |
+| `lifecycle_manager` | BT-driven configure/activate on bringup, deactivate/shutdown on SIGINT, for the four lifecycle nodes above (`mserve_display`/`mserve_joystick`/`mserve_sensehat` aren't lifecycle-managed) — see `ws/src/lifecycle_manager/README.md` |
+| `launch` | `mserve_min.launch.py` — starts drivechain + base + camera + lidar + display + joystick + sensehat + `robot_state_publisher` + `lifecycle_manager` together |
 
 ## Files
 
@@ -80,7 +85,6 @@ ws/src/
 - `docs/session.md` — session decisions and notes.
 - `docs/testing-and-scripts.md` — test strategy and script reference.
 - `docs/simulation_hil.md` — simulation status and hardware-in-loop plan.
-- `docs/remote-rviz-zenoh.md` — running RViz on a remote machine (e.g. Thor) over Zenoh; current procedure.
 
 `docs/plan.md`, `docs/architecture.md`, `docs/packages.md`, and
 `docs/milestones.md` are early planning docs and describe some package
@@ -98,6 +102,8 @@ The full stack (rosbridge + `mserve_drivechain` + `mserve_base` + `mserve_camera
 - `http://<pi-ip>:6240/base.html`
 - `http://<pi-ip>:6240/camera.html`
 - `http://<pi-ip>:6240/lidar.html`
+- `http://<pi-ip>:6240/joystick.html`
+- `http://<pi-ip>:6240/sensehat.html`
 
 Off-network access is via Raspberry Pi Connect (`rpi-connect` — installed but
 not yet signed in, `rpi-connect signin`).
@@ -114,7 +120,15 @@ every run):
 ./scripts/run_stack.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
 ./scripts/run_stack.sh --sim        # simulated backend, no hardware needed
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
+
+./scripts/run_stack.sh --foxglove       # also start Foxglove Bridge (ws://<pi-ip>:8765)
+./scripts/run_stack.sh --slam-map       # also start SLAM Toolbox, building/extending a map
+./scripts/run_stack.sh --slam-local     # also start SLAM Toolbox, localizing against a saved map
 ```
+
+`--sim`, `--foxglove`, and `--slam-map`/`--slam-local` are order-independent
+and can be combined (e.g. `--sim --foxglove --slam-map`). SLAM Toolbox needs
+`ws/src/third_party/slam_toolbox/` vendored first — see [Build](#build).
 
 It starts rosbridge + `web_video_server`, then launches `mserve_drivechain` +
 `mserve_base` + `mserve_camera` + `mserve_lidar` + `robot_state_publisher` +
@@ -139,13 +153,17 @@ them enabled) before tearing down rosbridge/web server cleanly.
 ## Remote RViz (Zenoh)
 
 Gazebo + RViz run on the NVIDIA Thor, not the Pi (see [Hardware](#hardware)).
+For same-LAN viewing/teleop without any of this, Foxglove Bridge
+(`--foxglove`, above) is the simpler path — Zenoh is only needed for
+discovery across Tailscale or other multi-interface setups where DDS/plain
+multicast discovery doesn't reliably work.
 
-**Not yet ported to Docker** (see the known-gap note at the top) — this
-script assumes a native `ros2` on PATH, which this Pi OS install doesn't
-have. Likely needs `network_mode: host` in `docker-compose.yml` since DDS/
-Zenoh multicast discovery doesn't traverse Docker's default bridge network
-cleanly — a real decision, not copy-paste. Two scripts, one per machine, in
-`scripts/remote/`:
+**Deferred, not yet ported to Docker** (tracked in `docs/TODO.md`'s
+DEFERRED section) — the scripts below assume a native `ros2` on PATH, which
+this Pi OS install doesn't have. Likely needs `network_mode: host` in
+`docker-compose.yml` since DDS/Zenoh multicast discovery doesn't traverse
+Docker's default bridge network cleanly — a real decision, not copy-paste.
+Two scripts, one per machine, in `scripts/remote/`:
 
 ```bash
 # On the Pi — start the router, leave it running (native ROS 2 required):
@@ -158,9 +176,13 @@ source /opt/ros/jazzy/setup.bash
 ```
 
 Order doesn't matter — the router and `run_stack.sh` are independent
-processes. See **[`docs/remote-rviz-zenoh.md`](docs/remote-rviz-zenoh.md)**
-for why Zenoh instead of plain DDS discovery, what each script actually sets
-up, and troubleshooting.
+processes. `rmw_zenoh_cpp` sidesteps DDS's reliance on multicast: the Pi
+runs a Zenoh router at a known address, and the remote machine connects to
+it directly (`client` mode) instead of relying on multicast/gossip to find
+it. The remote-side script sets `RMW_IMPLEMENTATION=rmw_zenoh_cpp` +
+`ZENOH_CONFIG_OVERRIDE`, restarts its local `ros2 daemon` (it caches
+discovery config from its last start), and opens RViz pre-configured with
+`ws/src/mserve_description/rviz/mserve.rviz`.
 
 ## Running on boot (systemd)
 
@@ -202,13 +224,14 @@ source /opt/ros/jazzy/setup.bash
 cd /ws
 colcon build \
   --packages-select interfaces utils mserve_drivechain mserve_base \
-    mserve_camera mserve_lidar mserve_display mserve_description \
-    lifecycle_manager launch btcpp_ros2_interfaces behaviortree_ros2 \
+    mserve_camera mserve_lidar mserve_display mserve_joystick mserve_sensehat \
+    mserve_description lifecycle_manager launch btcpp_ros2_interfaces \
+    behaviortree_ros2 \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
 `utils`, `mserve_drivechain`, `mserve_base`, `mserve_camera`, `mserve_lidar`,
-`mserve_display`, and `lifecycle_manager` all use `target_link_libraries()`
+`mserve_display`, `mserve_sensehat`, and `lifecycle_manager` all use `target_link_libraries()`
 with modern imported targets (`rclcpp::rclcpp`, `interfaces::interfaces`,
 etc. — message packages export a `<pkg>::<pkg>` aggregate target
 automatically via `rosidl_cmake_aggregate_target-extras.cmake`, no extra

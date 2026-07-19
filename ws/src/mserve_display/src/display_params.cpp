@@ -2,6 +2,7 @@
 
 #include "mserve_display/display_limits.hpp"
 #include "mserve_display/display_node.hpp"
+#include "mserve_display/framebuffer.hpp"
 
 namespace mserve_display {
 
@@ -20,7 +21,12 @@ void DisplayNode::loadParams()
   auto logger = get_logger();
 
   fb_device_ = mserve_utils::get_or_declare_param(
-    params, logger, "fb_device", std::string("/dev/fb0"), "framebuffer device");
+    params, logger, "fb_device", std::string(""),
+    "framebuffer device (empty = auto-detect the ELEGOO panel by driver name)");
+  if (fb_device_.empty()) {
+    fb_device_ = resolveFramebufferDevice();
+    RCLCPP_INFO(logger, "fb_device auto-detected: %s", fb_device_.c_str());
+  }
   fb_flip_180_ = get_parameter("fb_flip_180").as_bool();
   touch_device_name_match_ = mserve_utils::get_or_declare_param(
     params, logger, "touch.device_name_match", std::string("ADS7846 Touchscreen"),

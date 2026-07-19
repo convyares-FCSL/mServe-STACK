@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_sensehat</name>
+  <version>0.1.0</version>
+  <description>
+    Pi Sense HAT (2): 8x8 LED matrix, 5-way joystick, and LSM9DS1 IMU. Plain
+    rclcpp::Node, not lifecycle-managed — same reasoning as mserve_display
+    (no hardware "connect" step of its own; the kernel already owns the
+    framebuffer/joystick/I2C devices, this node just reads/writes them).
+
+    LED matrix shows drivechain connection status (X = disconnected, O =
+    connected); the joystick's center click calls mserve_drivechain's
+    connect service, same action as mserve_display's/mserve_joystick's
+    Connect button. IMU publishes sensor_msgs/Imu standalone — not yet fused
+    into mserve_base's odometry.
+
+    IMU access is via RTIMULib (vendored source, see
+    ws/src/third_party/README.md) — no apt package exists for this distro
+    (it's Raspberry Pi OS/Debian-only upstream).
+  </description>
+  <maintainer email="ca99896@gmail.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_srvs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>utils</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

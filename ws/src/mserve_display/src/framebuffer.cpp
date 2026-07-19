@@ -11,7 +11,34 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <dirent.h>
+
+#include <fstream>
+
 namespace mserve_display {
+
+std::string resolveFramebufferDevice(const std::string & driver_name, const std::string & fallback)
+{
+  DIR * dir = ::opendir("/sys/class/graphics");
+  if (dir == nullptr) {
+    return fallback;
+  }
+  std::string found;
+  while (dirent * entry = ::readdir(dir)) {
+    std::string fb_name = entry->d_name;
+    if (fb_name.rfind("fb", 0) != 0) {
+      continue;
+    }
+    std::ifstream name_file("/sys/class/graphics/" + fb_name + "/name");
+    std::string driver;
+    if (name_file && std::getline(name_file, driver) && driver == driver_name) {
+      found = "/dev/" + fb_name;
+      break;
+    }
+  }
+  ::closedir(dir);
+  return found.empty() ? fallback : found;
+}
 
 Framebuffer::Framebuffer(std::string device, bool flip_180)
 : device_(std::move(device)), flip_180_(flip_180) {}

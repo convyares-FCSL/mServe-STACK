@@ -10,6 +10,7 @@
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <tf2_ros/transform_broadcaster.hpp>
 
@@ -61,6 +62,11 @@ private:
   // mserve_drivechain motor_feedback in (odometry input)
   void on_motor_feedback(const interfaces::msg::DriveMotorFeedback::SharedPtr msg);
   rclcpp::Subscription<interfaces::msg::DriveMotorFeedback>::SharedPtr motor_feedback_sub_;
+
+  // mserve_sensehat IMU in (odometry yaw input — see UpdateOdometry's comment
+  // on odometry.use_imu_for_yaw for why gyro replaces wheel-derived yaw rate)
+  void on_imu(const sensor_msgs::msg::Imu::SharedPtr msg);
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 
   // Publishers — lifecycle-managed, exposed on blackboard as std::function
   void create_publishers();

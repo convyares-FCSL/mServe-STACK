@@ -55,6 +55,14 @@ BaseNode::CallbackReturn BaseNode::on_configure(const rclcpp_lifecycle::State &)
       "/mserve_drivechain/motor_feedback", rclcpp::QoS(10),
       [this](const DriveMotorFeedback::SharedPtr msg) { on_motor_feedback(msg); });
 
+    // QoS matches mserve_sensehat's imu publisher (rclcpp::SensorDataQoS()).
+    // topic_names.imu is pre-declared in declare_params() — see that
+    // function's comment for why this can't declare it itself here.
+    const auto imu_topic = get_parameter("topic_names.imu").as_string();
+    imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
+      imu_topic, rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::Imu::SharedPtr msg) { on_imu(msg); });
+
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     create_publishers();
@@ -118,6 +126,7 @@ BaseNode::CallbackReturn BaseNode::on_cleanup(const rclcpp_lifecycle::State &) {
   drive_client_.reset();
   cmd_vel_sub_.reset();
   motor_feedback_sub_.reset();
+  imu_sub_.reset();
   tf_broadcaster_.reset();
   cmd_vel_safe_pub_.reset();
   base_status_pub_.reset();
@@ -170,6 +179,10 @@ void BaseNode::on_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg) {
 
 void BaseNode::on_motor_feedback(const DriveMotorFeedback::SharedPtr msg) {
   blackboard_->set("motor_feedback", *msg);
+}
+
+void BaseNode::on_imu(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  blackboard_->set("imu", *msg);
 }
 
 void BaseNode::create_publishers() {

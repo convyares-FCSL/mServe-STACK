@@ -58,6 +58,43 @@
     /* LiDAR plot — full-width section below Drive/Camera, bigger than a mini preview */
     #scan-canvas { display: block; width: 100%; height: 320px; }
     #scan-placeholder { color: #64748b; font-size: 0.85rem; position: absolute; }
+    .not-available { color: var(--danger); font-size: 0.8rem; }
+
+    /* Compass — same widget/convention as sensehat.html, duplicated rather
+       than shared (no JS module system on this plain-script-tag site) */
+    .compass-wrap {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      gap: 12px; margin: 0 auto;
+    }
+    /* Bigger than sensehat.html's — this panel sits next to the 320px-tall
+       LiDAR plot, a 140px dial looked lost beside it. */
+    .compass-dial {
+      position: relative; width: 240px; height: 240px; border-radius: 50%;
+      background: var(--surface-2); border: 2px solid #475569;
+      flex-shrink: 0;
+    }
+    .compass-tick {
+      position: absolute; left: 50%; top: 10px; font-size: 1rem; color: #94a3b8;
+      transform: translateX(-50%);
+    }
+    .compass-ring {
+      position: absolute; inset: 0;
+      transform-origin: 50% 50%;
+      transition: transform 0.15s ease-out;
+    }
+    .compass-fixed-pointer {
+      position: absolute; left: 50%; top: 50%; width: 6px; height: 104px;
+      background: linear-gradient(var(--danger), var(--accent));
+      transform-origin: 50% 100%;
+      transform: translate(-50%, -100%);
+      border-radius: 3px;
+    }
+    .compass-center-dot {
+      position: absolute; left: 50%; top: 50%; width: 12px; height: 12px;
+      border-radius: 50%; background: var(--text); transform: translate(-50%, -50%);
+    }
+    .compass-readout { font-size: 1rem; color: #94a3b8; }
+    .compass-readout .feedback-value { font-size: 2.6rem; }
     .service-status {
       padding: 4px 12px;
       border-radius: 999px;
@@ -193,22 +230,55 @@
       </div>
     </section>
 
-    <!-- LiDAR ───────────────────────────────────────────────────────────── -->
+    <!-- LiDAR + Compass ────────────────────────────────────────────────── -->
     <section class="panel">
-      <h2>LiDAR</h2>
-      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
-        Top-down plot of <code>/scan</code>, robot at center, forward = up. Scroll to
-        zoom, or use the buttons. See <a href="lidar.html" style="color:var(--accent)">LiDAR →</a>
-        for lifecycle/parameter controls.
-      </p>
-      <div class="button-row" style="margin-bottom:10px;align-items:center">
-        <button id="btn-zoom-out" style="padding:6px 14px">−</button>
-        <button id="btn-zoom-in" style="padding:6px 14px">+</button>
-        <span id="zoom-label" style="color:#94a3b8;font-size:0.85rem">6.0 m</span>
-      </div>
-      <div id="scan-canvas-wrap">
-        <canvas id="scan-canvas"></canvas>
-        <div id="scan-placeholder">No scan — activate mserve_lidar first.</div>
+      <div class="sensor-grid">
+        <div>
+          <h2>LiDAR</h2>
+          <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+            Top-down plot of <code>/scan</code>, robot at center, forward = up. Scroll to
+            zoom, or use the buttons. See <a href="lidar.html" style="color:var(--accent)">LiDAR →</a>
+            for lifecycle/parameter controls.
+          </p>
+          <div class="button-row" style="margin-bottom:10px;align-items:center">
+            <button id="btn-zoom-out" style="padding:6px 14px">−</button>
+            <button id="btn-zoom-in" style="padding:6px 14px">+</button>
+            <span id="zoom-label" style="color:#94a3b8;font-size:0.85rem">6.0 m</span>
+          </div>
+          <div id="scan-canvas-wrap">
+            <canvas id="scan-canvas"></canvas>
+            <div id="scan-placeholder">No scan — activate mserve_lidar first.</div>
+          </div>
+        </div>
+
+        <div>
+          <h2>Compass</h2>
+          <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+            From <code>mserve_sensehat</code> (Sense HAT IMU). See
+            <a href="sensehat.html" style="color:var(--accent)">Sense HAT →</a> for
+            accel/gyro/magnetometer/environmental readings.
+          </p>
+          <p id="compass-uncalibrated-warning" class="not-available" style="display:none">
+            Uncalibrated — heading is unreliable until RTIMULibCal has been run (see
+            ws/src/mserve_sensehat/README.md).
+          </p>
+          <div class="compass-wrap">
+            <div class="compass-readout">
+              <div class="feedback-value" id="compass-heading">—</div>
+              <div class="feedback-unit">degrees (0 = N, 90 = E)</div>
+            </div>
+            <div class="compass-dial">
+              <div class="compass-ring" id="compass-ring">
+                <span class="compass-tick" data-base="translateX(-50%)" style="top:6px;left:50%">N</span>
+                <span class="compass-tick" data-base="translateY(-50%)" style="top:50%;left:auto;right:6px">E</span>
+                <span class="compass-tick" data-base="translateX(-50%)" style="bottom:6px;top:auto;left:50%">S</span>
+                <span class="compass-tick" data-base="translateY(-50%)" style="top:50%;left:6px">W</span>
+              </div>
+              <div class="compass-fixed-pointer"></div>
+              <div class="compass-center-dot"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

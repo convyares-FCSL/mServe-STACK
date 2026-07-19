@@ -53,6 +53,7 @@
 #include <interfaces/srv/drive.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "base_types.hpp"

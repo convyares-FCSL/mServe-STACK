@@ -16,11 +16,30 @@ confirmed-working values logged by mserve_display's Framebuffer class on
 this exact hardware/overlay (dtoverlay=tft35a,rotate=90) — this script
 isn't meant to be a general-purpose framebuffer tool.
 """
+import glob
 import struct
 import subprocess
 import sys
 
-FB_DEVICE = "/dev/fb0"
+# The ELEGOO panel's fbtft driver registers as "fb_ili9486" — look it up by
+# name instead of assuming /dev/fb0. Framebuffer *numbering* depends on
+# kernel probe order, which shifts when other framebuffer-registering
+# hardware is added: adding a Pi Sense HAT (its rpisense_fb driver, "RPi-
+# Sense FB") bumped this panel from fb0 to fb1 on this robot, silently
+# breaking a hardcoded /dev/fb0 with no error (the write just went to the
+# wrong device instead of failing).
+def find_fb_device(driver_name="fb_ili9486", fallback="/dev/fb0"):
+    for name_path in sorted(glob.glob("/sys/class/graphics/fb*/name")):
+        try:
+            with open(name_path) as f:
+                if f.read().strip() == driver_name:
+                    return "/dev/" + name_path.split("/")[-2]
+        except OSError:
+            continue
+    return fallback
+
+
+FB_DEVICE = find_fb_device()
 WIDTH = 480
 HEIGHT = 320
 # Matches mserve_display's fb_flip_180 param (mserve_params.yaml) — this

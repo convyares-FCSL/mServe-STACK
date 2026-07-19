@@ -212,7 +212,7 @@ if [[ "$USE_DOCKER" == true ]]; then
     colcon build \
       --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
         lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar mserve_display \
-        mserve_joystick $DOCKER_SLAM_PKG \
+        mserve_joystick mserve_sensehat $DOCKER_SLAM_PKG \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "

@@ -31,6 +31,7 @@ ws/src/
   mserve_lidar/         lifecycle node, RPLIDAR C1 (vendored SDK, no apt package exists)
   mserve_display/       ELEGOO 3.5" SPI touchscreen UI (plain node, not lifecycle-managed)
   mserve_joystick/      game controller teleop, consumes /joy (plain node, not lifecycle-managed)
+  mserve_sensehat/      Pi Sense HAT: LED matrix, joystick, IMU (vendored RTIMULib, plain node)
   mserve_description/   URDF robot model
   launch/               launch files (mserve_min.launch.py, mserve_slam.launch.py)
   lifecycle_manager/    BT.CPP-driven configure/activate/shutdown for drivechain/base
@@ -67,11 +68,12 @@ cd /ws
 colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
   launch mserve_description lifecycle_manager btcpp_ros2_interfaces \
   behaviortree_ros2 mserve_camera mserve_lidar mserve_display mserve_joystick \
+  mserve_sensehat \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 
 `utils`, `mserve_drivechain`, `mserve_base`, `mserve_camera`, `mserve_lidar`,
-`mserve_display`, and `lifecycle_manager` all use `target_link_libraries()`
+`mserve_display`, `mserve_sensehat`, and `lifecycle_manager` all use `target_link_libraries()`
 with modern imported targets (`rclcpp::rclcpp`, `<pkg>::<pkg>` aggregate
 targets for message packages, auto-generated via
 `rosidl_cmake_aggregate_target-extras.cmake`, no extra `find_package` needed)

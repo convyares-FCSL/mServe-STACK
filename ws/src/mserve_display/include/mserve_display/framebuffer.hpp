@@ -16,6 +16,17 @@ namespace mserve_display {
 // must never call present() per-primitive: a full-frame SPI flush is slow
 // (100ms+), so draw everything for one logical redraw into the back
 // buffer first, then present() once.
+// Looks up /sys/class/graphics/fb*/name for a framebuffer whose driver name
+// matches driver_name, returning "/dev/fbN". Framebuffer *numbering* is
+// probe-order-dependent, not fixed — it shifted on this robot (the ELEGOO
+// panel's fb_ili9486 driver went from fb0 to fb1) the moment a Pi Sense
+// HAT's own rpisense_fb driver was added ahead of it, silently breaking a
+// hardcoded device path with no error (writes just went to the wrong
+// device). Falls back to `fallback` if no match is found.
+std::string resolveFramebufferDevice(
+  const std::string & driver_name = "fb_ili9486",
+  const std::string & fallback = "/dev/fb0");
+
 class Framebuffer
 {
 public:

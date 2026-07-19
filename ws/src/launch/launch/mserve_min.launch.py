@@ -57,6 +57,10 @@ def generate_launch_description():
         'with_joystick', default_value='true',
         description='Start joy_node + mserve_joystick'
     )
+    with_sensehat_arg = DeclareLaunchArgument(
+        'with_sensehat', default_value='true',
+        description='Start mserve_sensehat (Pi Sense HAT: LED matrix, joystick, IMU)'
+    )
 
     joy_node = Node(
         package='joy',
@@ -166,6 +170,18 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_display')),
     )
 
+    # Not a lifecycle node — same reasoning as mserve_display above (no
+    # hardware "connect" step worth gating, just opens fbdev/evdev/i2c
+    # devices at startup). See mserve_sensehat/README.md.
+    sensehat = Node(
+        package='mserve_sensehat',
+        executable='sensehat_node',
+        name='mserve_sensehat',
+        output='screen',
+        parameters=[params_file],
+        condition=IfCondition(LaunchConfiguration('with_sensehat')),
+    )
+
     # Publishes /robot_description + /tf_static /tf from the URDF — needed so
     # a remote RViz (e.g. on Thor) can place camera_link_optical relative to
     # base_link. Not a lifecycle node — robot_state_publisher is a plain
@@ -185,11 +201,13 @@ def generate_launch_description():
         with_lidar_arg,
         with_display_arg,
         with_joystick_arg,
+        with_sensehat_arg,
         drivechain,
         base,
         camera,
         lidar,
         display,
+        sensehat,
         robot_state_publisher,
         joy_node,
         joystick,

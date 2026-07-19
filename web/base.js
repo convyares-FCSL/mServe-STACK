@@ -93,15 +93,17 @@ function stopDrive() {
   publishTwist(0, 0);
 }
 
-// Bind a D-pad button to start driving on press and stop on release, covering
-// both mouse and touch input.
 function bindHold(buttonId, getLinear, getAngular) {
   const btn = document.getElementById(buttonId);
-  const press = (e) => { e.preventDefault(); startDrive(getLinear(), getAngular()); };
+  const press = (e) => {
+    e.preventDefault();
+    btn.setPointerCapture(e.pointerId);
+    startDrive(getLinear(), getAngular());
+  };
   const release = (e) => { e.preventDefault(); stopDrive(); };
-  btn.addEventListener('mousedown', press);
-  btn.addEventListener('touchstart', press, { passive: false });
-  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach((evt) => btn.addEventListener(evt, release));
+  btn.addEventListener('pointerdown', press);
+  btn.addEventListener('pointerup', release);
+  btn.addEventListener('pointercancel', release);
 }
 
 bindHold('btn-fwd',   () =>  parseFloat(speedLinearSlider.value),  () => 0);
@@ -271,3 +273,31 @@ new ROSLIB.Topic({
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── Compass (from mserve_sensehat) ───────────────────────────────────────
+// Same widget/convention as sensehat.js's setCompassHeading — duplicated,
+// not shared (no JS module system on this plain-script-tag site). Ring
+// rotates -heading so true north stays correctly placed as the robot
+// turns; a fixed pointer at the top of the dial reads off the current
+// heading, matching a phone/car-nav compass.
+
+const elCompassRing = document.getElementById('compass-ring');
+const compassTickEls = [...document.querySelectorAll('#compass-ring .compass-tick')];
+
+function setCompassHeading(headingDeg) {
+  const heading = headingDeg ?? 0;
+  elCompassRing.style.transform = `rotate(${-heading}deg)`;
+  for (const el of compassTickEls) {
+    el.style.transform = `${el.dataset.base} rotate(${heading}deg)`;
+  }
+}
+setCompassHeading(0);
+
+new ROSLIB.Topic({
+  ros, name: '/mserve_sensehat/status', messageType: 'interfaces/msg/SensehatStatus',
+}).subscribe((msg) => {
+  document.getElementById('compass-heading').textContent = msg.imu_available ? `${Math.round(msg.heading_deg ?? 0)}°` : '—';
+  setCompassHeading(msg.heading_deg);
+  document.getElementById('compass-uncalibrated-warning').style.display =
+    (msg.imu_available && !msg.compass_calibrated) ? 'block' : 'none';
+});

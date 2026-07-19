@@ -12,10 +12,15 @@ The web UI connects to ROS 2 through `rosbridge_server` and uses `roslibjs`.
 - allow lifecycle transitions from the browser
 - publish `/cmd_vel` commands to drive the robot from the browser
 - preview the camera stream (`camera.html`, plus a smaller preview on `base.html`)
-- plot the live `/scan` (`lidar.html`)
+- plot the live `/scan` (`lidar.html`, plus a smaller version alongside a
+  live compass on `base.html`)
 - show live game controller state — raw `/joy` (sticks/triggers/D-pad/buttons),
   `/cmd_vel`, and `mserve_joystick`'s speed/angular scale (`joystick.html`;
   `mserve_joystick` isn't lifecycle-managed, so no lifecycle card there)
+- show live Pi Sense HAT state — temperature/pressure/humidity, accel/gyro/
+  magnetometer, a compass heading, joystick up/down/left/right/center, and
+  device availability (`sensehat.html`; `mserve_sensehat` isn't
+  lifecycle-managed either, same reasoning as `mserve_joystick`)
 
 ## Run
 
@@ -42,6 +47,7 @@ Then open:
 - `http://<pi-ip>:6240/camera.html`
 - `http://<pi-ip>:6240/lidar.html`
 - `http://<pi-ip>:6240/joystick.html`
+- `http://<pi-ip>:6240/sensehat.html`
 
 Press Ctrl+C to stop everything — this runs `lifecycle_manager`'s shutdown
 tree (deactivates the nodes) before tearing down rosbridge/web server.

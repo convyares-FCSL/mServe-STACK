@@ -129,6 +129,30 @@ note. `nav2_map_server` shows up in `slam_toolbox`'s `package.xml` as an
 map *serving*, a separate concern from SLAM *building* a map, and
 `slam_toolbox` has its own `save_map` service independent of it.
 
+## RTIMULib
+
+Used by `ws/src/mserve_sensehat` for the Pi Sense HAT's LSM9DS1 IMU. No apt
+package exists for this distro — `librtimulib-dev` is Raspberry Pi OS/
+Debian-only upstream (from `archive.raspberrypi.com`), not in Ubuntu's repos
+(this container's base image).
+
+```bash
+cd ws/src/third_party
+git clone --depth 1 https://github.com/RPi-Distro/RTIMULib.git
+```
+
+No patches needed. `mserve_sensehat/CMakeLists.txt` globs the relevant
+sources directly and builds them as a **static** library baked into the
+node — not `add_subdirectory`-ing RTIMULib's own CMakeLists (which builds a
+shared `.so`). Tried the shared route first; it built and even ran under a
+plain `ros2 run`, but broke under the real systemd/`run_stack.sh` launch
+path (`error while loading shared libraries: libRTIMULib.so.7`), because
+`run_stack.sh` deliberately sources only `interfaces`' `local_setup.bash`
+(see this file's Foxglove Bridge note below), so no other package's
+`install/lib/` — including a freshly vendored one's — ever lands on
+`LD_LIBRARY_PATH` at runtime. Static linking sidesteps that; no separate
+build step needed here either way, unlike BT.CPP/slam_toolbox above.
+
 ## navigation2 (Nav2) — removed 2026-07-18
 
 Was vendored + patched here (minimal 18-package set, `main` branch) as prep

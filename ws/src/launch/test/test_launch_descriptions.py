@@ -61,6 +61,7 @@ def test_bringup_includes_expected_nodes():
         ('mserve_camera', 'camera_node'),
         ('mserve_lidar', 'lidar_node'),
         ('mserve_display', 'display_node'),
+        ('mserve_sensehat', 'sensehat_node'),
         ('robot_state_publisher', 'robot_state_publisher'),
         ('lifecycle_manager', 'lifecycle_manager'),
     }

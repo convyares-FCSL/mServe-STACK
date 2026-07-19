@@ -17,9 +17,18 @@ mserve_base:
     drive:
       cmd_vel_timeout_ms: 500      # send a zero drive command if no /cmd_vel within this window
     feedback_rate: 10.0            # Hz — drive loop tick rate
+    odometry:
+      # Gyro (mserve_sensehat's IMU) replaces wheel-differential-derived yaw
+      # rate in UpdateOdometry when available — wheel slip during turns was
+      # the traced root cause of real ~30deg heading drift over one mapped
+      # SLAM loop with wheel-only odometry (docs/TODO.md). Falls back to
+      # wheel-derived yaw if the IMU is unavailable/stale.
+      use_imu_for_yaw: true
+      imu_max_age_ms: 500
     topic_names:
       cmd_vel: /cmd_vel            # standard ROS topic — Nav2 and joy publish here
       cmd_vel_safe: /mserve/cmd_vel_safe
+      imu: /mserve_sensehat/imu
     qos:
       commands:
         reliability: reliable
@@ -76,7 +85,12 @@ mserve_lidar:
 
 mserve_display:
   ros__parameters:
-    fb_device: /dev/fb0
+    # Empty = auto-detect the ELEGOO panel's framebuffer by driver name
+    # (fb_ili9486) instead of assuming /dev/fb0 — its numbering shifts when
+    # other framebuffer-registering hardware (e.g. a Pi Sense HAT) is added.
+    # See mserve_display::resolveFramebufferDevice / boot_splash.py's
+    # matching lookup.
+    fb_device: ""
     fb_flip_180: true
     touch:
       device_name_match: "ADS7846 Touchscreen"
@@ -129,7 +143,7 @@ mserve_joystick:
       # the one place that already owns it, rather than duplicated/guessed
       # at in each cmd_vel source (joystick, future Nav2, teleop, ...).
       linear_axis: left_stick_y     # joystick_map name (see joystick_params.yaml) driving linear.x
-      angular_axis: left_stick_x    # joystick_map name driving angular.z
+      angular_axis: right_stick_x    # joystick_map name driving angular.z
       deadzone: 0.1                 # ignore stick deflection below this magnitude
     speed:
       initial: 0.4        # m/s at full stick deflection
@@ -160,3 +174,23 @@ mserve_joystick:
     service_names:
       connect: /mserve_drivechain/connect
       display_set_mode: /mserve_display/set_display_mode
+
+mserve_sensehat:
+  ros__parameters:
+    imu_frame_id: sensehat_link   # not yet a real URDF frame
+    imu_publish_hz: 20.0
+    imu_settings_dir: /tmp/mserve_sensehat  # RTIMULib's own settings/calibration cache
+    joystick_poll_hz: 20.0
+    joystick_device_name_match: "Raspberry Pi Sense HAT Joystick"
+    status_publish_hz: 5.0        # ~/status (SensehatStatus) — web/sensehat.html
+    # Key (up/down/left/right/center) -> action. Same pattern as
+    # mserve_joystick's button_actions — only entries listed here are wired
+    # up. "connect" is currently the only supported action.
+    button_actions:
+      center: connect
+    topic_names:
+      imu: /mserve_sensehat/imu
+      status: /mserve_sensehat/status
+      drivechain_status: /mserve_drivechain/drive_status
+    service_names:
+      connect: /mserve_drivechain/connect

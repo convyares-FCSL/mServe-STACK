@@ -26,4 +26,7 @@ constexpr double kFeedbackRateMax = 50.0;  // Hz
 constexpr int kMotorRpmMax = 200;   // matches mserve_drivechain's DDSM115 ceiling (±200 RPM)
 constexpr int kMotorRpmMin = -200;
 
+constexpr int kImuMaxAgeMsMin = 50;    // ms
+constexpr int kImuMaxAgeMsMax = 5000;  // ms
+
 }  // namespace mserve_base

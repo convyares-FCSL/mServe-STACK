@@ -54,13 +54,19 @@ RUN apt-get update \
         ros-jazzy-tf2-geometry-msgs \
         ros-jazzy-message-filters \
         ros-jazzy-pluginlib \
-        # slam_toolbox's package.xml declares nav2_map_server as an
-        # exec_depend (map *serving*, not the SLAM/mapping this stack
-        # actually uses — save_map/serialize_map are slam_toolbox's own
-        # services, independent of it — see ws/src/third_party/README.md's
-        # slam_toolbox section) but colcon's scoped --packages-select build
-        # still needs it resolvable to build slam_toolbox at all. The apt
-        # binary satisfies that without vendoring/building all 18 Nav2
-        # packages from source just for this.
-        ros-jazzy-nav2-map-server \
+        # Full Nav2 stack, apt-installed — no vendoring needed. An earlier
+        # attempt (pre-Docker/Jazzy) vendored + patched an 18-package Nav2
+        # subset from source (see ws/src/third_party/README.md's Nav2
+        # section, "removed 2026-07-18") because the target distro at the
+        # time had no prebuilt packages; that's no longer true on Jazzy —
+        # every ros-jazzy-nav2-* package (bringup, amcl, costmap-2d,
+        # controller, planner, bt-navigator, behaviors, smac-planner, ...)
+        # is on packages.ros.org. This metapackage also satisfies
+        # slam_toolbox's package.xml nav2_map_server exec_depend (map
+        # *serving*, not the SLAM/mapping this stack actually uses —
+        # save_map/serialize_map are slam_toolbox's own services,
+        # independent of it), which colcon's scoped --packages-select build
+        # needs resolvable to build slam_toolbox at all — previously
+        # satisfied with just ros-jazzy-nav2-map-server on its own.
+        ros-jazzy-navigation2 \
     && rm -rf /var/lib/apt/lists/*

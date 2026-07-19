@@ -43,13 +43,30 @@ void BaseNode::declare_params()
     mserve_utils::make_double_range_descriptor(
       "Drive loop tick rate (Hz)", kFeedbackRateMin, kFeedbackRateMax));
 
+  // See UpdateOdometry's comment (base_bt_nodes.cpp) for why gyro yaw rate
+  // replaces the wheel-derived one when available — wheel slip was the
+  // traced root cause of real heading drift (~30deg over one mapped loop,
+  // see docs/TODO.md). imu_max_age_ms: fall back to wheel-derived yaw if
+  // mserve_sensehat's last message is older than this (node not running,
+  // IMU not detected, etc.) — same staleness-guard pattern as
+  // drive.cmd_vel_timeout_ms above.
+  this->declare_parameter("odometry.use_imu_for_yaw", true);
+  this->declare_parameter<int64_t>("odometry.imu_max_age_ms", 500,
+    mserve_utils::make_int_range_descriptor(
+      "Max age of the last IMU message before falling back to wheel-derived yaw (ms)",
+      kImuMaxAgeMsMin, kImuMaxAgeMsMax));
+
   // Pre-declare topic_names.*/qos.* here, before add_on_set_parameters_callback
   // is registered — declaring them lazily inside on_configure() would trigger
   // on_parameters() while the state is CONFIGURING, which rejects the change
-  // because it isn't UNCONFIGURED.
+  // because it isn't UNCONFIGURED. (Hit this exact failure first-hand adding
+  // topic_names.imu below — on_configure() called get_or_declare_param
+  // directly instead of pre-declaring here, and on_configure failed outright
+  // every time: "topic_names.imu requires reconfigure".)
   mserve_topics::cmd_vel(*this);
   mserve_topics::cmd_vel_safe(*this);
   mserve_qos::commands(*this);
+  this->declare_parameter("topic_names.imu", std::string("/mserve_sensehat/imu"));
 }
 
 void BaseNode::load_params()
@@ -66,6 +83,10 @@ void BaseNode::load_params()
 
   blackboard_->set("cmd_vel_timeout_ms", static_cast<int>(get_parameter("drive.cmd_vel_timeout_ms").as_int()));
   blackboard_->set("feedback_rate",      get_parameter("feedback_rate").as_double());
+
+  blackboard_->set("use_imu_for_yaw", get_parameter("odometry.use_imu_for_yaw").as_bool());
+  blackboard_->set(
+    "imu_max_age_ms", static_cast<int>(get_parameter("odometry.imu_max_age_ms").as_int()));
 }
 
 rcl_interfaces::msg::SetParametersResult BaseNode::on_parameters(
@@ -110,6 +131,12 @@ rcl_interfaces::msg::SetParametersResult BaseNode::on_parameters(
     }
     if (name == "drive.cmd_vel_timeout_ms" && blackboard_) {
       blackboard_->set("cmd_vel_timeout_ms", static_cast<int>(p.as_int()));
+    }
+    if (name == "odometry.use_imu_for_yaw" && blackboard_) {
+      blackboard_->set("use_imu_for_yaw", p.as_bool());
+    }
+    if (name == "odometry.imu_max_age_ms" && blackboard_) {
+      blackboard_->set("imu_max_age_ms", static_cast<int>(p.as_int()));
     }
     if (name == "feedback_rate" && blackboard_) {
       const double rate = p.as_double();

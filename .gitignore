@@ -1,6 +1,11 @@
 .env
 .env.local
 
+# mserve_sensehat's RTIMULib settings/calibration — machine/robot-specific
+# (calibrated against this exact unit's magnetic environment), not project
+# data. See docker-compose.yml's volumes: and ws/src/mserve_sensehat/README.md.
+sensehat_calibration/
+
 build/
 install/
 log/

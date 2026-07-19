@@ -236,8 +236,40 @@ BT::NodeStatus UpdateOdometry::tick()
   const double left_dist  = left_wheel_rad_s  * wheel_radius * dt;
   const double right_dist = right_wheel_rad_s * wheel_radius * dt;
 
-  const double delta_s     = (left_dist + right_dist) / 2.0;
-  const double delta_theta = (right_dist - left_dist) / wheel_separation;
+  const double delta_s           = (left_dist + right_dist) / 2.0;
+  const double delta_theta_wheel = (right_dist - left_dist) / wheel_separation;
+
+  // Prefer gyro-derived yaw rate (mserve_sensehat's IMU, angular_velocity.z)
+  // over wheel-differential-derived — wheel slip during turns (not just
+  // wear/imprecision, real slip) was the traced root cause of ~30deg
+  // heading drift over one mapped loop with wheel-only odometry (see
+  // docs/TODO.md); the gyro doesn't depend on wheel/floor contact at all.
+  // Falls back to the wheel-derived value above if the IMU is unavailable/
+  // stale (mserve_sensehat not running, chip not detected, cable unplugged
+  // mid-session, etc.) or disabled via odometry.use_imu_for_yaw — same
+  // graceful-degradation reasoning as every other optional-peripheral
+  // fallback in this stack.
+  double delta_theta = delta_theta_wheel;
+  if (bb_get(bb, std::string("use_imu_for_yaw"), true)) {
+    sensor_msgs::msg::Imu imu;
+    if (bb->get("imu", imu)) {
+      const int max_age_ms = bb_get(bb, std::string("imu_max_age_ms"), 500);
+      const double age_ms = (now - rclcpp::Time(imu.header.stamp)).seconds() * 1000.0;
+      if (age_ms >= 0.0 && age_ms <= static_cast<double>(max_age_ms)) {
+        // Negated — confirmed on real hardware (2026-07-19): commanding
+        // +0.5 rad/s (REP-103: positive = CCW/left turn viewed from above)
+        // produced a *negative* raw odom yaw change. The Sense HAT sits
+        // flat on top of the Pi, but the LSM9DS1 chip's own Z axis on this
+        // board apparently points the opposite way from the wheel-diff
+        // convention below (delta_theta_wheel is positive for a right-
+        // wheel-faster/CCW turn) — same category of real-hardware sign
+        // surprise as the joystick D-pad and motor directions elsewhere in
+        // this stack (see mserve_joystick/joystick_view.js's stick-sign
+        // comments), not something derivable from the datasheet alone.
+        delta_theta = -imu.angular_velocity.z * dt;
+      }
+    }
+  }
 
   double x = 0.0, y = 0.0, theta = 0.0;
   double left_wheel_angle = 0.0, right_wheel_angle = 0.0;
