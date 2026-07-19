@@ -27,8 +27,8 @@ if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   exit 1
 fi
 
-# Source the whole workspace, not just interfaces (as earlier versions of
-# this script did): safe here because we invoke the node directly via
+# Source the whole workspace, not just interfaces: safe here because we
+# invoke the node directly via
 # `ros2 run` below, not `ros2 launch foxglove_bridge foxglove_bridge_launch.xml`
 # — this repo has a package literally named "launch" (see
 # ws/src/launch/package.xml's comment) that shadows the real ROS 2 `launch`

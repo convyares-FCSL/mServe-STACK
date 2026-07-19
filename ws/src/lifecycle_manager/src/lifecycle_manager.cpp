@@ -12,7 +12,7 @@ namespace {
 BT::RosNodeParams lifecycleRosParams(const std::shared_ptr<rclcpp::Node>& node) {
     BT::RosNodeParams params(node);
     params.wait_for_server_timeout = std::chrono::seconds(2);
-    // 2s -> 10s (2026-07-19): slam_toolbox blocks its own executor
+    // 10s, not 2s: slam_toolbox blocks its own executor
     // synchronously deserializing a saved pose-graph at configure time
     // (--slam-local) — house_v2's ~7MB posegraph took long enough to miss a
     // 2s get_state response window. That timeout becomes a FAILURE from
@@ -218,14 +218,12 @@ void LifecycleManager::build() {
 
         if (!bringup_complete_) {
             auto status = tree_.tickOnce();
-            // Was `if (status != RUNNING)`, treating FAILURE the same as
-            // SUCCESS — confirmed on real hardware (2026-07-19): a genuine
-            // tree FAILURE (see lifecycleRosParams' comment on the
-            // server_timeout bump for the actual trigger) still logged
-            // "All nodes successfully activated" and set bringup_complete_,
-            // permanently halting further ticks with a lifecycle node stuck
-            // unconfigured. On FAILURE, deliberately *don't* set
-            // bringup_complete_: BT.CPP re-descends from the root on the
+            // FAILURE must not be treated like SUCCESS here — doing so logs
+            // "All nodes successfully activated" and sets bringup_complete_
+            // on a genuine tree FAILURE (see lifecycleRosParams' comment for
+            // a real trigger), permanently halting further ticks with a
+            // lifecycle node stuck unconfigured. On FAILURE, deliberately
+            // *don't* set bringup_complete_: BT.CPP re-descends from the
             // next tickOnce() for any node not currently RUNNING (including
             // RetryUntilSuccessful's own attempt counter), so leaving this
             // false lets the 100ms timer above retry the whole bringup tree

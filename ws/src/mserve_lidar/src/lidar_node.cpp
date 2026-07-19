@@ -217,10 +217,10 @@ void LidarNode::disconnect() {
 void LidarNode::capture_loop() {
   // Paced to a defined cycle rather than trusting grabScanDataHq() to
   // naturally rate-limit this loop by blocking — same reasoning as
-  // mserve_camera's capture_loop(), which needed this after a real
-  // hardware incident (2026-07-19): a loop around a supposedly-blocking
+  // mserve_camera's capture_loop(): a loop around a supposedly-blocking
   // hardware call still needs its own independent ceiling, since nothing
-  // guarantees the call keeps blocking normally under a device failure.
+  // guarantees the call keeps blocking normally under a device failure
+  // (mserve_camera's capture() demonstrably spins on a full core then).
   const auto target_period = std::chrono::duration<double>(1.0 / scan_rate_hz_);
   std::vector<sl_lidar_response_measurement_node_hq_t> nodes(8192);
   int consecutive_failures = 0;
@@ -263,20 +263,16 @@ void LidarNode::publish_scan(
   size_t count, rclcpp::Time stamp, double scan_duration)
 {
   // Deliberately NOT trimming leading/trailing no-return (dist_mm_q2 == 0)
-  // samples here — this used to shrink the published array to only the
-  // "real data" span, but that means angle_min/angle_max/array-size varied
-  // scan-to-scan (however many no-return samples happened to land at the
-  // edges that revolution). SLAM/Nav2 consumers (slam_toolbox's Karto
-  // backend confirmed, and Nav2's costmap raytracing works the same way)
-  // register a laser's geometry from the first scan they see and expect
-  // every later scan to match it exactly — a varying array size meant
-  // slam_toolbox silently rejected nearly every scan after the first
-  // ("LaserRangeScan contains N range readings, expected M"), so /map never
-  // updated. Fixed by always publishing the full raw buffer (indices
-  // 0..count-1) and representing no-return samples as `range = infinity`
-  // wherever they land, which is what the standard LaserScan convention
-  // (and the mid-scan case just below) already does — no data is lost,
-  // just no longer silently dropped from the array's edges.
+  // samples: trimming makes angle_min/angle_max/array-size vary
+  // scan-to-scan (however many no-return samples happen to land at the
+  // edges that revolution), and SLAM/Nav2 consumers (slam_toolbox's Karto
+  // backend confirmed, Nav2's costmap raytracing works the same way)
+  // register a laser's geometry from the first scan they see and silently
+  // reject every later scan that doesn't match it exactly
+  // ("LaserRangeScan contains N range readings, expected M"). So: always
+  // publish the full raw buffer (indices 0..count-1), representing
+  // no-return samples as `range = infinity` wherever they land — the
+  // standard LaserScan convention, same as the mid-scan case just below.
   const size_t node_count = count;
 
   auto scan = std::make_unique<sensor_msgs::msg::LaserScan>();

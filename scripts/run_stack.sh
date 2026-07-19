@@ -47,10 +47,10 @@ for arg in "$@"; do
   esac
 done
 UART_DEVICE="${ARGS[0]:-/dev/ttyAMA0}"
-# --nav2 is fully independent of --slam-map/--slam-local (switched
-# 2026-07-19 to AMCL + map_server for localization, keeping slam_toolbox's
-# role purely to building maps — see nav2_params.yaml's header comment for
-# why) — no auto-enable/require logic needed between them anymore.
+# --nav2 is fully independent of --slam-map/--slam-local: Nav2 localizes
+# via AMCL + map_server, and slam_toolbox's role is purely building maps
+# (see nav2_params.yaml's header comment for why) — no auto-enable/require
+# logic needed between them.
 
 # ── Detect native vs Docker ───────────────────────────────────────────────────
 if command -v ros2 >/dev/null 2>&1; then
@@ -378,8 +378,8 @@ sleep 1
 # present when SLAM was actually started) exists before calling it, instead
 # of unconditionally polling and letting rosbridge log an ERROR to /rosout
 # for every failed call_service on a service that was never expected to
-# exist this run. That was previously drowning out real errors in any panel
-# subscribed to /rosout (e.g. Foxglove's Log panel) — see web/lidar.js.
+# exist this run — which drowns out real errors in any panel subscribed to
+# /rosout (e.g. Foxglove's Log panel). See web/lidar.js.
 echo "Starting rosapi…"
 if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
@@ -514,9 +514,9 @@ if [[ "$SLAM" == true ]]; then
 fi
 
 # ── Start Nav2 (opt-in, --nav2 — AMCL + map_server, independent of SLAM) ───────
-# Fully independent of the SLAM Toolbox block above (switched to AMCL +
-# map_server for localization 2026-07-19 — see nav2_params.yaml's header
-# comment). Small delay just to let /odom (mserve_base) and /scan
+# Fully independent of the SLAM Toolbox block above (Nav2 localizes via
+# AMCL + map_server itself — see nav2_params.yaml's header comment).
+# Small delay just to let /odom (mserve_base) and /scan
 # (mserve_lidar) settle first, same reasoning as the SLAM block above, not
 # an actual dependency on it.
 if [[ "$NAV2" == true ]]; then

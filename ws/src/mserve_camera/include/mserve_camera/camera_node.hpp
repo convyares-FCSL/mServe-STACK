@@ -62,9 +62,9 @@ private:
 
   // VIDIOC_S_PARM (frame interval) — V4l2CameraDevice has no wrapper for it,
   // so this reaches the device directly via a second, independent open() of
-  // the same node. See camera_limits.hpp's kTargetFps — as of 2026-07-13 this
-  // is confirmed NOT to actually change the streamed rate; kept only because
-  // it's a harmless no-op on failure, pending a real fix.
+  // the same node. See camera_limits.hpp's kTargetFps — confirmed NOT to
+  // actually change the streamed rate; kept only because it's a harmless
+  // no-op on failure, pending a real fix.
   bool request_frame_rate(int fps);
 
   // YUYV -> BGR (+ 180-degree rotate if flip_180_) done once per frame in

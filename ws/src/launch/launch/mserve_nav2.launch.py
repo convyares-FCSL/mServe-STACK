@@ -5,11 +5,11 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 
-# AMCL + map_server for localization (switched 2026-07-19 from slam_toolbox's
-# own localization mode — see nav2_params.yaml's header comment for why:
+# AMCL + map_server for localization — deliberately not slam_toolbox's own
+# localization mode (see nav2_params.yaml's header comment for why:
 # slam_toolbox's job here is building maps, not the click-to-correct
 # /initialpose ergonomics AMCL provides for keeping the live scan aligned to
-# a saved map). slam_toolbox (--slam-map) and this launch file are now fully
+# a saved map). slam_toolbox (--slam-map) and this launch file are fully
 # independent — no --slam-local pairing needed, --nav2 works standalone.
 #
 # Costmaps aren't separate nodes here — nav2_costmap_2d runs embedded inside

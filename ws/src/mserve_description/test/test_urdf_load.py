@@ -22,10 +22,9 @@ def test_xacro_expands_to_expected_links_and_joints():
     joints = {joint.attrib['name']: joint.attrib['type'] for joint in robot.findall('joint')}
     lidar_sensor = robot.find("./gazebo[@reference='lidar_link']/sensor[@name='rplidar_c1']")
     # mserve.urdf.xacro includes the plain mserve_camera.xacro — the real
-    # hardware is a USB webcam (mserve_camera wraps v4l2_camera), not a
-    # depth/RGBD camera. mserve_depth_camera.xacro modeled the latter and
-    # was used briefly; confirmed against actual hardware 2026-07-19 and
-    # switched back — see mserve.urdf.xacro's own comment.
+    # hardware is a USB webcam (mserve_camera wraps v4l2_camera), not the
+    # depth/RGBD camera mserve_depth_camera.xacro models — see
+    # mserve.urdf.xacro's own comment.
     camera_sensor = robot.find("./gazebo[@reference='camera_link']/sensor[@name='pi_camera_module_3']")
 
     assert {

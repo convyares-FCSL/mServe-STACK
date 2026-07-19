@@ -2,7 +2,7 @@
 
 ## Purpose
 
-mServe is a ROS 2 C++ robot stack for learning real robot systems in detail. Originally built against ROS 2 Jazzy; as of the July 2026 SD-card migration it runs natively (no Docker) against ROS 2 Lyrical. The project should make the important parts visible: configuration, lifecycle state, command validation, motor communication, simulation, tests, and launch topology.
+mServe is a ROS 2 C++ robot stack for learning real robot systems in detail. It runs in Docker (ROS 2 Jazzy) on the Pi 5. The project should make the important parts visible: configuration, lifecycle state, command validation, motor communication, simulation, tests, and launch topology.
 
 This matters because the same ROS 2 habits transfer into more serious controls work, including hydrogen compression, dispensing, process control, and safety-adjacent automation. We should avoid hiding the useful learning behind large frameworks too early.
 
@@ -25,56 +25,32 @@ The first control stack should be small enough to read in one sitting and close 
 
 ## ESP32 Motor Boundary
 
-> **As implemented:** this boundary exists, but not as a separate ROS package.
-> The ESP32 is a physical board (onboard the Waveshare DDSM Driver HAT) running
-> its own firmware — `ws/src/mserve_drivechain/drive_firmware/` — and
-> `mserve_drivechain` owns the JSON-over-UART client side directly (see
-> `drivechain_uart.cpp`) rather than a dedicated `mserve_esp32` ROS package.
-> The boundary described below is real; the package split is not. See
-> `ws/src/mserve_drivechain/README.md` for the current, detailed writeup.
+The boundary is real but is not a separate ROS package. Three layers, each
+owning one thing:
 
-Create a dedicated C++ package named `mserve_esp32`.
+`mserve_base` owns robot-level motion logic:
 
-`mserve_base` should own robot-level motion logic:
+- Subscribe to `/cmd_vel`, validate/clamp commands.
+- Convert body velocity into per-motor RPM (diff-drive kinematics, both
+  directions — feedback + IMU integrate into `/odom`).
+- Publish drive status; decide whether motion is allowed based on lifecycle
+  state and safety rules.
 
-- Subscribe to velocity commands.
-- Validate/clamp commands.
-- Convert body velocity into wheel targets.
-- Publish drive status.
-- Decide whether motion is allowed based on lifecycle state and safety rules.
+`mserve_drivechain` owns transport and protocol (the planned `mserve_esp32`
+package, folded in):
 
-`mserve_esp32` should own transport and protocol:
+- Open and manage the UART connection (`drivechain_uart.cpp`, JSON over
+  `/dev/ttyAMA0`).
+- Send per-motor commands, parse feedback/status, detect comms timeouts,
+  fail safe (zero motors) when the ESP32 disappears.
 
-- Open and manage the ESP32 connection.
-- Send wheel commands to the motor controller.
-- Parse wheel feedback, heartbeat, fault, and battery/status packets.
-- Publish ESP32 status and wheel feedback.
-- Detect comms timeouts.
-- Fail safe when the ESP32 disappears.
+The ESP32 itself is a physical board (onboard the Waveshare DDSM Driver HAT)
+running its own firmware — `ws/src/mserve_drivechain/drive_firmware/` — and
+owns the raw DDSM115 binary motor protocol. The Pi side only ever speaks
+JSON. See `ws/src/mserve_drivechain/README.md` for the detailed writeup.
 
-This keeps control logic testable without hardware and keeps serial/protocol code isolated.
-
-Initial likely topics:
-
-```text
-/cmd_vel
-/mserve/motor/wheel_command
-/mserve/motor/wheel_feedback
-/mserve/base/status
-/mserve/esp32/status
-/mserve/events
-```
-
-Initial config should include:
-
-```text
-hardware.esp32.transport
-hardware.esp32.port
-hardware.esp32.baudrate
-hardware.esp32.heartbeat_timeout_ms
-hardware.esp32.command_timeout_ms
-hardware.esp32.protocol_version
-```
+This keeps control logic testable without hardware and keeps serial/protocol
+code isolated.
 
 ## Robot Description Philosophy
 
@@ -125,6 +101,36 @@ Simulation should teach the same boundaries as hardware:
 - Simulated wheel feedback should use the same topic shape as hardware where practical.
 - Nav2 should send normal `/cmd_vel`.
 - The base node should still be the safety/command boundary.
+
+## C++ Package Conventions
+
+Each C++ package follows:
+
+```text
+package_name/
+├── CMakeLists.txt
+├── package.xml
+├── include/package_name/
+├── src/           node.cpp, params, BT nodes, main.cpp
+└── test/          GTest for ROS-free logic, launch_testing for graph behavior
+```
+
+Rules:
+
+- C++17; header/source separation; smart pointers; `main()` wrapped in
+  `try/catch`.
+- Keep ROS-free logic separable and unit-tested (kinematics, clamping,
+  packet codecs, timeout logic).
+- Lifecycle nodes for hardware/motion subsystems; plain nodes only for
+  operator-facing peripherals (display, joystick, Sense HAT).
+- Callback groups for blocking or long-running work.
+- `target_link_libraries()` with modern imported targets, not
+  `ament_target_dependencies()` — a portability choice; keep new packages
+  consistent.
+- Hardware nodes wrap the vendor's device/driver class directly, never the
+  vendor's whole node — an upstream driver node is a plain node and can't be
+  driven by `lifecycle_manager`.
+- Register composable nodes only after standalone behavior is clear.
 
 ## Future Systems
 

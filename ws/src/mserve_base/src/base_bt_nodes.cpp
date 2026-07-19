@@ -256,7 +256,7 @@ BT::NodeStatus UpdateOdometry::tick()
       const int max_age_ms = bb_get(bb, std::string("imu_max_age_ms"), 500);
       const double age_ms = (now - rclcpp::Time(imu.header.stamp)).seconds() * 1000.0;
       if (age_ms >= 0.0 && age_ms <= static_cast<double>(max_age_ms)) {
-        // Negated — confirmed on real hardware (2026-07-19): commanding
+        // Negated — confirmed on real hardware: commanding
         // +0.5 rad/s (REP-103: positive = CCW/left turn viewed from above)
         // produced a *negative* raw odom yaw change. The Sense HAT sits
         // flat on top of the Pi, but the LSM9DS1 chip's own Z axis on this

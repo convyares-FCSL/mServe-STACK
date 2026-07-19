@@ -14,14 +14,12 @@ constexpr int kHeightMax = 1080;
 // that only supports a lower rate is requested, the driver just clamps to
 // its actual max — this is a request, not a guarantee.
 //
-// KNOWN NOT TO WORK (2026-07-13): verified against real hardware that the
-// second-fd approach in request_frame_rate() does not actually change the
-// streamed rate (still ~12.6Hz measured after this "succeeds"). The
-// assumption that frame interval is UVC device-level, not per-fd, was wrong
-// for this driver — VIDIOC_S_PARM on a second fd is silently a no-op for the
-// fd that actually calls STREAMON. See docs/todo.md. Left in place because
-// it's harmless (still just a WARN on failure), not because it's believed
-// to work.
+// KNOWN NOT TO WORK (verified on real hardware): the second-fd approach in
+// request_frame_rate() does not change the streamed rate (~12.6Hz measured
+// after it "succeeds") — frame interval is per-fd state for this driver, so
+// VIDIOC_S_PARM on a second fd is silently a no-op for the fd that actually
+// calls STREAMON. See docs/camera/todo.md. Left in place because it's a
+// harmless WARN on failure, not because it's believed to work.
 constexpr int kTargetFps = 30;
 
 // JPEG quality for camera/image_raw/compressed (cv::IMWRITE_JPEG_QUALITY).

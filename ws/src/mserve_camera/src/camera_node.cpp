@@ -140,12 +140,10 @@ CameraNode::CallbackReturn CameraNode::on_shutdown(const rclcpp_lifecycle::State
 // ==============================================================================
 
 bool CameraNode::request_frame_rate(int fps) {
-  // NOTE: verified 2026-07-13 that this does NOT actually change the
-  // streamed rate on this hardware/driver, despite the ioctl reporting
-  // success — see camera_limits.hpp's kTargetFps comment. Kept as a no-op
-  // pending a real fix; a second, independent open() of the device node
-  // apparently doesn't share frame-interval negotiation with the fd that
-  // actually calls camera_->start() (VIDIOC_STREAMON) on this driver.
+  // Verified on real hardware: this does NOT actually change the streamed
+  // rate on this driver, despite the ioctl reporting success — see
+  // camera_limits.hpp's kTargetFps comment. Kept as a harmless no-op
+  // pending a real fix.
   const int fd = ::open(device_.c_str(), O_RDWR);
   if (fd < 0) {
     RCLCPP_WARN(get_logger(), "Could not reopen %s to set frame interval: %s",
@@ -211,7 +209,7 @@ sensor_msgs::msg::CompressedImage::UniquePtr CameraNode::encode_compressed(
 void CameraNode::capture_loop() {
   // Paced to a defined cycle rather than trusting V4l2CameraDevice::
   // capture() to naturally rate-limit this loop by blocking. It normally
-  // does — but confirmed on real hardware (2026-07-19) that under a
+  // does — but confirmed on real hardware that under a
   // sustained device failure, a *single* call can internally spin logging
   // "Error dequeueing buffer" far faster than any camera frame rate
   // (millions of lines / a full CPU core pinned within minutes), without
@@ -261,15 +259,12 @@ void CameraNode::capture_loop() {
       auto info = camera_info_;
       info.header.stamp = raw_yuyv->header.stamp;
 
-      // Gated on actual subscriber count, not just lifecycle-active state —
-      // is_activated() alone was true (and this work ran) every frame
-      // regardless of whether anyone was listening. In normal operation
-      // (no `--foxglove`) *nothing* subscribes to image_raw/compressed —
+      // Gated on actual subscriber count, not just lifecycle-active state.
+      // In normal operation *nothing* subscribes to image_raw/compressed —
       // both web UI pages stream image_raw itself, and web_video_server
-      // does its own MJPEG transcode from that, so encode_compressed()'s
-      // full JPEG encode (the most expensive single step in this loop) was
-      // pure waste every single frame. Confirmed 2026-07-19 while chasing
-      // CPU headroom for Nav2.
+      // does its own MJPEG transcode from that — and encode_compressed()'s
+      // full JPEG encode is the most expensive single step in this loop,
+      // so encoding without a subscriber is pure waste.
       const bool want_compressed =
         compressed_pub_->is_activated() && compressed_pub_->get_subscription_count() > 0;
       const bool want_raw =

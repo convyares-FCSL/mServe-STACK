@@ -1,62 +1,90 @@
 # TODO
 
+Statements of what's next, not history — the story of how things got done
+lives in `git log`.
+
 ## Next
-- [ ] Add battery monitoring.
 
-- [ ] Add Nav2 launch / `mserve_navigation`, using the SLAM Toolbox choice above (real localization/nav testing needs it; sim/Gazebo work on the Thor doesn't). `ros-jazzy-navigation2` is now apt-installed in the `Dockerfile` (2026-07-19) — replaced an earlier from-source vendor (18-package subset + 2 patches) that predated the Docker/Jazzy revert, when the target distro had no prebuilt Nav2 packages; Jazzy has the full set on packages.ros.org, so no vendoring/patching needed this time. Package/launch file itself not started yet.
+- [ ] Command arbitration + e-stop gate in `mserve_base`. Nav2 and
+  `mserve_joystick` both publish to `/cmd_vel` with no priority between them —
+  last publisher wins. `mserve_base` is the designed home for source
+  arbitration and an e-stop.
+- [ ] Fold drivechain hardware connect/disconnect into lifecycle
+  activate/deactivate — remove the separate `~/connect` service and update all
+  callers (web UI, joystick, Sense HAT) to drive lifecycle transitions instead.
+- [ ] Continue Nav2 tuning: AMCL odometry noise model (`alpha1`–`alpha5` still
+  at Nav2 defaults), velocity caps (deliberately conservative), controller
+  behavior. Doorway passage is solved; the rest is untouched.
+- [ ] Named destinations ("go to the kitchen") — map map-frame poses to names,
+  accept a name, send the Nav2 goal.
+- [ ] Add battery monitoring (ESP32 reports it; nothing consumes it yet).
+- [ ] Tie battery level into the Face screen's eyes — droop/half-close as
+  `drivechain_status.battery_level` falls, fully close at a low threshold.
+  `mserve_display` already subscribes to `drivechain_status`; the eyelid shapes
+  exist in `scripts/boot_splash.py`. Needs render logic in
+  `renderFace`/`screens.cpp`.
+- [ ] Fix `mserve_camera` frame rate — stuck at ~12.6Hz vs the format table's
+  30Hz. Per-fd `VIDIOC_S_PARM` is a verified no-op on this driver; a different
+  mechanism is needed. See `docs/camera/todo.md`.
+- [ ] Add mic capture — re-evaluate `audio_common` now that the platform is
+  Docker + Jazzy (the old blocker was a missing GStreamer dependency on the
+  since-reverted native Lyrical install; it may simply work now). Fallback:
+  hand-rolled ALSA capture node. See `docs/camera/todo.md`.
+- [ ] Add speaker output.
+- [ ] Add real ESP32 packet protocol (binary framing/CRC to replace JSON once
+  the protocol is stable).
+- [ ] Add hardware safety behavior on the ESP32 for Pi comms loss.
+- [ ] Consider switching `slam_toolbox` from vendored+patched source to the
+  apt package (`ros-jazzy-slam-toolbox`). Deliberately not done: our two
+  patches fix genuine upstream bugs (Boost serialization gap breaking
+  `serialize_map`; a `message_filters` constructor mismatch) and it's unknown
+  whether the apt build has them. If revisited, re-test `save_map` **and**
+  `serialize_map` before trusting it — the Boost bug only breaks the latter.
+  See `ws/src/third_party/README.md`.
+- [ ] Add arm/manipulation package (`mserve_manipulation`) — next major phase
+  after navigation, not in parallel. `arm_mount_link` is already a reserved
+  frame in the URDF. Arm likely controlled by a separate Pi.
+- [ ] Add AI package — image detection first.
+- [ ] Add AI commands — track / go-to-position on top of detection + Nav2.
+- [ ] Fill the unit-test gap: diff-drive math, command clamping,
+  timeout/fail-safe, QoS/validation — `mserve_base/test/` is empty; only
+  `utils/test/test_config.cpp` and
+  `mserve_drivechain/test/test_packet_codec.cpp` exist.
+- [ ] Revisit `ros2_control` as a comparison exercise, not a rewrite.
+- [ ] Consider composable-node registration / process-plane split (control /
+  motor comms / sensors / nav) once the standalone nodes are stable.
 
-- [] Update drivechain so connect to hardware and disconnect is a function of lifecycle activate and deactive not a seperate function (update all call to existing to activate and deactive lifecycle now).
+## Deferred
 
-- [ ] Consider switching `slam_toolbox` from vendored+patched source (`ws/src/third_party/slam_toolbox/`) to the apt package (`ros-jazzy-slam-toolbox`, confirmed available 2026-07-19, same story as Nav2 above). Deliberately **not** done yet, unlike Nav2 — our two patches (`ws/src/third_party/README.md`'s slam_toolbox section) fix genuine upstream bugs (a Boost serialization gap breaking `serialize_map`, a `message_filters` constructor mismatch), not just distro-version drift, and it's unknown whether the apt build already has them fixed. The vendored+patched build is what `house_v2`'s save/serialize and `--slam-local` were just verified against (2026-07-19) — switching now risks silently re-breaking `serialize_map` right after getting it working. If revisited: apt-install `ros-jazzy-slam-toolbox`, then explicitly re-test `save_map` *and* `serialize_map` (not just mapping) before trusting it, since the Boost bug only affects the latter.
-- [ ] Tie battery level into the Face screen's eyes — droop/half-close them as `drivechain_status.battery_level` falls, fully close at some low threshold (a "sleepy" look), same eyelid shapes `scripts/boot_splash.py` already draws for its closed-eyes boot state. `mserve_display` already subscribes to `drivechain_status`, just needs the render logic in `renderFace`/`screens.cpp`.
-- [ ] Mic (`audio_common`) — `ros-lyrical-audio-capture` depends on `libgstreamer-plugins-good1.0-0`, which doesn't exist in this Ubuntu Resolute release's repos at all. Deferred; hand-rolling an ALSA capture node is the likely path if revisited (see `docs/camera/todo.md`).
-- [ ] Add in speaker.
-- [ ] `mserve_camera` frame rate still stuck at ~12.6Hz, not the format table's 30Hz. Attempted fix (second independent `open()` issuing `VIDIOC_S_PARM`) verified on real hardware (2026-07-13) to be a silent no-op — assumption that frame interval is UVC device-level rather than per-fd was wrong for this driver. Left in place harmlessly; real fix needs a different mechanism. See `docs/camera/todo.md`.
-- [ ] Add real ESP32 packet protocol.
-- [ ] Add hardware safety behavior for ESP32 comms loss.
-- [ ] Add arm/manipulation package (`mserve_manipulation`) — deliberately sequenced as the next major phase *after* `mserve_navigation` lands, not scaffolded in parallel. `arm_mount_link` is already a reserved frame in the URDF. See `docs/packages.md`. - Update seperate pi to control arm.
-- [ ] Add AI package - with image detection
-- [ ] Add ai commands - for track or go to position.
-- [ ] Revisit `ros2_control` later as a comparison exercise, not as the first implementation.
+- [ ] Port Zenoh remote-RViz (`rmw_zenoh_cpp`, for RViz on the Thor across
+  Tailscale) to the Docker + Jazzy setup — the `scripts/remote/` scripts
+  assume native `ros2` on PATH. Likely needs `network_mode: host` in
+  `docker-compose.yml`; DDS/Zenoh multicast discovery doesn't traverse
+  Docker's bridge network cleanly. Same-LAN visualization is already covered
+  by Foxglove Bridge, which is why this can wait.
 
+## Done
 
+One line each, newest first. Details: `git log` and the per-package READMEs.
 
-## DEFERRED
-- [ ] Port Zenoh remote-RViz (`rmw_zenoh_cpp`, used for viewing RViz on the Thor over the network) to the Docker + Jazzy setup — still native-only from before the platform revert back to Docker. Likely needs `network_mode: host` in `docker-compose.yml` instead of the default bridge network, since DDS/Zenoh discovery/multicast doesn't traverse Docker's bridge networking cleanly — a real decision, not copy-paste. Carried over from `transfer.md` (deleted — its other checklist items are all done: Docker+Jazzy revert, camera/lidar/SLAM/Foxglove Bridge all confirmed working in Docker, systemd unit committed).
-
-## DONE
-- [x] Scaffold `scripts/` hygiene and build helpers.
-- [x] Scaffold `mserve_interfaces` with central config and first messages.
-- [x] Scaffold `mserve_utils` with config/QoS validation tests.
-- [x] Scaffold `mserve_base` lifecycle node.
-- [x] Scaffold `mserve_drivechain` lifecycle node in dry-run mode.
-- [x] Scaffold `launch` (planned as `mserve_bringup`) minimal launch.
-- [x] Decide first ESP32 transport: **UART** (`/dev/ttyAMA0`, Pi 5 GPIO header), JSON protocol. Implemented in `mserve_drivechain/src/drivechain_uart.cpp`, not a separate transport-agnostic layer.
-- [x] Scaffold `lifecycle_manager` (BT.CPP + `behaviortree_ros2`, vendored at `ws/src/BehaviorTree.ROS2/`) to drive `mserve_drivechain` + `mserve_base` through configure/activate on bringup and a graceful shutdown tree on SIGINT/SIGTERM. Wired into `launch/mserve_min.launch.py`; `run_stack.sh` no longer drives lifecycle transitions itself. See `ws/src/lifecycle_manager/README.md` + `docs/todo.md`.
-- [x] Remove leftover `hyfleet_subsystem`-derived scaffolding not used by mserve: `mserve_base_archive/`, and the booster/compression msgs+srvs (`ControlBooster`, `ControlCompressor`, `SystemState`, `BoosterCmd`, `CompressorCmd`, `DispenserCmd`, `GasRouterCmd`, `SetMode`, `Cmd`) from `interfaces/`.
-- [x] Add `mserve_camera` package — lifecycle node wrapping `v4l2_camera`'s `V4l2CameraDevice` directly (USB UVC webcam, YUYV @ 640x480), publishing standard `sensor_msgs/Image` + `CameraInfo`. Wired into `lifecycle_manager` bringup/shutdown and `mserve_min.launch.py`. Web UI: `web/camera.html` (lifecycle/params/image/camera_info/log) via `ros-lyrical-web-video-server` (MJPEG transcode, port 8080 — raw YUYV isn't browser-decodable directly), plus a live image preview added to `web/base.html`. See `ws/src/mserve_camera/README.md` + `docs/todo.md`.
-- [x] Add `robot_state_publisher` to `mserve_min.launch.py`, publishing `/robot_description` + TF from `mserve_description`'s URDF — needed for a remote RViz (Thor) to place `camera_link_optical` relative to `base_link`. Verified working over the LAN (and separately over a `rmw_zenoh_cpp` router across Tailscale — see `docs/session.md`).
-- [x] Add real wheel odometry in `mserve_base` — `UpdateOdometry`/`PublishOdometry` BT nodes integrate `/odom` (`nav_msgs/Odometry`), broadcast `odom -> base_link` TF, and publish `/joint_states` for `left_wheel_joint`/`right_wheel_joint` (fixing the RViz TF errors on those two frames). Integrates from wheel *velocity*, not position — `mserve_drivechain`'s DDSM115 protocol never reports position in the speed-loop mode `mserve_base` actually drives in. Along the way, fixed a real bug: `mserve_drivechain` sign-corrected `velocity_rpm` for physically-reversed motors but not `position_rad`, and never populated `DriveMotorFeedback.stamp` at all. Verified in both `--sim` and on real hardware (short bounded test drive). See `ws/src/mserve_base/README.md`.
-- [x] Decide whether first robot model is plain URDF or minimal Xacro — Xacro, fully in use (`ws/src/mserve_description/urdf/mserve.urdf.xacro` + `mserve_core.xacro`/`mserve_camera.xacro`/`mserve_depth_camera.xacro`/`mserve_lidar.xacro`/`mserve_gazebo.xacro`).
-- [x] Reorganize all scripts into a single flat `scripts/` folder (previously split across `web/*.sh` and numbered `scripts/0N_*` phase folders). Renamed the main entry point `run_drivechain_hw.sh` → `run_stack.sh` (it now launches the whole stack — drivechain, base, camera, robot_state_publisher, lifecycle_manager — not just the drivechain). Updated `mserve-drivechain.service`'s `ExecStart`, and every doc reference across the repo. Verified end-to-end in `--sim` mode: both nodes reach `active`, web UI serves correctly, and Ctrl+C/SIGINT cleanly tears everything down with zero leftover processes. See `scripts/README.md` for the current layout.
-- [x] Add `mserve_lidar` package (RPLIDAR C1) — lifecycle node wrapping Slamtec's RPLIDAR SDK `sl::ILidarDriver` directly. No apt package for `rplidar_ros` exists on this distro (unlike `v4l2_camera`), and upstream's own build has no reusable library target either, so `third_party/rplidar_sdk` vendors the SDK sources (BSD-licensed, serial-only, modern `sl::` API only) straight into the package. Publishes standard `sensor_msgs/LaserScan` (`scan`). Wired into `lifecycle_manager` bringup/shutdown and `mserve_min.launch.py`. Web UI: `web/lidar.html` (lifecycle/params/live 2D scan plot via canvas/log). URDF/Gazebo side (`mserve_lidar.xacro`, `mserve_gazebo_bridge.yaml`) was already scaffolded — node defaults (`lidar_link` frame, `scan` topic, 0.05-12.0m range) were matched to that, not built from scratch. Verified end-to-end against a physical RPLIDAR C1 (`/dev/ttyUSB0`): configure/activate/deactivate/cleanup and shutdown-from-active all clean, `/scan` streaming at ~10.3Hz with real ranges. See `docs/lidar/todo.md`.
-- [x] Add launch tests for minimal bringup — `ws/src/launch/test/test_launch_descriptions.py` (was a dead stub, never wired into `BUILD_TESTING`; now checks `mserve_min.launch.py` actually declares `backend`/`uart_device` args and wires up all six expected package/executable pairs, including `lifecycle_manager` inside its `TimerAction`).
-- [x] Add robot description and TF smoke test — `ws/src/mserve_description/test/test_tf_smoke.py`, a `launch_testing` test that boots `robot_state_publisher` alone (no hardware, no other mServe node) with the real xacro and checks `/tf_static` actually carries every fixed-joint frame. `test_urdf_load.py` already covered the xacro structurally but not runtime TF. Along the way, running the suite for the first time (`BUILD_TESTING` had never actually been turned on in this repo before — every documented build command uses `-DBUILD_TESTING=OFF`) surfaced that `test_urdf_load.py` itself was already broken: it asserted the old `mserve_camera.xacro` sensor (`pi_camera_module_3`, topic `camera/image_raw`), but `mserve.urdf.xacro` has included `mserve_depth_camera.xacro` instead for a while (`depth_camera` sensor, topic `camera`) — fixed.
-- [x] Add Foxglove Bridge support — `scripts/run_foxglove_bridge.sh` (standalone, mirrors `run_rosbridge.sh`), `ws://<pi-ip>:8765`. Debugged two collisions along the way: (1) sourcing the full workspace `install/setup.bash` breaks `ros2 launch`'s XML frontend, because this repo has a package literally named `launch` that shadows the real `launch` framework package on the ament index — fixed by sourcing only `install/interfaces/share/interfaces/local_setup.bash`. (2) `set -u` in the script aborts immediately when sourcing ROS's `setup.bash` (references an unset var internally) — matched `run_stack.sh`'s existing `set -eo pipefail` (no `-u`).
-- [x] Add `camera/image_raw/compressed` (JPEG, `sensor_msgs/CompressedImage`) — raw YUYV was saturating the WebSocket bridges (foxglove_bridge/rosbridge multiplex every topic over one connection), queuing ahead of small time-critical messages like `/tf` and causing the robot model to visibly lag ~12s behind teleop in Foxglove even though driving itself felt instant. Hand-rolled (`cv::cvtColor` + `cv::imencode`), not via `image_transport`'s plugin system — see `ws/src/mserve_camera/README.md`'s "Compressed image" section for why. **Verified on real hardware**: switching Foxglove's Image panel to the compressed topic dropped the lag from ~12s to ~1s.
-- [x] SLAM Toolbox (`async_slam_toolbox_node`) brought under BT-managed lifecycle coverage, matching drivechain/base/camera/lidar — a second `lifecycle_manager` instance (node name `slam_lifecycle_manager`), launched from `mserve_slam.launch.py`, drives it through configure/activate on bringup and a real shutdown tree on SIGINT. `lifecycle_manager` gained `bringup_tree_file`/`shutdown_tree_file` params so a second instance can point at its own tree pair (`trees/slam_bringup.xml`/`trees/slam_shutdown.xml`) without touching the always-on `bringup.xml`/`shutdown.xml`. Replaces the previous plain `launch_ros` `ChangeState`/`OnStateTransition` event handlers, which had **no shutdown path at all** — Ctrl+C just SIGTERM'd `slam_toolbox` with no deactivate/cleanup transition. Verified on real hardware: normal (non-SLAM) bringup/shutdown unaffected, `--slam` bringup reaches `active` via the BT, and Ctrl+C runs the shutdown tree (`active → shutdown_active → finalized`) before the process exits. `foxglove_bridge` was considered too but isn't a lifecycle node (no `change_state`/`get_state` services) — its existing plain start/pkill handling in `run_stack.sh` is already the right approach. See `ws/src/lifecycle_manager/README.md`'s "Running more than one instance".
-- [x] Gazebo sim (`scripts/sim/launch_mserve_description_gazebo.sh`) verified end-to-end on the Thor (2026-07-13) — robot spawns, RViz shows RobotModel/TF/LaserScan/camera image all populated correctly. Along the way, fixed a build regression: declaring `<exec_depend>lifecycle_manager</exec_depend>` in `ws/src/launch/package.xml` (added for the SLAM BT-coverage work above) broke this script's isolated `mserve_description`-only host build, because `mserve_description`'s own `<exec_depend>launch</exec_depend>` (meaning the framework) gets ambiguously resolved by colcon to this repo's local `launch` package — see that package's `package.xml` comment for the full explanation. Harmless `gz_frame_id`-not-defined-in-SDF warnings in the log are cosmetic (Gazebo copies the element through regardless).
-- [x] Add `mserve_display` package (ELEGOO 3.5" SPI touchscreen) — Face (eyes tracking `cmd_vel_safe` angular.z, eyebrows added for a clearer direction cue)/Menu/Info/Calibrate screens, `~/set_display_mode` service, boot-splash before the Docker/colcon startup delay. See `ws/src/mserve_display/README.md`.
-- [x] Decide SLAM Toolbox vs. AMCL — chose SLAM Toolbox (`ws/src/third_party/slam_toolbox/`, vendored source), running and verified building `/map` live in Foxglove, first map saved. See `docs/plan.md`'s Current Open Questions for the original tradeoff notes.
-- [x] Split `slam_toolbox_params.yaml` into `slam_params_map.yaml`/`slam_params_local.yaml`, picked via a new `mode` launch arg (`map`/`local`) on `mserve_slam.launch.py`; `run_stack.sh`/`run_slam.sh` flags renamed to match (`--slam-map`/`--slam-local`). Along the way, real hardware debugging (2026-07-13) surfaced and fixed four separate bugs blocking `/map` from ever actually updating:
-  1. **`mserve_lidar` published variable-length scans** — it trimmed leading/trailing no-return samples per scan, so `ranges.size()`/`angle_min`/`angle_max` varied on every single scan. `slam_toolbox`'s Karto backend registers a fixed layout from the first scan and silently rejects every scan that doesn't match it exactly (`LaserRangeScan contains N range readings, expected M` in its log) — meaning almost every scan after the first was discarded, which is why `/map` looked frozen/garbled no matter how much the robot moved. Fixed by publishing the full raw buffer every time (no-return samples represented as `range = infinity` in place, not trimmed from the array's edges) — see `ws/src/mserve_lidar/src/lidar_node.cpp`.
-  2. **`mserve_slam.launch.py`'s mode-file-selection silently dropped `--params-file` entirely** — the first attempt used a `PathJoinSubstitution` with a nested list to concatenate `slam_params_` + mode + `.yaml`, which `launch_ros` couldn't resolve to a valid path; `slam_toolbox` fell back to compiled-in defaults (`base_frame: base_footprint`, which doesn't exist in this robot's TF tree) and could never compute an odom pose. Fixed with `OpaqueFunction` + `context.perform()` (the reliable pattern for building a path from a launch argument) instead of chained substitutions.
-  3. **`interfaces` package was never rebuilt after the `slam_toolbox_params.yaml` rename** — its installed `share/interfaces/config/` still only had the old (deleted) filename symlinked, so even a *correct* launch file had nothing valid to load. A reminder that renaming files under `ws/src/*/config/` needs a rebuild of that package specifically, not just whatever consumes it.
-  4. **`serialize_map` (needed for `--slam-local`) failed on every call** — Boost.Serialization "unregistered class"/"unregistered void cast" errors, because upstream never registered `slam_toolbox::LoopClosureListener` (the one concrete listener type `slam_toolbox_common.cpp` unconditionally attaches to every `Mapper`) for polymorphic (de)serialization, and its `MapperLoopClosureListener` base's `serialize()` never registered its own void_cast to `MapperListener` either. `save_map`/online mapping were unaffected (this only breaks the pose-graph save path). Fixed with `BOOST_CLASS_EXPORT_KEY`/`_IMPLEMENT` plus explicit `base_object<>()` calls at both inheritance levels — see `ws/src/third_party/README.md`'s slam_toolbox section for the exact patch (3 files, not git-tracked since `third_party/` is gitignored — **must be reapplied after any fresh clone of slam_toolbox**).
-- [X] Add remote control support.
-- [X] Update actual layout of the system.
-
-  All four verified together on real hardware: `/map` grows correctly as the robot drives, `save_map` produces a valid `.pgm`/`.yaml` (`kitchen_map.*`, first real saved map), and `serialize_map` now produces both `.posegraph` and `.data` with `result: 0`. New `map/` directory at the repo root — both save services resolve a bare name there via `cwd` set on the `slam_toolbox` node in `mserve_slam.launch.py`, no path typing needed from the web UI or CLI. Web UI (`web/lidar.html`) gained a "Serialize Map" button next to "Save Map".
-- [X] Nav2 wired up (`ws/src/launch/launch/mserve_nav2.launch.py` + `ws/src/interfaces/config/nav2_params.yaml`, `--nav2` flag on `run_stack.sh`) — apt-installed (`ros-jazzy-navigation2`), no vendoring. `--nav2` implies `--slam-local` if no SLAM flag is given. Verified on real hardware (2026-07-19): full lifecycle bringup clean, `/goal_pose` reachable from Foxglove's 3D panel (Publish -> Pose topic set to `/goal_pose`, not Foxglove's ROS1-era `/move_base_simple/goal` default). Along the way, found and fixed a real bug in `lifecycle_manager.cpp`: it treated any non-RUNNING BT tick result (including genuine FAILURE) as success, which combined with `slam_toolbox` blocking its executor during a slow pose-graph load (missing the 2s `get_state` response window) left `slam_toolbox` silently stuck `unconfigured` while logging "All nodes successfully activated". Fixed both the false-success logging and bumped the service timeout 2s -> 10s.
-- [X] Fix Nav2 doorway navigation (2026-07-19) — real hardware testing surfaced the robot stalling at interior doorways. Root causes, found by measuring the actual doorway from the saved map (`map/house_v2.pgm`, ~0.60-0.64m clear opening) and the real chassis: (1) `inflation_radius: 0.4` was far too generous for a small house, dropped to 0.15 after also fixing (2); (2) `robot_radius: 0.28` was a circle sized to the chassis's ~0.24m diagonal bounding radius, which penalizes every heading by the full diagonal even driving straight through a doorway — replaced with a `footprint` polygon on both costmaps built from the real measured chassis (370x315mm) plus a 20mm pad, freeing up real margin (~120-140mm/side instead of ~40mm); (3) with `inflation_radius` dropped too far (0.1) chasing the doorway block, NavFn lost its cost gradient toward corridor centerlines and paths hugged one wall arbitrarily — 0.15 (affordable now that the footprint isn't eating all the margin) restored centering. `mserve_description/urdf/mserve_core.xacro`'s `chassis_width` also corrected from a guessed 0.25 to the measured 0.20 (cosmetic only, doesn't feed the footprint). Confirmed working end-to-end on real hardware. Lots more Nav2 tuning still expected (AMCL noise model, velocity caps, controller behavior) — this only unblocked doorway passage.
-- [X] Foxglove Bridge on by default — `--foxglove` flag replaced with `--no-foxglove` (kept `--foxglove` as a harmless no-op for old habits).
+- [x] Foxglove Bridge on by default (`--no-foxglove` to skip).
+- [x] Nav2 doorway navigation fixed — measured-footprint polygon + retuned inflation on both costmaps (see `nav2_params.yaml` comments).
+- [x] Nav2 wired up (`--nav2`, AMCL + map_server localization) and verified on real hardware; also fixed `lifecycle_manager` treating BT FAILURE as success.
+- [x] SLAM map/localize modes split (`--slam-map`/`--slam-local`); four blocking bugs fixed along the way (fixed-size scans, launch param path, stale install, Boost serialization patch — see `ws/src/third_party/README.md`).
+- [x] `mserve_sensehat` package — LED matrix status, joystick connect, IMU fused into odometry.
+- [x] `mserve_joystick` package — game controller teleop.
+- [x] `mserve_display` package — Face/Menu/Info/Calibrate on the ELEGOO touchscreen, plus boot splash.
+- [x] Gazebo sim verified end-to-end on the Thor.
+- [x] SLAM Toolbox brought under BT-managed lifecycle (second `lifecycle_manager` instance).
+- [x] JPEG-compressed camera topic (fixed multi-second Foxglove lag over the WebSocket bridges).
+- [x] Foxglove Bridge support (`scripts/run_foxglove_bridge.sh`).
+- [x] Launch tests + robot-description TF smoke test (and fixed the stale `test_urdf_load.py` they surfaced).
+- [x] `mserve_lidar` package (RPLIDAR C1, vendored Slamtec SDK).
+- [x] Real wheel odometry in `mserve_base` (`/odom`, `odom -> base_link` TF, `/joint_states`).
+- [x] `robot_state_publisher` in minimal bringup.
+- [x] `mserve_camera` package (wraps `v4l2_camera`'s device class) + web UI page.
+- [x] Scripts reorganized flat under `scripts/`; entry point renamed to `run_stack.sh`.
+- [x] `lifecycle_manager` (BT.CPP) drives all lifecycle transitions.
+- [x] Removed leftover `hyfleet_subsystem` scaffolding from `interfaces`/`mserve_base_archive`.
+- [x] ESP32 transport decided and implemented: JSON over UART on `/dev/ttyAMA0`.
+- [x] Initial scaffolds: `interfaces`, `utils`, `mserve_base`, `mserve_drivechain`, `launch`, remote control, Xacro robot model.

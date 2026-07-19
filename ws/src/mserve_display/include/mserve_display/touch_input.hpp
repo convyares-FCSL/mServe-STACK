@@ -26,9 +26,8 @@ struct TapEvent
 };
 
 // Finds and reads the ADS7846 touch controller's evdev device. Never
-// hardcodes /dev/input/eventN — the number has shifted before (confirmed
-// this session) — instead matches by name via /proc/bus/input/devices at
-// open() time.
+// hardcodes /dev/input/eventN — the number is not stable across boots —
+// instead matches by name via /proc/bus/input/devices at open() time.
 class TouchInput
 {
 public:

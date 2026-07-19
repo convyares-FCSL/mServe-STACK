@@ -62,5 +62,5 @@ colcon build --packages-select slam_toolbox --cmake-args -DBUILD_TESTING=OFF --s
 
 echo "[deps_setup] All dependencies ready."
 echo ""
-echo "Next: build the workspace with:"
-echo "  bash scripts/build/build_workspace.sh"
+echo "Next: run the stack (it builds the workspace itself):"
+echo "  ./scripts/run_stack.sh"
