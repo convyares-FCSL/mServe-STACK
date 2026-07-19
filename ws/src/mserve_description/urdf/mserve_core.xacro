@@ -3,19 +3,22 @@
   <xacro:include filename="inertial_macros.xacro"/>
 
     <!-- Chassis Properties (in meteres, kG) -->
-  <xacro:property name="chassis_length" value="0.37"/>
-  <xacro:property name="chassis_width" value="0.25"/>
+  <xacro:property name="chassis_length" value="0.37"/>  <!-- measured 2026-07-19 -->
+  <xacro:property name="chassis_width" value="0.20"/>  <!-- measured 2026-07-19: body width, excludes wheels -->
   <xacro:property name="chassis_height" value="0.15"/>
   <xacro:property name="chassis_mass" value="12.0"/>
   <!-- Measured 2026-07-19: 75mm from the wheel axis (base_link origin — the
        wheel joints below attach directly to base_link) to the back of the
-       frame. chassis_length/chassis_width/chassis_height remain rough
-       placeholders — the real chassis is an open aluminum-extrusion rail
-       frame, not a solid box, and camera/lidar heights are measured
-       directly from the wheel axis (see mserve_lidar.xacro/
-       mserve_camera.xacro) rather than through chassis_height, so that
-       placeholder mostly just affects this visual box's own proportions
-       now, not sensor placement. -->
+       frame, and chassis_length/chassis_width are now real measurements
+       (370x200mm body). chassis_height remains a rough placeholder — the
+       real chassis is an open aluminum-extrusion rail frame, not a solid
+       box, and camera/lidar heights are measured directly from the wheel
+       axis (see mserve_lidar.xacro/mserve_camera.xacro) rather than through
+       chassis_height, so that placeholder mostly just affects this visual
+       box's own proportions now, not sensor placement. Nav2's footprint
+       (ws/src/interfaces/config/nav2_params.yaml) uses the 315mm
+       wheel-to-wheel outer width directly, not chassis_width here, since
+       collision avoidance needs the true outer envelope including wheels. -->
   <xacro:property name="chassis_joint_x" value="-0.075"/>
 
      <!-- Wheel Properties (in meteres)  -->

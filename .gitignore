@@ -10,6 +10,7 @@ build/
 install/
 log/
 temp/
+map/
 
 # Third-party vendored dependencies (source builds) — see ws/src/third_party/README.md
 ws/src/third_party/*/

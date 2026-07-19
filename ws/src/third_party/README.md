@@ -153,33 +153,28 @@ path (`error while loading shared libraries: libRTIMULib.so.7`), because
 `LD_LIBRARY_PATH` at runtime. Static linking sidesteps that; no separate
 build step needed here either way, unlike BT.CPP/slam_toolbox above.
 
-## navigation2 (Nav2) — removed 2026-07-18
+## navigation2 (Nav2) — apt-installed instead, not vendored (2026-07-19)
 
-Was vendored + patched here (minimal 18-package set, `main` branch) as prep
-for a future `mserve_navigation` phase — never wired into any launch file.
-Deleted during the Docker transfer cleanup (161MB, unused, and its
-presence in the workspace was actively causing `slam_toolbox` colcon
-builds to fail — see that section's "Second required patch" note for the
-mechanism). Re-clone from `https://github.com/ros-navigation/navigation2.git`
-(branch `main`) if this work resumes; these two patches were needed to get
-it building against this distro's toolchain (find current apt package names
-fresh rather than trusting old ones written against a different distro):
+Was briefly vendored + patched here (minimal 18-package set, `main` branch,
+two patches for a BT.CPP API mismatch and a `-Werror` false positive) as
+prep for a future `mserve_navigation` phase, then deleted 2026-07-18 during
+the Docker transfer cleanup (161MB, unused, and its presence was actively
+breaking `slam_toolbox` colcon builds — see that section's "Second required
+patch" note for the mechanism). That vendoring predated the Docker/Jazzy
+revert, when the target distro had no prebuilt Nav2 packages at all — no
+longer true. The full stack (`nav2-bringup`, `nav2-amcl`, `nav2-costmap-2d`,
+`nav2-controller`, `nav2-planner`, `nav2-bt-navigator`, `nav2-behaviors`,
+`nav2-smac-planner`, ...) is on `packages.ros.org` for Jazzy now, confirmed
+2026-07-19 — `Dockerfile` apt-installs the `ros-jazzy-navigation2`
+metapackage directly, no vendoring/patching needed this time. See
+`docs/TODO.md` for the still-unstarted `mserve_navigation` package/launch
+work itself.
 
-1. `nav2_behavior_tree/include/nav2_behavior_tree/utils/loop_rate.hpp` —
-   used `tree_->wakeUpSignal()->waitFor(...)`, an older BT.CPP API this
-   distro's `behaviortree_cpp` package doesn't have (`Tree` has no
-   `wakeUpSignal` member). Replace both `wake_up->waitFor(...)` call sites
-   with `tree_->sleep(...)` directly (`Tree::sleep(timeout)` does the same
-   interruptible wait — interrupted by `emitWakeUpSignal()`, returns `true`
-   if interrupted before timeout — in one call), and delete the
-   `auto wake_up = tree_->wakeUpSignal();` line.
-2. `nav2_common/cmake/nav2_package.cmake` — drop `-Werror` from the
-   `add_compile_options(...)` call for GNU/Clang (keep the rest of the
-   warning flags). Newer GCC than `main` was tested against turns
-   real-but-harmless deprecations and at least one outright false positive
-   (`-Wnull-dereference` inside GCC-inlined, auto-generated ROS message
-   `operator==` code) into hard build failures. Every warning still prints,
-   just isn't fatal.
+**`slam_toolbox` above is a candidate for the same treatment**
+(`ros-jazzy-slam-toolbox` is also apt-available) but hasn't been switched —
+unlike Nav2, our two patches there fix genuine upstream bugs, not just
+distro-version drift, and it's unverified whether the apt build already has
+them. See `docs/TODO.md`'s entry for what to check before switching.
 
 Scope it down from the full 34-package repo the same way as before: no
 `nav2_amcl` (this robot uses `slam_toolbox` in localization mode instead —

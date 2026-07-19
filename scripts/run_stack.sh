@@ -9,15 +9,16 @@
 # and inside the mserve Docker container (Raspberry Pi / Debian).
 #
 # Usage:
-#   ./scripts/run_stack.sh [--sim] [--foxglove] [--slam-map|--slam-local] [uart_device]
+#   ./scripts/run_stack.sh [--sim] [--no-foxglove] [--slam-map|--slam-local] [--nav2] [uart_device]
 #
 # Examples:
 #   ./scripts/run_stack.sh --sim             # sim, no hardware needed
-#   ./scripts/run_stack.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+#   ./scripts/run_stack.sh                   # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART) — Foxglove Bridge on by default
 #   ./scripts/run_stack.sh /dev/ttyACM0      # hardware, custom device (e.g. USB)
-#   ./scripts/run_stack.sh --foxglove        # also start Foxglove Bridge (ws://<pi-ip>:8765)
+#   ./scripts/run_stack.sh --no-foxglove     # skip Foxglove Bridge (ws://<pi-ip>:8765)
 #   ./scripts/run_stack.sh --slam-map        # also start SLAM Toolbox, building/extending a map
 #   ./scripts/run_stack.sh --slam-local      # also start SLAM Toolbox, localizing against a saved map
+#   ./scripts/run_stack.sh --nav2            # + Nav2 (AMCL + map_server, independent of --slam-map/--slam-local)
 # ─────────────────────────────────────────────────────────────────────────────
 set -eo pipefail
 
@@ -26,23 +27,30 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 WS_DIR="$ROOT_DIR/ws"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
-# Order-independent: --sim, --foxglove, --slam-map/--slam-local can appear in
-# any order before the optional positional uart_device.
+# Order-independent: --sim, --no-foxglove, --slam-map/--slam-local, --nav2 can
+# appear in any order before the optional positional uart_device.
 SIM_MODE=false
-FOXGLOVE=false
+FOXGLOVE=true
 SLAM=false
 SLAM_MODE=""
+NAV2=false
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --sim) SIM_MODE=true ;;
-    --foxglove) FOXGLOVE=true ;;
+    --foxglove) FOXGLOVE=true ;;  # already the default — kept as a harmless no-op, not an error, for old habits/scripts
+    --no-foxglove) FOXGLOVE=false ;;
     --slam-map) SLAM=true; SLAM_MODE="map" ;;
     --slam-local) SLAM=true; SLAM_MODE="local" ;;
+    --nav2) NAV2=true ;;
     *) ARGS+=("$arg") ;;
   esac
 done
 UART_DEVICE="${ARGS[0]:-/dev/ttyAMA0}"
+# --nav2 is fully independent of --slam-map/--slam-local (switched
+# 2026-07-19 to AMCL + map_server for localization, keeping slam_toolbox's
+# role purely to building maps — see nav2_params.yaml's header comment for
+# why) — no auto-enable/require logic needed between them anymore.
 
 # ── Detect native vs Docker ───────────────────────────────────────────────────
 if command -v ros2 >/dev/null 2>&1; then
@@ -118,16 +126,20 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f nav2_             2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joy_node            2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joystick_node       2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f sensehat_node       2>/dev/null || true
   else
     pkill -f rosbridge_websocket    2>/dev/null || true
     pkill -f rosapi_node            2>/dev/null || true
     pkill -f web_video_server       2>/dev/null || true
     pkill -f foxglove_bridge        2>/dev/null || true
     pkill -f async_slam_toolbox_node 2>/dev/null || true
+    pkill -f nav2_ 2>/dev/null || true
     pkill -f joy_node               2>/dev/null || true
     pkill -f joystick_node          2>/dev/null || true
+    pkill -f sensehat_node 2>/dev/null || true
     pkill -f "http.server 6240"     2>/dev/null || true
   fi
 
@@ -150,8 +162,10 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f nav2_          2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joy_node              2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joystick_node         2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f sensehat_node         2>/dev/null || true
   else
     pkill -9 -f drivechain_node       2>/dev/null || true
     pkill -9 -f base_node             2>/dev/null || true
@@ -165,8 +179,10 @@ cleanup() {
     pkill -9 -f web_video_server      2>/dev/null || true
     pkill -9 -f foxglove_bridge       2>/dev/null || true
     pkill -9 -f async_slam_toolbox_node 2>/dev/null || true
+    pkill -9 -f nav2_ 2>/dev/null || true
     pkill -9 -f joy_node              2>/dev/null || true
     pkill -9 -f joystick_node         2>/dev/null || true
+    pkill -9 -f sensehat_node 2>/dev/null || true
   fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
@@ -274,6 +290,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f nav2_        2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f camera_node           2>/dev/null || true
@@ -281,6 +298,9 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f display_node          2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f robot_state_publisher 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f lifecycle_manager     2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joy_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joystick_node  2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f sensehat_node   2>/dev/null || true
   sleep 1
   # Force-kill any survivors so the new nodes don't end up with duplicate
   # /mserve_base or /mserve_drivechain registrations.
@@ -289,6 +309,7 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f nav2_     2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f drivechain_node       2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f base_node             2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f camera_node           2>/dev/null || true
@@ -296,12 +317,16 @@ if [[ "$USE_DOCKER" == true ]]; then
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f display_node          2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f robot_state_publisher 2>/dev/null || true
   docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f lifecycle_manager     2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joy_node       2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joystick_node  2>/dev/null || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f sensehat_node   2>/dev/null || true
 else
   pkill -f rosbridge_websocket    2>/dev/null || true
   pkill -f rosapi_node            2>/dev/null || true
   pkill -f web_video_server       2>/dev/null || true
   pkill -f foxglove_bridge        2>/dev/null || true
   pkill -f async_slam_toolbox_node 2>/dev/null || true
+  pkill -f nav2_ 2>/dev/null || true
   pkill -f drivechain_node       2>/dev/null || true
   pkill -f base_node             2>/dev/null || true
   pkill -f camera_node           2>/dev/null || true
@@ -309,6 +334,9 @@ else
   pkill -f display_node          2>/dev/null || true
   pkill -f robot_state_publisher 2>/dev/null || true
   pkill -f lifecycle_manager    2>/dev/null || true
+  pkill -f joy_node 2>/dev/null || true
+  pkill -f joystick_node 2>/dev/null || true
+  pkill -f sensehat_node 2>/dev/null || true
   sleep 2  # wait for port 9090/6240 to be released before restarting
 fi
 
@@ -485,6 +513,27 @@ if [[ "$SLAM" == true ]]; then
   fi
 fi
 
+# ── Start Nav2 (opt-in, --nav2 — AMCL + map_server, independent of SLAM) ───────
+# Fully independent of the SLAM Toolbox block above (switched to AMCL +
+# map_server for localization 2026-07-19 — see nav2_params.yaml's header
+# comment). Small delay just to let /odom (mserve_base) and /scan
+# (mserve_lidar) settle first, same reasoning as the SLAM block above, not
+# an actual dependency on it.
+if [[ "$NAV2" == true ]]; then
+  echo "Starting Nav2 (map_server/AMCL + controller/planner/behavior/bt_navigator + nav2_lifecycle_manager)…"
+  sleep 3
+  if [[ "$USE_DOCKER" == true ]]; then
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -d robot-mserve bash -lc "
+      source /opt/ros/jazzy/setup.bash
+      source /ws/install/setup.bash
+      ros2 launch launch mserve_nav2.launch.py > /tmp/mserve_nav2.log 2>&1
+    "
+  else
+    ros2 launch launch mserve_nav2.launch.py > /tmp/mserve_nav2.log 2>&1 &
+    NATIVE_PIDS+=($!)
+  fi
+fi
+
 # ── Web server (always native — Python is always available) ───────────────────
 echo "Starting web server on http://localhost:6240…"
 cd "$ROOT_DIR/web"
@@ -515,6 +564,15 @@ if [[ "$SLAM" == true && "$SLAM_MODE" == "map" ]]; then
   echo ""
 elif [[ "$SLAM" == true && "$SLAM_MODE" == "local" ]]; then
   echo "  SLAM Toolbox running (localization) against the map set in slam_params_local.yaml."
+  echo ""
+fi
+if [[ "$NAV2" == true ]]; then
+  echo "  Nav2 running (AMCL + map_server against nav2_params.yaml's yaml_filename)."
+  echo "  If the robot's real pose doesn't match its believed one (e.g. moved by hand),"
+  echo "  correct it first — Foxglove/RViz 2D Pose Estimate, or /initialpose directly."
+  echo "  Send a goal via Foxglove/RViz (Nav2 Goal / /goal_pose), or:"
+  echo "    ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \"{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0}, orientation: {w: 1.0}}}}\""
+  echo "  nav2 log: /tmp/mserve_nav2.log"
   echo ""
 fi
 echo "  rosbridge log: /tmp/rosbridge.log"

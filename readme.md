@@ -3,9 +3,11 @@
 ROS 2 C++ robot stack for the mServe differential-drive robot, running in Docker (ROS 2 Jazzy) on a Raspberry Pi 5. There is no native ROS install on this Pi — Docker is the only runtime path.
 
 Drivechain, base, camera (`mserve_camera`), lidar (`mserve_lidar`), rosbridge,
-Foxglove Bridge (`--foxglove`), SLAM Toolbox (`--slam-map`/`--slam-local`),
-and the full web UI (`drivechain.html`/`base.html`/`camera.html`/
-`lidar.html`) all run in Docker. Device paths use udev `by-id` stable
+Foxglove Bridge (on by default, `--no-foxglove` to skip it), SLAM Toolbox
+(`--slam-map`/`--slam-local`), Nav2 (`--nav2`, implies `--slam-local` if no
+SLAM flag is given), and the full web UI (`drivechain.html`/`base.html`/
+`camera.html`/`lidar.html`/`joystick.html`/`sensehat.html`) all run in
+Docker. Device paths use udev `by-id` stable
 symlinks (see `docker-compose.yml`), not raw `/dev/videoN`/`/dev/ttyUSBN` —
 those indices aren't stable across USB resets/replugs on this Pi, confirmed
 the hard way. `slam_toolbox` itself needed a small source patch (this
@@ -117,18 +119,26 @@ container automatically (building/rebuilding the workspace inside it first,
 every run):
 
 ```bash
-./scripts/run_stack.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART)
+./scripts/run_stack.sh              # hardware, /dev/ttyAMA0 (Pi 5 GPIO UART) — Foxglove Bridge on by default
 ./scripts/run_stack.sh --sim        # simulated backend, no hardware needed
 ./scripts/run_stack.sh /dev/ttyACM0 # hardware, custom UART device (e.g. USB)
+./scripts/run_stack.sh --no-foxglove    # skip Foxglove Bridge (ws://<pi-ip>:8765)
 
-./scripts/run_stack.sh --foxglove       # also start Foxglove Bridge (ws://<pi-ip>:8765)
 ./scripts/run_stack.sh --slam-map       # also start SLAM Toolbox, building/extending a map
 ./scripts/run_stack.sh --slam-local     # also start SLAM Toolbox, localizing against a saved map
+./scripts/run_stack.sh --nav2           # + Nav2 — implies --slam-local (no need to pass both)
 ```
 
-`--sim`, `--foxglove`, and `--slam-map`/`--slam-local` are order-independent
-and can be combined (e.g. `--sim --foxglove --slam-map`). SLAM Toolbox needs
+`--sim`, `--no-foxglove`, `--slam-map`/`--slam-local`, and `--nav2` are
+order-independent and can be combined (e.g. `--sim --nav2`). `--nav2` needs
+a live `map -> odom` transform — if neither `--slam-map` nor `--slam-local`
+is also given, it implies `--slam-local` automatically (pass `--slam-map`
+explicitly instead if you want Nav2 running while still building the map).
+Either way it needs `ws/src/interfaces/config/slam_params_local.yaml`'s
+`map_file_name` already pointing at a real saved map (see
+[SLAM + Navigation](#slam--navigation) below). SLAM Toolbox needs
 `ws/src/third_party/slam_toolbox/` vendored first — see [Build](#build).
+Nav2 is apt-installed (`ros-jazzy-navigation2`), nothing to vendor.
 
 It starts rosbridge + `web_video_server`, then launches `mserve_drivechain` +
 `mserve_base` + `mserve_camera` + `mserve_lidar` + `robot_state_publisher` +
@@ -150,13 +160,84 @@ Press Ctrl+C to stop. This runs `lifecycle_manager`'s shutdown tree
 (deactivates drivechain + base, plus camera + lidar if running natively with
 them enabled) before tearing down rosbridge/web server cleanly.
 
+## SLAM + Navigation
+
+`slam_toolbox` (`--slam-map`/`--slam-local`) and Nav2 (`--nav2`) are fully
+independent — `slam_toolbox`'s only job is *building* maps; Nav2 localizes
+against a saved one itself, via AMCL + `map_server`, not `slam_toolbox`'s
+own localization mode (switched 2026-07-19 — see `nav2_params.yaml`'s
+header comment: `slam_toolbox`'s localization mode has no equivalent of
+AMCL's `/initialpose`, so there was no quick way to correct the believed
+pose after moving the robot by hand, only a clunky `deserialize_map`
+service call with a manually typed-in pose).
+
+Full workflow, mapping through autonomous navigation:
+
+```bash
+# 1. Map a space (drive around manually — web UI, joystick, or Sense HAT):
+./scripts/run_stack.sh --slam-map
+# Watch /map build live in Foxglove (on by default). When done, save it as a
+# plain image (what Nav2's map_server needs) — NOT serialize_map, that's a
+# different format (a pose-graph, only relevant if you want slam_toolbox's
+# own --slam-local mode for something other than Nav2):
+ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '/root/mServe-STACK/map/my_map'}}"
+
+# 2. Point nav2_params.yaml's map_server at it (one-time, per map):
+#    ws/src/interfaces/config/nav2_params.yaml -> map_server.yaml_filename: /root/mServe-STACK/map/my_map.yaml
+
+# 3. Localize (AMCL) and drive Nav2:
+./scripts/run_stack.sh --nav2
+```
+
+**If the robot's real position doesn't match what it believes** (moved by
+hand, kidnapped-robot situation, or just started somewhere other than the
+map's origin) — use Foxglove/RViz's **2D Pose Estimate** tool: click where
+the robot actually is, drag to set its actual facing direction, release.
+That publishes `geometry_msgs/PoseWithCovarianceStamped` to `/initialpose`,
+which AMCL uses directly to re-seed its particle filter — no service calls
+needed, this is the whole reason AMCL was chosen over `slam_toolbox`'s own
+localization mode for this role.
+
+**Sending a Nav2 goal from Foxglove**: `bt_navigator` subscribes to
+`/goal_pose` (`geometry_msgs/msg/PoseStamped`) directly — no action client
+needed, same simple-goal bridge RViz's "2D Nav Goal" button uses. In
+Foxglove's 3D panel: set **Fixed Frame to `map`** (not `odom` — goals need
+map-frame coordinates), open the panel's Publish settings and set the
+"Pose" publish topic to `/goal_pose` (Foxglove defaults this to the ROS1-era
+`/move_base_simple/goal`, which nothing here listens to), then use the
+3D view's publish-pose tool: click where you want the robot to go, drag to
+set the facing direction, release to send. Or from the CLI:
+
+```bash
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+  "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0}, orientation: {w: 1.0}}}}"
+```
+
+Nav2 (`ws/src/launch/launch/mserve_nav2.launch.py`, params in
+`ws/src/interfaces/config/nav2_params.yaml`) runs `map_server` + `amcl` for
+localization plus the planning/control layer (`controller_server` +
+`planner_server` + `behavior_server` + `bt_navigator`), all managed by
+Nav2's own `nav2_lifecycle_manager` — a separate thing from this project's
+own BT.CPP-driven `lifecycle_manager`, which only manages mserve's own
+packages. Both costmaps use a `footprint` polygon (real measured chassis:
+370mm long, 315mm wheel-to-wheel, plus a 20mm pad), not a `robot_radius`
+circle — a circle sized to the chassis diagonal left almost no margin in
+interior doorways, since it penalizes every heading by the full diagonal
+even when driving straight through. `inflation_radius: 0.15` on both
+costmaps; needed the tighter footprint first to afford any inflation at
+all without reblocking doorways (see `nav2_params.yaml`'s own comments for
+the full doorway-tuning story, 2026-07-19). AMCL's odometry noise model
+(`alpha1`-`5`) is left at Nav2's own untuned defaults. Velocity caps are
+deliberately conservative for a first-tested integration; raise once
+trusted on real hardware.
+
 ## Remote RViz (Zenoh)
 
 Gazebo + RViz run on the NVIDIA Thor, not the Pi (see [Hardware](#hardware)).
-For same-LAN viewing/teleop without any of this, Foxglove Bridge
-(`--foxglove`, above) is the simpler path — Zenoh is only needed for
-discovery across Tailscale or other multi-interface setups where DDS/plain
-multicast discovery doesn't reliably work.
+For same-LAN viewing/teleop without any of this, Foxglove Bridge (on by
+default, above) is the simpler path — Zenoh is only needed for discovery
+across Tailscale or other multi-interface setups where DDS/plain multicast
+discovery doesn't reliably work.
 
 **Deferred, not yet ported to Docker** (tracked in `docs/TODO.md`'s
 DEFERRED section) — the scripts below assume a native `ros2` on PATH, which
@@ -280,7 +361,7 @@ Grafana/Loki (if running):
 ## Design decisions
 
 - **`mserve_drivechain` does not own kinematics.** Wheel geometry (`wheel_separation`, `wheel_radius`) and diff-drive math (both directions — `/cmd_vel` → wheel RPM, and wheel velocity feedback → odometry) live in `mserve_base`. `mserve_drivechain` is a pure motor driver — it only ever sees per-motor RPM commands and reports per-motor velocity/position feedback, so swapping the drivetrain hardware only requires changes in one package.
-- **`mserve_base` is the future command arbiter.** When Nav2 and manual joystick are added, source arbitration and the e-stop gate live here. `mserve_drivechain` always sees a single safe Twist.
+- **`mserve_base` is the future command arbiter — still not built.** Nav2 and `mserve_joystick` both already publish directly to `/cmd_vel` (same topic, no priority/mutex between them) — whichever published most recently wins at any instant. `mserve_joystick` only publishes while genuinely active (see its own README) specifically to reduce accidental interference, but that's a mitigation, not real arbitration. Source arbitration and the e-stop gate are still meant to live in `mserve_base` eventually; `mserve_drivechain` always sees a single safe Twist either way, just not necessarily the one you'd expect if two sources are driving at once.
 - **Parameter bounds enforced by ROS descriptors.** Out-of-range values are rejected before callbacks are called. No manual throws needed.
 - **Named QoS profiles from `mserve_utils`.** `mserve_qos::commands`, `mserve_qos::feedback`, `mserve_qos::status` — profiles readable from params without recompiling.
 - **No `ros2_control` yet.** The first control stack is written by hand so every part (clamping, kinematics, serial protocol, odometry, fail-safe) is visible and learnable. `ros2_control` revisited later as a comparison.
