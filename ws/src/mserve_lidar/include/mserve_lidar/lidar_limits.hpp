@@ -20,4 +20,13 @@ constexpr float kMinRangeM = 0.05f;
 // a number the sensor can't actually deliver.
 constexpr float kMaxRangeM = 12.0f;
 
+// Ceiling on capture_loop()'s own iteration rate — see that function's
+// comment (and mserve_camera's equivalent, where this pattern was first
+// added after a real hardware incident) for why a loop around a supposedly-
+// blocking SDK call still needs its own independent pacing. Default sits
+// above the RPLIDAR C1's actual ~10Hz revolution rate, so it costs nothing
+// normally.
+constexpr double kScanRateHzMin = 1.0;
+constexpr double kScanRateHzMax = 30.0;
+
 }  // namespace mserve_lidar

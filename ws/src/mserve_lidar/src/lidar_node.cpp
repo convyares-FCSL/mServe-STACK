@@ -2,8 +2,10 @@
 #include "mserve_lidar/lidar_limits.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <limits>
+#include <thread>
 
 namespace mserve_lidar {
 
@@ -213,19 +215,46 @@ void LidarNode::disconnect() {
 // ==============================================================================
 
 void LidarNode::capture_loop() {
+  // Paced to a defined cycle rather than trusting grabScanDataHq() to
+  // naturally rate-limit this loop by blocking — same reasoning as
+  // mserve_camera's capture_loop(), which needed this after a real
+  // hardware incident (2026-07-19): a loop around a supposedly-blocking
+  // hardware call still needs its own independent ceiling, since nothing
+  // guarantees the call keeps blocking normally under a device failure.
+  const auto target_period = std::chrono::duration<double>(1.0 / scan_rate_hz_);
   std::vector<sl_lidar_response_measurement_node_hq_t> nodes(8192);
+  int consecutive_failures = 0;
+  auto last_health_log = std::chrono::steady_clock::now();
 
   while (capturing_.load()) {
+    const auto cycle_start = std::chrono::steady_clock::now();
     size_t count = nodes.size();
     const auto start = now();
     const sl_result result = driver_->grabScanDataHq(nodes.data(), count);
     const double scan_duration = (now() - start).seconds();
 
-    if (SL_IS_FAIL(result)) continue;
-    driver_->ascendScanData(nodes.data(), count);
-    if (count < 2) continue;  // need at least 2 points for angle_increment
+    if (SL_IS_FAIL(result)) {
+      ++consecutive_failures;
+      if (cycle_start - last_health_log >= std::chrono::seconds(5)) {
+        RCLCPP_WARN(
+          get_logger(), "capture_loop: %d consecutive failures, device may be gone",
+          consecutive_failures);
+        last_health_log = cycle_start;
+      }
+    } else {
+      consecutive_failures = 0;
+      driver_->ascendScanData(nodes.data(), count);
+      if (count >= 2) {  // need at least 2 points for angle_increment
+        publish_scan(nodes, count, start, scan_duration);
+      }
+    }
 
-    publish_scan(nodes, count, start, scan_duration);
+    const auto elapsed = std::chrono::steady_clock::now() - cycle_start;
+    const auto remaining =
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(target_period) - elapsed;
+    if (remaining > std::chrono::steady_clock::duration::zero()) {
+      std::this_thread::sleep_for(remaining);
+    }
   }
 }
 

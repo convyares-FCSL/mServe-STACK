@@ -1,17 +1,34 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- RPLIDAR C1 envelope and scan characteristics -->
-  <xacro:property name="lidar_radius" value="0.04"/>
-  <xacro:property name="lidar_length" value="0.04"/>
+  <!-- RPLIDAR C1 envelope and scan characteristics — measured 2026-07-19:
+       55x55x35mm (wxdxh). Approximated as a cylinder (radius = min(w,d)/2,
+       length = h) rather than switching to a box — close enough for a
+       collision/visual placeholder, and keeps the riser-stacking math
+       below simple. -->
+  <xacro:property name="lidar_radius" value="0.0275"/>
+  <xacro:property name="lidar_length" value="0.035"/>
   <xacro:property name="lidar_mass" value="0.11"/>
   <xacro:property name="lidar_riser_radius" value="0.012"/>
-  <xacro:property name="lidar_riser_height" value="0.06"/>
-  <xacro:property name="lidar_riser_mass" value="0.03"/>
-  <xacro:property name="lidar_offset" value="0.00"/>
-  <xacro:property name="lidar_x" value="${chassis_length / 2.0 + lidar_offset}"/>
+  <!-- Measured 2026-07-19: 75mm forward of the wheel axis (base_link
+       origin). lidar_x is chassis-local (this macro's parent_link is
+       "chassis", whose own origin sits at chassis_joint_x relative to
+       base_link — see mserve_core.xacro), so it's the wheel-axis-relative
+       measurement minus chassis_joint_x (a negative number), not the
+       measurement directly. -->
+  <xacro:property name="lidar_x_from_wheel_axis" value="0.075"/>
+  <xacro:property name="lidar_x" value="${lidar_x_from_wheel_axis - chassis_joint_x}"/>
   <xacro:property name="lidar_y" value="0.0"/>
-  <xacro:property name="lidar_riser_z" value="${chassis_height + lidar_riser_height / 2.0}"/>
+  <xacro:property name="lidar_riser_mass" value="0.03"/>
+  <!-- Height above the wheel axis (base_link) measured 2026-07-19: 175mm —
+       taken directly from the wheel axis per that measurement (no chassis
+       box in between; the real chassis is an open rail frame, not a solid
+       box — see mserve_core.xacro's chassis_joint_x comment), so
+       lidar_riser_z no longer goes through chassis_height. riser_height is
+       solved backwards from the 175mm target (riser_height + lidar_length/2
+       = 175mm) rather than being its own independent measurement. -->
+  <xacro:property name="lidar_riser_height" value="${0.175 - lidar_length / 2.0}"/>
+  <xacro:property name="lidar_riser_z" value="${lidar_riser_height / 2.0}"/>
   <xacro:property name="lidar_z" value="${lidar_riser_height / 2.0 + lidar_length / 2.0}"/>
   <xacro:property name="lidar_scan_topic" value="scan"/>
   <xacro:property name="lidar_update_rate" value="10.0"/>

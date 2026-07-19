@@ -29,4 +29,12 @@ constexpr int kJpegQualityDefault = 80;
 constexpr int kJpegQualityMin = 1;
 constexpr int kJpegQualityMax = 100;
 
+// Ceiling on capture_loop()'s own iteration rate — see that function's
+// comment for why. Default (camera_node.hpp) sits above kTargetFps's
+// observed real ceiling (~12.6Hz) so it costs nothing normally; max is
+// deliberately well below any real webcam frame rate, since this exists to
+// cap runaway behavior, not to let someone configure it away.
+constexpr double kCaptureRateHzMin = 1.0;
+constexpr double kCaptureRateHzMax = 30.0;
+
 }  // namespace mserve_camera

@@ -29,15 +29,21 @@ void CameraNode::declare_params()
   // (now published as bgr8, not raw YUYV — see convert_and_flip()) and
   // camera/image_raw/compressed.
   this->declare_parameter<bool>("flip_180", true);
+
+  this->declare_parameter<double>("capture_rate_hz", 15.0,
+    mserve_utils::make_double_range_descriptor(
+      "Ceiling on capture_loop()'s iteration rate — see camera_node.hpp",
+      kCaptureRateHzMin, kCaptureRateHzMax));
 }
 
 void CameraNode::load_params() {
-  device_       = get_parameter("device").as_string();
-  width_        = static_cast<int>(get_parameter("width").as_int());
-  height_       = static_cast<int>(get_parameter("height").as_int());
-  frame_id_     = get_parameter("frame_id").as_string();
-  jpeg_quality_ = static_cast<int>(get_parameter("jpeg_quality").as_int());
-  flip_180_     = get_parameter("flip_180").as_bool();
+  device_          = get_parameter("device").as_string();
+  width_           = static_cast<int>(get_parameter("width").as_int());
+  height_          = static_cast<int>(get_parameter("height").as_int());
+  frame_id_        = get_parameter("frame_id").as_string();
+  jpeg_quality_    = static_cast<int>(get_parameter("jpeg_quality").as_int());
+  flip_180_        = get_parameter("flip_180").as_bool();
+  capture_rate_hz_ = get_parameter("capture_rate_hz").as_double();
 
   // Uncalibrated placeholder CameraInfo — width/height/frame_id are real,
   // K/D/R/P are left zeroed until an actual calibration is run. Any consumer

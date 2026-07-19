@@ -44,10 +44,20 @@ private:
   std::string frame_id_;
   int jpeg_quality_ = 80;
   bool flip_180_ = true;  // physical mount is upside down — see camera_params.cpp
+  // Ceiling on capture_loop()'s own iteration rate — see capture_loop()'s
+  // comment for why this can't just rely on V4l2CameraDevice::capture()
+  // blocking naturally. Default sits comfortably above the ~12.6Hz this
+  // camera actually sustains (see camera_limits.hpp's kTargetFps comment),
+  // so it costs nothing in normal operation.
+  double capture_rate_hz_ = 15.0;
 
-  // Capture loop — V4l2CameraDevice::capture() blocks until a frame is ready,
-  // so this runs on its own thread rather than a fixed-rate timer (matches
-  // upstream v4l2_camera_node's own capture_thread_/canceled_ pattern).
+  // Capture loop — V4l2CameraDevice::capture() *should* block until a frame
+  // is ready, so this runs on its own thread rather than a fixed-rate timer
+  // (matches upstream v4l2_camera_node's own capture_thread_/canceled_
+  // pattern) — but confirmed on real hardware that it doesn't always: under
+  // a sustained device failure it can return (or fail to return) far faster
+  // than any real camera frame rate, so capture_rate_hz_ paces this loop
+  // independent of that call's own behavior rather than trusting it.
   void capture_loop();
 
   // VIDIOC_S_PARM (frame interval) — V4l2CameraDevice has no wrapper for it,

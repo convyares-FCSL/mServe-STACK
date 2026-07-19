@@ -2,16 +2,26 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:include filename="inertial_macros.xacro"/>
 
-  <!-- Raspberry Pi Camera Module 3 style defaults. Keep these isolated so a
-       later hardware swap only needs this file updated. -->
+  <!-- USB webcam (not a CSI Pi Camera Module — mserve_camera wraps
+       v4l2_camera). width/height measured 2026-07-19: 80x30mm. camera_depth
+       is still the old Pi Camera Module 3 placeholder (11.5mm) — no real
+       depth measurement yet, and it barely matters visually next to the
+       80x30 footprint. -->
   <xacro:property name="camera_depth" value="0.0115"/>
-  <xacro:property name="camera_width" value="0.025"/>
-  <xacro:property name="camera_height" value="0.024"/>
+  <xacro:property name="camera_width" value="0.080"/>
+  <xacro:property name="camera_height" value="0.030"/>
   <xacro:property name="camera_mass" value="0.005"/>
-  <xacro:property name="camera_offset" value="0.005"/>
-  <xacro:property name="camera_x" value="${chassis_length + camera_depth / 2.0 + camera_offset}"/>
+  <!-- Measured 2026-07-19, both from the wheel axis (base_link origin):
+       280mm forward, 115mm up. camera_x is chassis-local (this macro's
+       parent_link is "chassis" — see mserve_core.xacro's chassis_joint_x
+       comment), so it's the wheel-axis measurement minus chassis_joint_x.
+       camera_z is direct — no chassis_height in this calculation, the real
+       chassis is an open rail frame, not a solid box (same reasoning as
+       mserve_lidar.xacro). -->
+  <xacro:property name="camera_x_from_wheel_axis" value="0.280"/>
+  <xacro:property name="camera_x" value="${camera_x_from_wheel_axis - chassis_joint_x}"/>
   <xacro:property name="camera_y" value="0.0"/>
-  <xacro:property name="camera_z" value="${chassis_height + camera_height / 2.0}"/>
+  <xacro:property name="camera_z" value="0.115"/>
 
   <xacro:property name="camera_image_topic" value="camera/image_raw"/>
   <xacro:property name="camera_info_topic" value="camera/camera_info"/>

@@ -41,6 +41,7 @@ private:
   std::string frame_id_;
   std::string scan_mode_;   // empty = lidar's typical/default mode
   bool inverted_ = false;
+  double scan_rate_hz_ = 15.0;  // ceiling on capture_loop()'s rate — see lidar_limits.hpp
 
   bool connect();
   bool check_device_info();
@@ -48,9 +49,13 @@ private:
   bool set_scan_mode();
   void disconnect();
 
-  // grabScanDataHq() blocks until a full revolution is ready, so this runs on
-  // its own thread rather than a fixed-rate timer — same reasoning as
-  // mserve_camera's capture_loop() around V4l2CameraDevice::capture().
+  // grabScanDataHq() *should* block until a full revolution is ready, so
+  // this runs on its own thread rather than a fixed-rate timer — same
+  // reasoning as mserve_camera's capture_loop() around
+  // V4l2CameraDevice::capture(). Also paced by scan_rate_hz_ independent of
+  // that call's own behavior, for the same reason mserve_camera's is: a
+  // loop around a supposedly-blocking hardware call still needs its own
+  // ceiling, confirmed the hard way on that node.
   void capture_loop();
   void publish_scan(
     const std::vector<sl_lidar_response_measurement_node_hq_t> & nodes,

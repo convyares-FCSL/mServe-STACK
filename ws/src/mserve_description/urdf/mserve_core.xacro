@@ -7,14 +7,29 @@
   <xacro:property name="chassis_width" value="0.25"/>
   <xacro:property name="chassis_height" value="0.15"/>
   <xacro:property name="chassis_mass" value="12.0"/>
-  <xacro:property name="chassis_joint_x" value="-0.10"/>
+  <!-- Measured 2026-07-19: 75mm from the wheel axis (base_link origin — the
+       wheel joints below attach directly to base_link) to the back of the
+       frame. chassis_length/chassis_width/chassis_height remain rough
+       placeholders — the real chassis is an open aluminum-extrusion rail
+       frame, not a solid box, and camera/lidar heights are measured
+       directly from the wheel axis (see mserve_lidar.xacro/
+       mserve_camera.xacro) rather than through chassis_height, so that
+       placeholder mostly just affects this visual box's own proportions
+       now, not sensor placement. -->
+  <xacro:property name="chassis_joint_x" value="-0.075"/>
 
      <!-- Wheel Properties (in meteres)  -->
-  <xacro:property name="wheel_radius" value="0.05"/>
+  <xacro:property name="wheel_radius" value="0.05035"/>  <!-- measured 2026-07-19: 100.7mm diameter -->
   <xacro:property name="wheel_width" value="0.04"/>
   <xacro:property name="wheel_mass" value="0.765"/>
-  <xacro:property name="wheel_spacing" value="0.015"/>
-  <xacro:property name="wheel_y_offset" value="${(chassis_width / 2.0 ) + wheel_spacing + (wheel_width / 2)}"/>
+  <!-- Measured 2026-07-19 (real robot, matches mserve_params.yaml's
+       mserve_base.limits.wheel_separation — keep both in sync). Drives
+       wheel_y_offset directly rather than the other way around, since this
+       is now a real measurement and chassis_width is still a guess — a
+       kinematically-critical dimension shouldn't be derived from an
+       unmeasured cosmetic one. -->
+  <xacro:property name="wheel_separation" value="0.305"/>
+  <xacro:property name="wheel_y_offset" value="${wheel_separation / 2.0}"/>
   <xacro:property name="wheel_no_load_rpm" value="200.0"/>
   <xacro:property name="wheel_rated_rpm" value="115.0"/>
   <xacro:property name="wheel_rated_torque" value="0.96"/>
@@ -23,7 +38,6 @@
   <xacro:property name="wheel_speed_constant_rpm_per_volt" value="11.1"/>
   <xacro:property name="wheel_encoder_resolution" value="4096"/>
   <xacro:property name="wheel_single_wheel_load" value="10.0"/>
-  <xacro:property name="wheel_separation" value="${2.0 * wheel_y_offset}"/>
   <xacro:property name="wheel_velocity_limit" value="${wheel_no_load_rpm * 2.0 * pi / 60.0}"/>
   <xacro:property name="wheel_rated_velocity" value="${wheel_rated_rpm * 2.0 * pi / 60.0}"/>
   <xacro:property name="wheel_effort_limit" value="${wheel_stall_torque}"/>

@@ -3,6 +3,8 @@
 
 #include <lifecycle_msgs/msg/state.hpp>
 
+#include "mserve_utils/utils.hpp"
+
 namespace mserve_lidar {
 
 void LidarNode::declare_params()
@@ -20,14 +22,20 @@ void LidarNode::declare_params()
   this->declare_parameter<std::string>("scan_mode", "");
 
   this->declare_parameter<bool>("inverted", false);
+
+  this->declare_parameter<double>("scan_rate_hz", 15.0,
+    mserve_utils::make_double_range_descriptor(
+      "Ceiling on capture_loop()'s iteration rate — see lidar_node.hpp",
+      kScanRateHzMin, kScanRateHzMax));
 }
 
 void LidarNode::load_params() {
-  device_    = get_parameter("device").as_string();
-  baudrate_  = static_cast<int>(get_parameter("baudrate").as_int());
-  frame_id_  = get_parameter("frame_id").as_string();
-  scan_mode_ = get_parameter("scan_mode").as_string();
-  inverted_  = get_parameter("inverted").as_bool();
+  device_       = get_parameter("device").as_string();
+  baudrate_     = static_cast<int>(get_parameter("baudrate").as_int());
+  frame_id_     = get_parameter("frame_id").as_string();
+  scan_mode_    = get_parameter("scan_mode").as_string();
+  inverted_     = get_parameter("inverted").as_bool();
+  scan_rate_hz_ = get_parameter("scan_rate_hz").as_double();
 }
 
 rcl_interfaces::msg::SetParametersResult LidarNode::on_parameters(const std::vector<rclcpp::Parameter> & params){

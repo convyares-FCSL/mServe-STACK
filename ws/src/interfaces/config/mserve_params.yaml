@@ -8,8 +8,8 @@ mserve_base:
       max_linear_speed: 0.8        # m/s  — robot-level safety cap
       max_angular_speed: 1.2       # rad/s — robot-level safety cap
     geometry:
-      wheel_separation: 0.35       # m — track width between wheel centers
-      wheel_radius: 0.08           # m
+      wheel_separation: 0.305      # m — track width between wheel centers, measured 2026-07-19
+      wheel_radius: 0.05035        # m — 100.7mm diameter, measured 2026-07-19 (was 0.08, ~59% off — real speed/odometry were both wrong)
       gear_ratio: 1.0              # motor revs per wheel rev
     motor_ids:
       left: 2                      # mserve_drivechain hardware.motor_ids mapping
@@ -56,6 +56,7 @@ mserve_camera:
     height: 480                   # higher resolutions drop to 5-10fps in YUYV (MJPG would be needed for full-rate 1080p)
     frame_id: camera_link_optical # REP-103 optical frame — see mserve_camera.xacro/mserve_depth_camera.xacro
     flip_180: true                # physical mount is upside down on this chassis — confirmed 2026-07-19
+    capture_rate_hz: 15.0          # ceiling on capture_loop()'s rate — see mserve_camera/camera_node.hpp
 
 mserve_lidar:
   ros__parameters:
@@ -71,6 +72,7 @@ mserve_lidar:
     frame_id: lidar_link          # see mserve_lidar.xacro
     scan_mode: ""                 # empty = device's typical/default scan mode
     inverted: false
+    scan_rate_hz: 15.0             # ceiling on capture_loop()'s rate — see mserve_lidar/lidar_node.hpp
 
 mserve_display:
   ros__parameters:

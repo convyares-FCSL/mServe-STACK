@@ -4,13 +4,11 @@
   <!-- Include the core robot definition -->
   <xacro:include filename="mserve_core.xacro"/>
 
-  <!-- Pi Camera (disabled — replaced by depth camera below) -->
-  <!-- <xacro:include filename="mserve_camera.xacro"/> -->
-  <!-- <xacro:mserve_camera parent_link="chassis"/> -->
-
-  <!-- Depth Camera -->
-  <xacro:include filename="mserve_depth_camera.xacro"/>
-  <xacro:mserve_depth_camera parent_link="chassis"/>
+  <!-- USB webcam (mserve_camera wraps v4l2_camera) — plain RGB, not depth.
+       mserve_depth_camera.xacro (kept in the tree, just unused) modeled an
+       RGBD camera that doesn't match this hardware — confirmed 2026-07-19. -->
+  <xacro:include filename="mserve_camera.xacro"/>
+  <xacro:mserve_camera parent_link="chassis"/>
 
   <!-- Include Lidar -->
   <xacro:include filename="mserve_lidar.xacro"/>

@@ -30,9 +30,20 @@
   <xacro:property name="camera_mass"         value="0.072"/>  <!-- named camera_mass for mserve_gazebo.xacro total mass -->
   <xacro:property name="depth_camera_offset" value="0.005"/>
 
-  <!-- Mount flush with the front face of the chassis, at chassis-top height -->
-  <xacro:property name="depth_camera_x" value="${chassis_length + depth_camera_depth / 2.0 + depth_camera_offset}"/>
+  <!-- Measured 2026-07-19: 280mm forward of the wheel axis (base_link
+       origin). depth_camera_x is chassis-local (this macro's parent_link
+       is "chassis", whose own origin sits at chassis_joint_x relative to
+       base_link — see mserve_core.xacro), so it's the wheel-axis-relative
+       measurement minus chassis_joint_x. -->
+  <xacro:property name="depth_camera_x_from_wheel_axis" value="0.280"/>
+  <xacro:property name="depth_camera_x" value="${depth_camera_x_from_wheel_axis - chassis_joint_x}"/>
   <xacro:property name="depth_camera_y" value="0.0"/>
+  <!-- Height above the wheel axis NOT yet updated — 115mm measured, but
+       chassis_height (still an unmeasured 150mm placeholder) alone already
+       exceeds that: chassis_height + depth_camera_height/2 as currently
+       written can't produce 115mm without chassis_height actually being
+       ~102mm, i.e. this depends on a real chassis_height measurement, not
+       just this camera's own numbers. Get that before touching this. -->
   <xacro:property name="depth_camera_z" value="${chassis_height + depth_camera_height / 2.0}"/>
 
   <xacro:property name="depth_camera_image_topic"   value="camera/image_raw"/>
