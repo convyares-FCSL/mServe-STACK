@@ -168,27 +168,34 @@ bool CameraNode::request_frame_rate(int fps) {
 // Compressed encode
 // ==============================================================================
 
-sensor_msgs::msg::CompressedImage::UniquePtr CameraNode::encode_compressed(
-  const sensor_msgs::msg::Image & image)
+cv::Mat CameraNode::convert_and_flip(const sensor_msgs::msg::Image & yuyv_image)
 {
   // Wraps the existing buffer (no copy) — safe because this only reads from
-  // it, and the caller still owns `image` at this point.
+  // it, and the caller still owns `yuyv_image` at this point.
   const cv::Mat yuyv(
-    static_cast<int>(image.height), static_cast<int>(image.width), CV_8UC2,
-    const_cast<uint8_t *>(image.data.data()), image.step);
+    static_cast<int>(yuyv_image.height), static_cast<int>(yuyv_image.width), CV_8UC2,
+    const_cast<uint8_t *>(yuyv_image.data.data()), yuyv_image.step);
 
   cv::Mat bgr;
   cv::cvtColor(yuyv, bgr, cv::COLOR_YUV2BGR_YUYV);
+  if (flip_180_) {
+    cv::rotate(bgr, bgr, cv::ROTATE_180);
+  }
+  return bgr;
+}
 
+sensor_msgs::msg::CompressedImage::UniquePtr CameraNode::encode_compressed(
+  const cv::Mat & bgr, const std_msgs::msg::Header & header)
+{
   std::vector<uchar> jpeg_buf;
   const std::vector<int> encode_params{cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
   if (!cv::imencode(".jpg", bgr, jpeg_buf, encode_params)) {
-    RCLCPP_ERROR(get_logger(), "cv::imencode failed for a %ux%u frame", image.width, image.height);
+    RCLCPP_ERROR(get_logger(), "cv::imencode failed for a %dx%d frame", bgr.cols, bgr.rows);
     return nullptr;
   }
 
   auto compressed = std::make_unique<sensor_msgs::msg::CompressedImage>();
-  compressed->header = image.header;
+  compressed->header = header;
   compressed->format = "jpeg";
   compressed->data.assign(jpeg_buf.begin(), jpeg_buf.end());
   return compressed;
@@ -200,30 +207,43 @@ sensor_msgs::msg::CompressedImage::UniquePtr CameraNode::encode_compressed(
 
 void CameraNode::capture_loop() {
   while (capturing_.load()) {
-    sensor_msgs::msg::Image::UniquePtr image;
+    sensor_msgs::msg::Image::UniquePtr raw_yuyv;
     try {
-      image = camera_->capture();
+      raw_yuyv = camera_->capture();
     } catch (const std::exception & e) {
       RCLCPP_ERROR(get_logger(), "Capture error: %s", e.what());
       continue;
     }
-    if (!image) continue;
+    if (!raw_yuyv) continue;
 
-    image->header.stamp = now();
-    image->header.frame_id = frame_id_;
+    raw_yuyv->header.stamp = now();
+    raw_yuyv->header.frame_id = frame_id_;
 
     auto info = camera_info_;
-    info.header.stamp = image->header.stamp;
+    info.header.stamp = raw_yuyv->header.stamp;
 
-    // Encode from *image before it's moved out below — publish() takes ownership.
+    // Converted (and flip_180_-rotated) once, shared by both outputs below —
+    // see convert_and_flip()'s comment for why the flip happens here and not
+    // on the raw YUYV bytes.
+    const cv::Mat bgr = convert_and_flip(*raw_yuyv);
+
     if (compressed_pub_->is_activated()) {
-      if (auto compressed = encode_compressed(*image)) {
+      if (auto compressed = encode_compressed(bgr, raw_yuyv->header)) {
         compressed_pub_->publish(std::move(compressed));
       }
     }
 
-    if (image_pub_->is_activated()) image_pub_->publish(std::move(image));
-    if (info_pub_->is_activated())  info_pub_->publish(info);
+    if (image_pub_->is_activated()) {
+      auto bgr_image = std::make_unique<sensor_msgs::msg::Image>();
+      bgr_image->header = raw_yuyv->header;
+      bgr_image->height = static_cast<uint32_t>(bgr.rows);
+      bgr_image->width  = static_cast<uint32_t>(bgr.cols);
+      bgr_image->encoding = "bgr8";
+      bgr_image->step = static_cast<uint32_t>(bgr.step);
+      bgr_image->data.assign(bgr.datastart, bgr.dataend);
+      image_pub_->publish(std::move(bgr_image));
+    }
+    if (info_pub_->is_activated()) info_pub_->publish(info);
   }
 }
 

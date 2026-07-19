@@ -13,6 +13,11 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     interfaces_share = get_package_share_directory('interfaces')
     params_file = os.path.join(interfaces_share, 'config', 'mserve_params.yaml')
+    # controller_profiles for every supported controller model live in one
+    # file, always loaded — mserve_params.yaml's mserve_joystick.
+    # controller_profile value (read by the node itself, not here) picks
+    # which one to actually use. See joystick_params.yaml's header comment.
+    joystick_params_file = os.path.join(interfaces_share, 'config', 'joystick_params.yaml')
 
     description_share = Path(get_package_share_directory('mserve_description'))
     xacro_file = description_share / 'urdf' / 'mserve.urdf.xacro'
@@ -47,6 +52,36 @@ def generate_launch_description():
     with_display_arg = DeclareLaunchArgument(
         'with_display', default_value='true',
         description='Start mserve_display'
+    )
+    with_joystick_arg = DeclareLaunchArgument(
+        'with_joystick', default_value='true',
+        description='Start joy_node + mserve_joystick'
+    )
+
+    joy_node = Node(
+        package='joy',
+        executable='joy_node',
+        name='joy_node',
+        output='screen',
+        parameters=[{
+            # Keeps /joy publishing continuously even with the stick
+            # centered — mserve_base zeroes the drive command if no
+            # /cmd_vel arrives within cmd_vel_timeout_ms (500ms default), so
+            # mserve_joystick needs a steady stream of /joy callbacks to
+            # re-publish from, not just on-change.
+            'autorepeat_rate': 20.0,
+            'device_id': 0,
+        }],
+        condition=IfCondition(LaunchConfiguration('with_joystick')),
+    )
+
+    joystick = Node(
+        package='mserve_joystick',
+        executable='joystick_node',
+        name='mserve_joystick',
+        output='screen',
+        parameters=[params_file, joystick_params_file],
+        condition=IfCondition(LaunchConfiguration('with_joystick')),
     )
 
     drivechain = Node(
@@ -149,11 +184,14 @@ def generate_launch_description():
         with_camera_arg,
         with_lidar_arg,
         with_display_arg,
+        with_joystick_arg,
         drivechain,
         base,
         camera,
         lidar,
         display,
         robot_state_publisher,
+        joy_node,
+        joystick,
         TimerAction(period=2.0, actions=[lifecycle_manager, lifecycle_manager_min])
     ])

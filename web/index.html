@@ -8,13 +8,11 @@
 </head>
 <body>
   <div class="container">
+    <div id="site-header"></div>
+
     <header>
       <h1>mServe Debug Bridge</h1>
-      <p>Connects to ROS via rosbridge and controls lifecycle + cmd_vel.
-         &nbsp;|&nbsp; <a href="base.html" style="color:var(--accent)">Base →</a>
-         &nbsp;|&nbsp; <a href="drivechain.html" style="color:var(--accent)">Drivechain →</a>
-         &nbsp;|&nbsp; <a href="camera.html" style="color:var(--accent)">Camera →</a>
-         &nbsp;|&nbsp; <a href="lidar.html" style="color:var(--accent)">LiDAR →</a></p>
+      <p>Connects to ROS via rosbridge and controls lifecycle + cmd_vel.</p>
       <div class="status-row">
         <span id="connection-status" class="status disconnected">Disconnected</span>
       </div>
@@ -89,8 +87,10 @@
         <button id="stop-cmd">Stop</button>
       </div>
     </section>
+    <div id="site-footer"></div>
   </div>
 
+  <script src="common.js"></script>
   <script src="roslib.min.js"></script>
   <script src="app.js"></script>
 </body>

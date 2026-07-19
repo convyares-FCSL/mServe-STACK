@@ -118,12 +118,16 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f web_video_server    2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f foxglove_bridge     2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f async_slam_toolbox_node     2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joy_node            2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -f joystick_node       2>/dev/null || true
   else
     pkill -f rosbridge_websocket    2>/dev/null || true
     pkill -f rosapi_node            2>/dev/null || true
     pkill -f web_video_server       2>/dev/null || true
     pkill -f foxglove_bridge        2>/dev/null || true
     pkill -f async_slam_toolbox_node 2>/dev/null || true
+    pkill -f joy_node               2>/dev/null || true
+    pkill -f joystick_node          2>/dev/null || true
     pkill -f "http.server 6240"     2>/dev/null || true
   fi
 
@@ -146,6 +150,8 @@ cleanup() {
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f web_video_server      2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f foxglove_bridge       2>/dev/null || true
     docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f async_slam_toolbox_node       2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joy_node              2>/dev/null || true
+    docker compose -f "$ROOT_DIR/docker-compose.yml" exec -T robot-mserve pkill -9 -f joystick_node         2>/dev/null || true
   else
     pkill -9 -f drivechain_node       2>/dev/null || true
     pkill -9 -f base_node             2>/dev/null || true
@@ -159,6 +165,8 @@ cleanup() {
     pkill -9 -f web_video_server      2>/dev/null || true
     pkill -9 -f foxglove_bridge       2>/dev/null || true
     pkill -9 -f async_slam_toolbox_node 2>/dev/null || true
+    pkill -9 -f joy_node              2>/dev/null || true
+    pkill -9 -f joystick_node         2>/dev/null || true
   fi
   for pid in "${NATIVE_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
@@ -203,7 +211,8 @@ if [[ "$USE_DOCKER" == true ]]; then
     cd /ws
     colcon build \
       --packages-select interfaces utils mserve_drivechain mserve_base launch mserve_description \
-        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar mserve_display $DOCKER_SLAM_PKG \
+        lifecycle_manager btcpp_ros2_interfaces behaviortree_ros2 mserve_camera mserve_lidar mserve_display \
+        mserve_joystick $DOCKER_SLAM_PKG \
       --cmake-args -DBUILD_TESTING=OFF \
       --symlink-install 2>&1
   "

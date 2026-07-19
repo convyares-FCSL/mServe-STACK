@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mserve_joystick</name>
+  <version>0.1.0</version>
+  <description>
+    Game controller teleop. Consumes sensor_msgs/Joy (published by the `joy`
+    package's joy_node from the raw USB gamepad device) and turns it into
+    /cmd_vel plus a handful of button actions (drivechain connect, display
+    info screen, speed/angular scale adjustment). A plain rclcpp::Node, not
+    lifecycle-managed — same reasoning as mserve_display (no hardware
+    "connect" step of its own; joy_node owns the actual device).
+
+    Two-file config split (both under interfaces/config/, both always loaded
+    onto this node): joystick_params.yaml holds one controller_profiles
+    entry per controller model, mapping that controller's raw
+    sensor_msgs/Joy axes[]/buttons[] indices to semantic names;
+    mserve_params.yaml's mserve_joystick section picks which profile to use
+    (controller_profile) and maps those semantic names to actions plus
+    tuning parameters — the latter doesn't need touching when only the
+    controller hardware changes.
+  </description>
+  <maintainer email="ca99896@gmail.com">ecm</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_srvs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>utils</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mServe — Joystick</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    #btn-online-toggle.is-online  { background: var(--success); }
+    #btn-online-toggle.is-offline { background: var(--danger); }
+
+    /* Parameters table (reused from camera/drivechain/lidar) */
+    #params-table .param-name { font-family: 'Courier New', monospace; font-size: 0.8rem; }
+    #params-table input.param-input[type="text"] { width: 260px; }
+    .motor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+    .motor-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-bottom: 1px solid #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .motor-table td { padding: 5px 10px; border-bottom: 1px solid #1e293b; }
+    .motor-table input[type="text"] {
+      background: var(--surface-2);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 0.85rem;
+    }
+    .motor-cmd-empty { color: #64748b; font-size: 0.85rem; padding: 10px 0; }
+
+    .feedback-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .feedback-grid { grid-template-columns: 1fr; }
+    }
+    .feedback-card {
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .feedback-card h4 {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+    }
+    .feedback-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .feedback-unit { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+
+    /* Stick pads + trigger bars */
+    .sticks-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: flex-start;
+      margin: 8px 0 20px;
+    }
+    .stick-pad-wrap { text-align: center; }
+    .stick-pad-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px; }
+    .stick-pad {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      background: var(--surface-2);
+      border-radius: 12px;
+    }
+    .stick-pad::before, .stick-pad::after {
+      content: '';
+      position: absolute;
+      background: #475569;
+    }
+    .stick-pad::before { left: 0; right: 0; top: 50%; height: 1px; }
+    .stick-pad::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+    .stick-dot {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      transition: transform 0.05s linear;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .trigger-wrap { text-align: center; }
+    .trigger-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px; }
+    .trigger-bar-track {
+      width: 36px;
+      height: 140px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .trigger-bar-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 0%;
+      background: var(--accent-2);
+      transition: height 0.05s linear;
+    }
+
+    .dpad-wrap { text-align: center; }
+    .dpad-mini {
+      display: grid;
+      grid-template-columns: repeat(3, 30px);
+      grid-template-rows: repeat(3, 30px);
+      gap: 4px;
+    }
+    .dpad-mini div {
+      background: var(--surface-2);
+      border-radius: 4px;
+    }
+    .dpad-mini div.lit { background: var(--accent); }
+    .dpad-mini .u { grid-column: 2; grid-row: 1; }
+    .dpad-mini .l { grid-column: 1; grid-row: 2; }
+    .dpad-mini .r { grid-column: 3; grid-row: 2; }
+    .dpad-mini .d { grid-column: 2; grid-row: 3; }
+
+    /* Buttons */
+    .buttons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .button-indicator {
+      padding: 10px 6px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      text-align: center;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      transition: background 0.05s linear, color 0.05s linear;
+    }
+    .button-indicator.lit {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .no-joy-notice {
+      color: #64748b;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="site-header"></div>
+
+    <header>
+      <h1>Joystick</h1>
+      <p>Game controller teleop — /joy → /cmd_vel, plus button actions (connect, display info, speed/angular scale)</p>
+      <div class="status-row" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span id="connection-status" class="status disconnected">ROS Disconnected</span>
+        <button id="btn-online-toggle" style="padding:6px 16px">—</button>
+        <span id="online-hint" style="font-size:0.8rem;color:#64748b">
+          Offline force-zeroes /cmd_vel (test the controller without driving the robot) —
+          everything else (connect, display info, speed/angular scale) still works.
+        </span>
+      </div>
+    </header>
+
+    <!-- Status ──────────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Status</h2>
+      <div class="feedback-grid">
+        <div class="feedback-card">
+          <h4>Controller profile</h4>
+          <div class="feedback-value" id="controller-profile" style="font-size:1.3rem">—</div>
+          <div class="feedback-unit">interfaces/config/joystick_params.yaml</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Speed scale</h4>
+          <div class="feedback-value" id="speed-scale">—</div>
+          <div class="feedback-unit">m/s at full left-stick deflection — button_actions below</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Angular scale</h4>
+          <div class="feedback-value" id="angular-scale">—</div>
+          <div class="feedback-unit">rad/s at full left-stick deflection — button_actions below</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Parameters ──────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Parameters</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Live view of mserve_joystick's ROS parameters — includes
+        mserve_params.yaml's mserve_joystick section (button_actions,
+        speed/angular scale, deadzone, ...) and joystick_params.yaml's
+        selected controller profile.
+      </p>
+      <div class="button-row" style="margin-bottom:12px">
+        <button id="btn-params-refresh">Refresh</button>
+        <button id="btn-params-apply">Apply Changes</button>
+      </div>
+      <table class="motor-table" id="params-table">
+        <thead>
+          <tr><th>Parameter</th><th>Value</th></tr>
+        </thead>
+        <tbody id="params-table-body">
+          <tr><td colspan="2" class="motor-cmd-empty">Click Refresh to load parameters.</td></tr>
+        </tbody>
+      </table>
+      <div id="params-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
+    <!-- Live /cmd_vel ──────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>/cmd_vel (live)</h2>
+      <div class="feedback-grid" style="grid-template-columns:1fr 1fr">
+        <div class="feedback-card">
+          <h4>Linear.x</h4>
+          <div class="feedback-value" id="cmd-linear">0.00</div>
+          <div class="feedback-unit">m/s</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Angular.z</h4>
+          <div class="feedback-value" id="cmd-angular">0.00</div>
+          <div class="feedback-unit">rad/s</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Raw /joy ───────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Raw /joy</h2>
+      <p id="no-joy-notice" class="no-joy-notice">No /joy messages received yet — is the controller powered on and joy_node running?</p>
+      <div class="sticks-row">
+        <div class="stick-pad-wrap">
+          <div class="stick-pad-label">Left stick (drive)</div>
+          <div class="stick-pad"><div id="left-stick-dot" class="stick-dot"></div></div>
+        </div>
+        <div class="stick-pad-wrap">
+          <div class="stick-pad-label">Right stick</div>
+          <div class="stick-pad"><div id="right-stick-dot" class="stick-dot"></div></div>
+        </div>
+        <div class="trigger-wrap">
+          <div class="trigger-label">L2</div>
+          <div class="trigger-bar-track"><div id="l2-fill" class="trigger-bar-fill"></div></div>
+        </div>
+        <div class="trigger-wrap">
+          <div class="trigger-label">R2</div>
+          <div class="trigger-bar-track"><div id="r2-fill" class="trigger-bar-fill"></div></div>
+        </div>
+        <div class="dpad-wrap">
+          <div class="trigger-label">D-pad</div>
+          <div class="dpad-mini">
+            <div class="u" id="dpad-u"></div>
+            <div class="l" id="dpad-l"></div>
+            <div class="r" id="dpad-r"></div>
+            <div class="d" id="dpad-d"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="buttons-grid" id="buttons-grid"></div>
+    </section>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="roslib.min.js"></script>
+  <script src="joystick.js"></script>
+</body>
+</html>

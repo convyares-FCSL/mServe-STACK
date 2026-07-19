@@ -55,6 +55,7 @@ mserve_camera:
     width: 640                    # YUYV @ 640x480 hits 30fps on this USB webcam;
     height: 480                   # higher resolutions drop to 5-10fps in YUYV (MJPG would be needed for full-rate 1080p)
     frame_id: camera_link_optical # REP-103 optical frame — see mserve_camera.xacro/mserve_depth_camera.xacro
+    flip_180: true                # physical mount is upside down on this chassis — confirmed 2026-07-19
 
 mserve_lidar:
   ros__parameters:
@@ -106,3 +107,54 @@ mserve_display:
       connect: /mserve_drivechain/connect
       drivechain_get_state: /mserve_drivechain/get_state
       base_get_state: /mserve_base/get_state
+
+mserve_joystick:
+  ros__parameters:
+    # Selects one of joystick_params.yaml's controller_profiles entries —
+    # this node reads that file's raw index map under
+    # controller_profiles.<controller_profile> at startup. Swapping
+    # controller hardware means adding a new profile there (see that file's
+    # header comment) and changing this one line — button_actions below
+    # doesn't need touching, since every profile uses the same semantic
+    # names.
+    controller_profile: pi_controller
+    joy_topic: /joy
+    drive:
+      # No invert_linear/invert_angular by design — this node publishes the
+      # standard REP-103 Twist convention with no per-source sign tweaking.
+      # Any hardware-specific direction correction belongs in
+      # mserve_drivechain's hardware.motor_signs instead (see that section),
+      # the one place that already owns it, rather than duplicated/guessed
+      # at in each cmd_vel source (joystick, future Nav2, teleop, ...).
+      linear_axis: left_stick_y     # joystick_map name (see joystick_params.yaml) driving linear.x
+      angular_axis: left_stick_x    # joystick_map name driving angular.z
+      deadzone: 0.1                 # ignore stick deflection below this magnitude
+    speed:
+      initial: 0.4        # m/s at full stick deflection
+      min: 0.1
+      max: 0.8             # matches mserve_base limits.max_linear_speed default — see that section
+      step: 0.1            # per increase_speed/decrease_speed button press
+    angular:
+      initial: 0.6         # rad/s at full stick deflection
+      min: 0.1
+      max: 1.2             # matches mserve_base limits.max_angular_speed default — see that section
+      step: 0.2            # per increase_angular/decrease_angular button press
+    status_publish_hz: 2.0  # ~/status (JoystickStatus: profile, speed/angular scale) — web/joystick.html
+    # Semantic name (from the selected joystick_params.yaml controller
+    # profile) -> action. Only entries present here are wired up;
+    # buttons/axes with no action listed are read but otherwise ignored.
+    # l1/r1/l2/r2 are the digital button indices (see joystick_params.yaml),
+    # not the l2_trigger/r2_trigger analog axes — a plain button press/edge
+    # is all "increase/decrease by one step" needs.
+    button_actions:
+      triangle: connect
+      circle: display_info
+      r1: increase_angular
+      l1: decrease_angular
+      r2: increase_speed
+      l2: decrease_speed
+    topic_names:
+      cmd_vel: /cmd_vel
+    service_names:
+      connect: /mserve_drivechain/connect
+      display_set_mode: /mserve_display/set_display_mode

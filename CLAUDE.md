@@ -30,6 +30,7 @@ ws/src/
   mserve_camera/        lifecycle node, USB webcam (wraps v4l2_camera's device class)
   mserve_lidar/         lifecycle node, RPLIDAR C1 (vendored SDK, no apt package exists)
   mserve_display/       ELEGOO 3.5" SPI touchscreen UI (plain node, not lifecycle-managed)
+  mserve_joystick/      game controller teleop, consumes /joy (plain node, not lifecycle-managed)
   mserve_description/   URDF robot model
   launch/               launch files (mserve_min.launch.py, mserve_slam.launch.py)
   lifecycle_manager/    BT.CPP-driven configure/activate/shutdown for drivechain/base
@@ -65,7 +66,7 @@ source /opt/ros/jazzy/setup.bash
 cd /ws
 colcon build --packages-select interfaces utils mserve_drivechain mserve_base \
   launch mserve_description lifecycle_manager btcpp_ros2_interfaces \
-  behaviortree_ros2 mserve_camera mserve_lidar mserve_display \
+  behaviortree_ros2 mserve_camera mserve_lidar mserve_display mserve_joystick \
   --cmake-args -DBUILD_TESTING=OFF --symlink-install
 ```
 

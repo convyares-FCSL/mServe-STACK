@@ -6,15 +6,6 @@
   <title>mServe — Camera</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .back-link {
-      display: inline-block;
-      margin-bottom: 16px;
-      color: var(--accent);
-      text-decoration: none;
-      font-size: 0.9rem;
-    }
-    .back-link:hover { text-decoration: underline; }
-
     /* Parameters table (reused from drivechain) */
     #params-table .param-name { font-family: 'Courier New', monospace; font-size: 0.8rem; }
     #params-table input.param-input[type="text"] { width: 260px; }
@@ -107,7 +98,7 @@
 </head>
 <body>
   <div class="container">
-    <a class="back-link" href="index.html">← mServe Debug Bridge</a>
+    <div id="site-header"></div>
 
     <header>
       <h1>Camera</h1>
@@ -196,8 +187,10 @@
       </div>
       <div id="log-box"></div>
     </section>
+    <div id="site-footer"></div>
   </div>
 
+  <script src="common.js"></script>
   <script src="roslib.min.js"></script>
   <script src="camera.js"></script>
 </body>

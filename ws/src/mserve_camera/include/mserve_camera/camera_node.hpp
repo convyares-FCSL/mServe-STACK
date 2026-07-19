@@ -5,12 +5,14 @@
 #include <string>
 #include <thread>
 
+#include <opencv2/core/mat.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <v4l2_camera/v4l2_camera_device.hpp>
 
 namespace mserve_camera {
@@ -41,6 +43,7 @@ private:
   int height_ = 480;
   std::string frame_id_;
   int jpeg_quality_ = 80;
+  bool flip_180_ = true;  // physical mount is upside down — see camera_params.cpp
 
   // Capture loop — V4l2CameraDevice::capture() blocks until a frame is ready,
   // so this runs on its own thread rather than a fixed-rate timer (matches
@@ -54,14 +57,22 @@ private:
   // it's a harmless no-op on failure, pending a real fix.
   bool request_frame_rate(int fps);
 
-  // YUYV -> BGR -> JPEG via OpenCV directly (cv::cvtColor + cv::imencode) —
-  // hand-rolled rather than pulled in via image_transport's plugin system,
-  // because image_transport::Publisher wraps a plain rclcpp::Publisher, not
-  // a LifecyclePublisher, which would silently break the "deactivate stops
-  // all publishing" guarantee the rest of this node relies on. Returns
-  // nullptr if the encode fails (never expected to under normal operation,
-  // since the source Mat/encoding are always what capture_loop just built).
-  sensor_msgs::msg::CompressedImage::UniquePtr encode_compressed(const sensor_msgs::msg::Image & image);
+  // YUYV -> BGR (+ 180-degree rotate if flip_180_) done once per frame in
+  // capture_loop(), shared by both outputs below — rotating the packed YUYV
+  // bytes directly instead would reverse column order, which silently swaps
+  // the U/V byte roles for even widths (wrong colors, not just a crash), so
+  // the flip only ever happens after conversion to BGR's one-byte-per-
+  // channel layout, where a flip is unambiguous.
+  cv::Mat convert_and_flip(const sensor_msgs::msg::Image & yuyv_image);
+
+  // BGR -> JPEG via OpenCV directly (cv::imencode) — hand-rolled rather than
+  // pulled in via image_transport's plugin system, because
+  // image_transport::Publisher wraps a plain rclcpp::Publisher, not a
+  // LifecyclePublisher, which would silently break the "deactivate stops all
+  // publishing" guarantee the rest of this node relies on. Returns nullptr
+  // if the encode fails (never expected to under normal operation).
+  sensor_msgs::msg::CompressedImage::UniquePtr encode_compressed(
+    const cv::Mat & bgr, const std_msgs::msg::Header & header);
 
   std::unique_ptr<v4l2_camera::V4l2CameraDevice> camera_;
   std::thread       capture_thread_;

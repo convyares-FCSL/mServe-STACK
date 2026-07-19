@@ -1,0 +1,4 @@
+string controller_profile
+float64 speed_scale
+float64 angular_scale
+bool online

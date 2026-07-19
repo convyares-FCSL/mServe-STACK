@@ -6,15 +6,6 @@
   <title>mServe — Base</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .back-link {
-      display: inline-block;
-      margin-bottom: 16px;
-      color: var(--accent);
-      text-decoration: none;
-      font-size: 0.9rem;
-    }
-    .back-link:hover { text-decoration: underline; }
-
     /* D-pad drive controls */
     .dpad {
       display: grid;
@@ -130,7 +121,7 @@
 </head>
 <body>
   <div class="container">
-    <a class="back-link" href="index.html">← mServe Debug Bridge</a>
+    <div id="site-header"></div>
 
     <header>
       <h1>Base</h1>
@@ -250,8 +241,10 @@
       </div>
       <div id="log-box"></div>
     </section>
+    <div id="site-footer"></div>
   </div>
 
+  <script src="common.js"></script>
   <script src="roslib.min.js"></script>
   <script src="lidar_view.js"></script>
   <script src="base.js"></script>

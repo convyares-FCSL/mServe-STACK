@@ -30,6 +30,12 @@ RUN apt-get update \
         ros-jazzy-web-video-server \
         # Foxglove Bridge, ws://<pi-ip>:8765 (--foxglove)
         ros-jazzy-foxglove-bridge \
+        # Game controller teleop: joy_node reads /dev/input/jsN (bind-mounted
+        # via /dev/input:/dev/input in docker-compose.yml) and publishes
+        # sensor_msgs/Joy; teleop_twist_joy turns a configured subset of
+        # that into /cmd_vel.
+        ros-jazzy-joy \
+        ros-jazzy-teleop-twist-joy \
         # slam_toolbox (vendored source, ws/src/third_party/slam_toolbox,
         # pre-patched — see that dir's mServe: comments) build/runtime deps.
         # --slam-map/--slam-local only; not needed for the base stack.

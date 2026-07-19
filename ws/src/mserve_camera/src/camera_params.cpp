@@ -23,6 +23,12 @@ void CameraNode::declare_params()
   this->declare_parameter<int64_t>("jpeg_quality", kJpegQualityDefault,
     mserve_utils::make_int_range_descriptor(
       "JPEG quality for camera/image_raw/compressed", kJpegQualityMin, kJpegQualityMax));
+
+  // Physical mount is upside down on this chassis — rotate 180 in software
+  // rather than relying on a mount fix. Applies to both camera/image_raw
+  // (now published as bgr8, not raw YUYV — see convert_and_flip()) and
+  // camera/image_raw/compressed.
+  this->declare_parameter<bool>("flip_180", true);
 }
 
 void CameraNode::load_params() {
@@ -31,6 +37,7 @@ void CameraNode::load_params() {
   height_       = static_cast<int>(get_parameter("height").as_int());
   frame_id_     = get_parameter("frame_id").as_string();
   jpeg_quality_ = static_cast<int>(get_parameter("jpeg_quality").as_int());
+  flip_180_     = get_parameter("flip_180").as_bool();
 
   // Uncalibrated placeholder CameraInfo — width/height/frame_id are real,
   // K/D/R/P are left zeroed until an actual calibration is run. Any consumer

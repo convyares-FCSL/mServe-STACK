@@ -1,0 +1,78 @@
+# Raw sensor_msgs/Joy axes[]/buttons[] indices, one profile per controller
+# model. mserve_params.yaml's mserve_joystick.controller_profile selects
+# which profile below the mserve_joystick node actually uses at startup —
+# add a new profile here for a different controller rather than editing an
+# existing one, then point controller_profile at its name. Every profile
+# uses the same semantic names (left_stick_x, triangle, l1, ...) so
+# mserve_params.yaml's button_actions section — which maps those names to
+# behavior — never needs touching when only the controller hardware
+# changes.
+#
+# Top-level key must be "mserve_joystick" (the node's name), not a
+# per-controller name — that's how ROS 2's --params-file loading finds this
+# file's parameters at all. Profile names live one level down, under
+# controller_profiles, for exactly that reason.
+#
+# "not_used" entries are declared, not omitted: joy_node reports every
+# index the controller's HID descriptor declares (via the kernel joydev
+# ABI) regardless of whether a physical button is wired to it, so an index
+# with no real control is still present in axes[]/buttons[] — recording it
+# here says "checked, nothing there" rather than leaving an index silently
+# unaccounted for. mserve_joystick treats "not_used" as a no-op (skipped,
+# not registered as an actionable name) — it's not a real semantic name.
+
+mserve_joystick:
+  ros__parameters:
+    controller_profiles:
+      pi_controller:
+        axes:
+          "0": left_stick_x
+          "1": left_stick_y
+          "2": right_stick_x
+          "3": right_stick_y
+          "4": r2_trigger       # analog: rest=+1.0, full squeeze=-1.0
+          "5": l2_trigger       # analog: rest=+1.0, full squeeze=-1.0
+          "6": dpad_x           # hat, not currently used by button_actions — sign convention unverified
+          "7": dpad_y           # hat, not currently used by button_actions — sign convention unverified
+        buttons:
+          "0": cross
+          "1": circle
+          "2": not_used
+          "3": square
+          "4": triangle
+          "5": not_used
+          "6": l1
+          "7": r1
+          "8": l2               # digital edge of the same physical control as axes.l2_trigger
+          "9": r2               # digital edge of the same physical control as axes.r2_trigger
+          "10": select
+          "11": start
+          "12": not_used        # confirmed analog on this pad, not a digital button — purpose unclear, not wired
+          "13": l3              # left stick click
+          "14": r3              # right stick click
+      other_controller:
+        axes:
+          "0": not_used
+          "1": not_used
+          "2": not_used
+          "3": not_used
+          "4": not_used
+          "5": not_used
+          "6": not_used
+          "7": not_used
+        buttons:
+          "0": not_used
+          "1": not_used
+          "2": not_used
+          "3": not_used
+          "4": not_used
+          "5": not_used
+          "6": not_used
+          "7": not_used
+          "8": not_used
+          "9": not_used
+          "10": not_used
+          "11": not_used
+          "12": not_used
+          "13": not_used
+          "14": not_used

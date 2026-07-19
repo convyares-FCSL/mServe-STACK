@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DriveStatus.msg"
   "msg/DisplayStatus.msg"
   "msg/Esp32Status.msg"
+  "msg/JoystickStatus.msg"
 
   # Drivechain v2 — per-motor command + feedback
   "msg/MotorCommand.msg"

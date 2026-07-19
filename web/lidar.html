@@ -6,15 +6,6 @@
   <title>mServe — LiDAR</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .back-link {
-      display: inline-block;
-      margin-bottom: 16px;
-      color: var(--accent);
-      text-decoration: none;
-      font-size: 0.9rem;
-    }
-    .back-link:hover { text-decoration: underline; }
-
     /* Parameters table (reused from camera/drivechain) */
     #params-table .param-name { font-family: 'Courier New', monospace; font-size: 0.8rem; }
     #params-table input.param-input[type="text"] { width: 260px; }
@@ -110,7 +101,7 @@
 </head>
 <body>
   <div class="container">
-    <a class="back-link" href="index.html">← mServe Debug Bridge</a>
+    <div id="site-header"></div>
 
     <header>
       <h1>LiDAR</h1>
@@ -132,64 +123,6 @@
         <button id="btn-deactivate">Deactivate</button>
         <button id="btn-cleanup">Cleanup</button>
       </div>
-    </section>
-
-    <!-- SLAM Toolbox ────────────────────────────────────────────────────── -->
-    <section class="panel">
-      <h2>SLAM Toolbox</h2>
-      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
-        Builds <code>/map</code> from this lidar's <code>/scan</code> while driving.
-        Separate node/process from <code>mserve_lidar</code> above — start it with
-        <code>./scripts/run_stack.sh --slam-map</code> (or standalone with
-        <code>./scripts/run_slam.sh map</code>) before these controls do anything.
-      </p>
-      <div class="node-state" style="margin-bottom:12px">
-        State: <span id="slam-node-state" class="state-label">?</span>
-      </div>
-      <div class="button-row" style="margin-bottom:16px">
-        <button id="slam-btn-configure">Configure</button>
-        <button id="slam-btn-activate">Activate</button>
-        <button id="slam-btn-deactivate">Deactivate</button>
-        <button id="slam-btn-cleanup">Cleanup</button>
-      </div>
-
-      <div class="feedback-grid" style="margin-bottom:16px">
-        <div class="feedback-card">
-          <h4>Map size</h4>
-          <div class="feedback-value" id="slam-map-size" style="font-size:1.3rem">—</div>
-          <div class="feedback-unit">cells (width × height)</div>
-        </div>
-        <div class="feedback-card">
-          <h4>Resolution</h4>
-          <div class="feedback-value" id="slam-map-resolution" style="font-size:1.3rem">—</div>
-          <div class="feedback-unit">m / cell</div>
-        </div>
-      </div>
-
-      <div class="button-row" style="margin-bottom:8px;align-items:center">
-        <button id="slam-btn-reset" class="btn-danger">Reset Map</button>
-      </div>
-      <p style="font-size:0.75rem;color:#64748b;margin:0 0 16px">
-        Clears the current map and pose graph and starts fresh — can't be
-        undone, save first if you want to keep it. <code>/map</code> won't
-        visibly clear until the next scan is processed (it's a latched
-        topic) — nudge the robot if it looks unchanged.
-      </p>
-
-      <div class="button-row" style="align-items:center;gap:10px">
-        <input type="text" id="slam-map-name" placeholder="map name" value="my_map"
-          style="background:var(--surface-2);border:1px solid #475569;border-radius:6px;color:var(--text);padding:6px 10px;font-size:0.85rem;width:160px" />
-        <button id="slam-btn-save-map">Save Map</button>
-        <button id="slam-btn-serialize-map">Serialize Map</button>
-      </div>
-      <p style="font-size:0.75rem;color:#64748b;margin:6px 0 0">
-        Both write into <code>map/</code> under the same name — <strong>Save
-        Map</strong> is a viewable <code>.pgm</code>/<code>.yaml</code>;
-        <strong>Serialize Map</strong> is slam_toolbox's own pose-graph
-        format, the one <code>--slam-local</code> actually loads. Run both if
-        you want to keep the map for localization later.
-      </p>
-      <div id="slam-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
     </section>
 
     <!-- Parameters ──────────────────────────────────────────────────────── -->
@@ -262,6 +195,64 @@
       </p>
     </section>
 
+    <!-- SLAM Toolbox ────────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>SLAM Toolbox</h2>
+      <p style="font-size:0.8rem;color:#64748b;margin:0 0 12px">
+        Builds <code>/map</code> from this lidar's <code>/scan</code> while driving.
+        Separate node/process from <code>mserve_lidar</code> above — start it with
+        <code>./scripts/run_stack.sh --slam-map</code> (or standalone with
+        <code>./scripts/run_slam.sh map</code>) before these controls do anything.
+      </p>
+      <div class="node-state" style="margin-bottom:12px">
+        State: <span id="slam-node-state" class="state-label">?</span>
+      </div>
+      <div class="button-row" style="margin-bottom:16px">
+        <button id="slam-btn-configure">Configure</button>
+        <button id="slam-btn-activate">Activate</button>
+        <button id="slam-btn-deactivate">Deactivate</button>
+        <button id="slam-btn-cleanup">Cleanup</button>
+      </div>
+
+      <div class="feedback-grid" style="margin-bottom:16px">
+        <div class="feedback-card">
+          <h4>Map size</h4>
+          <div class="feedback-value" id="slam-map-size" style="font-size:1.3rem">—</div>
+          <div class="feedback-unit">cells (width × height)</div>
+        </div>
+        <div class="feedback-card">
+          <h4>Resolution</h4>
+          <div class="feedback-value" id="slam-map-resolution" style="font-size:1.3rem">—</div>
+          <div class="feedback-unit">m / cell</div>
+        </div>
+      </div>
+
+      <div class="button-row" style="margin-bottom:8px;align-items:center">
+        <button id="slam-btn-reset" class="btn-danger">Reset Map</button>
+      </div>
+      <p style="font-size:0.75rem;color:#64748b;margin:0 0 16px">
+        Clears the current map and pose graph and starts fresh — can't be
+        undone, save first if you want to keep it. <code>/map</code> won't
+        visibly clear until the next scan is processed (it's a latched
+        topic) — nudge the robot if it looks unchanged.
+      </p>
+
+      <div class="button-row" style="align-items:center;gap:10px">
+        <input type="text" id="slam-map-name" placeholder="map name" value="my_map"
+          style="background:var(--surface-2);border:1px solid #475569;border-radius:6px;color:var(--text);padding:6px 10px;font-size:0.85rem;width:160px" />
+        <button id="slam-btn-save-map">Save Map</button>
+        <button id="slam-btn-serialize-map">Serialize Map</button>
+      </div>
+      <p style="font-size:0.75rem;color:#64748b;margin:6px 0 0">
+        Both write into <code>map/</code> under the same name — <strong>Save
+        Map</strong> is a viewable <code>.pgm</code>/<code>.yaml</code>;
+        <strong>Serialize Map</strong> is slam_toolbox's own pose-graph
+        format, the one <code>--slam-local</code> actually loads. Run both if
+        you want to keep the map for localization later.
+      </p>
+      <div id="slam-msg" style="margin-top:8px;font-size:0.85rem;color:#94a3b8"></div>
+    </section>
+
     <!-- Logs ────────────────────────────────────────────────────────────── -->
     <section class="panel">
       <h2>Logs</h2>
@@ -272,8 +263,10 @@
       </div>
       <div id="log-box"></div>
     </section>
+    <div id="site-footer"></div>
   </div>
 
+  <script src="common.js"></script>
   <script src="roslib.min.js"></script>
   <script src="lidar_view.js"></script>
   <script src="lidar.js"></script>

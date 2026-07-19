@@ -132,3 +132,27 @@ button:disabled {
 .btn-danger {
   background: var(--danger);
 }
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+.site-nav a { color: var(--accent); text-decoration: none; }
+.site-nav a:hover { text-decoration: underline; }
+.site-nav-current { color: var(--text); font-weight: 700; }
+.site-nav-sep { color: #475569; margin: 0 2px; }
+
+.site-footer {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #334155;
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: center;
+}
+.site-footer a { color: var(--accent); text-decoration: none; }
+.site-footer a:hover { text-decoration: underline; }
